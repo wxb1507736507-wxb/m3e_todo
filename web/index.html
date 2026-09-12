@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="基于 Material 3 Expressive 的待办应用">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="M3E Todo">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>M3E Todo</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!--
+    CanvasKit takes a moment to load. Painting the app's surface colour first
+    avoids a stark white flash, and the label explains the wait rather than
+    leaving what looks like a hung page.
+  -->
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background-color: #fef7ff;
+    }
+    #boot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      font-size: 14px;
+      letter-spacing: 0.4px;
+      color: #49454f;
+    }
+  </style>
+</head>
+<body>
+  <div id="boot">正在加载 M3E Todo…</div>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // The placeholder above sits behind the Flutter view. Remove it once the
+    // first frame is on screen; Flutter does not clean it up itself, so leaving
+    // this out would keep the text in the DOM indefinitely.
+    window.addEventListener('flutter-first-frame', function () {
+      var boot = document.getElementById('boot');
+      if (boot) {
+        boot.remove();
+      }
+    });
+  </script>
+</body>
+</html>

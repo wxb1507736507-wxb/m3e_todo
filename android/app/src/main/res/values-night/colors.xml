@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Dark-mode counterparts of `values/colors.xml`, taken from
+  `AppColorSchemes.dark(AppColorSeed.violet)`. Android picks this file
+  automatically when the system is in dark mode, which is why the app can keep
+  `ThemeMode.system` and still start with the right background.
+-->
+<resources>
+    <color name="m3_surface">#161219</color>
+    <color name="m3_surface_container">#231E25</color>
+</resources>

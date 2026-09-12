@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme applied while the process is starting, with the OS in dark mode. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <!-- Light status-bar icons, because the surface behind them is dark. -->
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- See the light-mode file for what this theme is for. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/m3_surface</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

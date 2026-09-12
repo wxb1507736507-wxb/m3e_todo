@@ -1,0 +1,46 @@
+import 'dart:io';
+
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:m3e_todo/app/app.dart';
+import 'package:m3e_todo/core/storage/app_directories.dart';
+import 'package:m3e_todo/core/storage/json_file_store.dart';
+import 'package:m3e_todo/core/storage/storage_providers.dart';
+import 'package:m3e_todo/features/settings/domain/app_settings.dart';
+import 'package:m3e_todo/features/settings/presentation/settings_controller.dart';
+import 'package:m3e_todo/features/todos/domain/repositories/todo_repository.dart';
+import 'package:m3e_todo/features/todos/presentation/providers/todo_providers.dart';
+
+import 'sample_todo.dart';
+
+/// Builds the real app wired to test doubles.
+///
+/// Overriding the repository and the clock is enough to make almost everything
+/// deterministic; only tests that care about persistence need to pass
+/// [dataDirectory]. That is the payoff of keeping platform I/O out of the widget
+/// tree: nothing below the container touches a real filesystem unless the test
+/// explicitly asks it to.
+Widget buildTestApp({
+  required TodoRepository repository,
+  DateTime? now,
+  AppSettings settings = const AppSettings(),
+  Directory? dataDirectory,
+}) {
+  // Always redirected away from the real per-user directory. A test must never
+  // be able to read or overwrite the developer's actual todos, and defaulting to
+  // a throwaway directory means a test cannot forget to isolate itself.
+  final Directory directory =
+      dataDirectory ?? Directory.systemTemp.createTempSync('m3e_todo_test');
+
+  return ProviderScope(
+    overrides: [
+      todoRepositoryProvider.overrideWithValue(repository),
+      initialSettingsProvider.overrideWithValue(settings),
+      clockProvider.overrideWithValue(() => now ?? testNow),
+      documentStoreFactoryProvider.overrideWithValue(
+        (String name) => JsonFileStore(directory.childFile(name)),
+      ),
+    ],
+    child: const M3eTodoApp(),
+  );
+}

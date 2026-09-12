@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme applied while the process is starting, with the OS in light mode. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <!-- Dark status-bar icons, because the surface behind them is light.
+             Only affects the window before Flutter takes over; from then on the
+             AppBar sets the overlay style itself. -->
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!-- Theme applied once the process has started. This sets the window colour
+         behind the Flutter UI, so the area outside the app's own surfaces (for
+         example behind a translucent system bar) matches the theme rather than
+         falling back to the platform default. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/m3_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The window Android shows while the process starts. Painting it in the app's
+  own surface colour makes the hand-off to the first Flutter frame invisible:
+  no white or black flash, the panel simply appears already in the right colour.
+
+  There is deliberately no `drawable-v21` variant of this file. The template
+  ships one, and because every device this app supports is API 24 or newer, that
+  variant would always win and this file would never be read.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/m3_surface" />
+</layer-list>

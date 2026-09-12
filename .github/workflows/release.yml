@@ -1,0 +1,332 @@
+name: Release
+
+# 两种触发方式：
+#   * 推送 v* 标签（例如 v0.1.0）—— 日常发布路径
+#   * 在 Actions 页面手动触发（可指定 tag，留空则用 pubspec.yaml 的版本）
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的 tag，例如 v0.1.0。留空则用 pubspec.yaml 里的版本'
+        required: false
+        type: string
+
+# gh release create 需要写权限；默认的 GITHUB_TOKEN 是只读的。
+permissions:
+  contents: write
+
+# 同一个 ref 上的发布串行执行，避免两次推送互相覆盖产物。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # 必须与本地开发用的 Flutter 保持一致，否则 CI 产物和本地行为可能对不上。
+  # 如果这个版本在 GitHub 上取不到（例如它是较新的版本号），改成 'stable'
+  # 或一个已发布的具体版本即可，这是唯一需要改的地方。
+  FLUTTER_VERSION: '3.47.3'
+
+  # AGP 9.x 要求 JDK 17+，用 21 留出余量。
+  JAVA_VERSION: '21'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 版本号：从 tag 或 pubspec.yaml 推导，供后续所有 job 使用
+  # ---------------------------------------------------------------------------
+  prepare:
+    name: 计算版本
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 推导 tag 与版本号
+        id: version
+        env:
+          # `inputs` 上下文只在 workflow_dispatch 触发时存在。用 && 短路，
+          # 这样标签推送时根本不会去读它。
+          INPUT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || '' }}
+        run: |
+          set -euo pipefail
+
+          # pubspec.yaml 里是 "0.1.0+1" 这种形式，取加号之前的部分作为版本。
+          PUBSPEC_VERSION=$(grep -E '^version:' pubspec.yaml | head -1 \
+            | sed -E 's/^version:[[:space:]]*//' | cut -d'+' -f1 | tr -d '[:space:]')
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # 标签推送：tag 就是权威来源。
+            TAG="${GITHUB_REF_NAME}"
+          elif [ -n "${INPUT_TAG}" ]; then
+            # 手动触发且填了 tag。
+            TAG="${INPUT_TAG}"
+          else
+            # 手动触发且留空：用 pubspec.yaml 的版本。
+            TAG="v${PUBSPEC_VERSION}"
+          fi
+
+          # 去掉 v 前缀就是 Android 的 versionName 与产物文件名里的版本。
+          VERSION="${TAG#v}"
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "解析结果：tag=${TAG} version=${VERSION}"
+
+  # ---------------------------------------------------------------------------
+  # Android：签名 APK + 上架用的 AAB
+  # ---------------------------------------------------------------------------
+  android:
+    name: 构建 Android
+    runs-on: ubuntu-latest
+    needs: prepare
+    env:
+      # 国内镜像在这里只会拖慢速度：GitHub 的 runner 直连官方仓库更快。
+      # 见 android/settings.gradle.kts 里的说明。
+      M3E_USE_MIRRORS: 'false'
+
+      # 放在 job 级 env 里而不是直接写进 if：GitHub 不允许在 if 条件中直接
+      # 引用 secrets，必须先经过 env 中转。
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: 切换回官方 Gradle 分发源
+        # gradle-wrapper.properties 指向腾讯镜像是为了适配国内网络，而 GitHub
+        # 的 runner 直连 services.gradle.org 更快也更可靠。
+        #
+        # 放在 setup-gradle 之前：那一步会按 wrapper 里的 URL 计算缓存键，
+        # 先改再装，缓存才不会挂在镜像地址上。
+        run: |
+          set -euo pipefail
+          sed -i 's|^distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-bin.zip|' \
+            android/gradle/wrapper/gradle-wrapper.properties
+          grep '^distributionUrl' android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: 启用 Gradle 依赖缓存
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # 上一步刚改过 wrapper，校验和自然不再匹配自带的那份。
+          validate-wrappers: false
+
+      - name: 把 tag 版本写入 pubspec.yaml
+        run: |
+          set -euo pipefail
+          # versionName 取自 tag；versionCode 用 run_number，保证每次发布单调递增
+          # —— Play 会拒绝版本号不增的包。这个改动只发生在 CI 工作区，不提交。
+          sed -i -E "s|^version:.*|version: ${{ needs.prepare.outputs.version }}+${{ github.run_number }}|" pubspec.yaml
+          grep '^version:' pubspec.yaml
+
+      - name: 配置签名密钥库
+        # 没有配置 secrets 时跳过：android/app/build.gradle.kts 会自动退回 debug
+        # 签名，产出的 APK 仍可安装，只是不能上架 Play。
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          set -euo pipefail
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          cat > android/key.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          storePassword=$ANDROID_STORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+          echo "已写入 android/key.properties（使用 release 密钥库签名）"
+
+      - name: 构建 APK
+        run: flutter build apk --release
+
+      - name: 构建 AAB
+        id: aab
+        # AAB 的调试符号剥离依赖 sdkmanager，也就是 Android SDK 的 cmdline-tools
+        # 组件：flutter_tools 只在 cmdlineToolsAvailable 时才把 sdkManagerPath
+        # 传给 Gradle，缺它时 AAB 会带着调试符号，Flutter 随即以非零码退出。
+        #
+        # GitHub 的 runner 镜像自带 cmdline-tools，所以正常情况下这一步是过的。
+        # 加 continue-on-error 是为了：万一它在某个镜像上失败，已经可用的 APK
+        # 不该被一起拖掉——发布仍然要出得来。
+        continue-on-error: true
+        run: flutter build appbundle --release
+
+      - name: 整理产物
+        env:
+          AAB_OUTCOME: ${{ steps.aab.outcome }}
+        run: |
+          set -euo pipefail
+          V="${{ needs.prepare.outputs.version }}"
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/m3e-todo-${V}-android.apk"
+
+          if [ "$AAB_OUTCOME" = "success" ]; then
+            cp build/app/outputs/bundle/release/app-release.aab "dist/m3e-todo-${V}-android.aab"
+          else
+            # AAB 是给 Play 上架用的，缺了不影响侧载分发。
+            echo "::warning::AAB 构建未成功，本次发布只包含 APK（通常是缺少 cmdline-tools）"
+          fi
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Windows 桌面
+  # ---------------------------------------------------------------------------
+  windows:
+    name: 构建 Windows
+    runs-on: windows-latest
+    needs: prepare
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: 把 tag 版本写入 pubspec.yaml
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i -E "s|^version:.*|version: ${{ needs.prepare.outputs.version }}+${{ github.run_number }}|" pubspec.yaml
+          grep '^version:' pubspec.yaml
+
+      - name: 构建 release
+        # windows-latest 预装了带 C++ 桌面工作负载的 Visual Studio，Flutter 的
+        # Windows 构建直接可用——这正是本地缺的那一环。
+        run: flutter build windows --release
+
+      - name: 打包
+        shell: pwsh
+        run: |
+          $v = "${{ needs.prepare.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          # Flutter 3.x 的产物路径带架构子目录。
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" `
+            -DestinationPath "dist/m3e-todo-$v-windows-x64.zip"
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Web
+  # ---------------------------------------------------------------------------
+  web:
+    name: 构建 Web
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: 把 tag 版本写入 pubspec.yaml
+        run: |
+          set -euo pipefail
+          sed -i -E "s|^version:.*|version: ${{ needs.prepare.outputs.version }}+${{ github.run_number }}|" pubspec.yaml
+          grep '^version:' pubspec.yaml
+
+      - name: 构建 release
+        run: flutter build web --release
+
+      - name: 打包
+        run: |
+          set -euo pipefail
+          V="${{ needs.prepare.outputs.version }}"
+          mkdir -p dist
+          (cd build/web && zip -qr "../../dist/m3e-todo-${V}-web.zip" .)
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/*
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 发布：汇总全部产物，创建（或更新）GitHub Release
+  # ---------------------------------------------------------------------------
+  release:
+    name: 发布 Release
+    runs-on: ubuntu-latest
+    needs: [prepare, android, windows, web]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 需要标签和完整历史：判断标签是否已存在，以及 --generate-notes
+          # 从提交历史生成发布说明。
+          fetch-depth: 0
+
+      - name: 汇总产物
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 生成校验和
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum m3e-todo-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: 创建或更新 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          # 三种情况分开处理，因为 gh 的语义不同：
+          #  1. release 已存在（重跑工作流）-> 覆盖产物，不重建 release；
+          #  2. 标签存在但 release 不存在（tag 推送触发）-> 直接为它建 release，
+          #     此时不能再传 --target，否则 gh 会因为标签已存在而报错；
+          #  3. 标签也不存在（手动触发）-> 从当前提交创建标签并发布。
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+            echo "已更新既有 release：$TAG"
+          elif git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            gh release create "$TAG" \
+              --title "M3E Todo ${TAG}" \
+              --generate-notes \
+              dist/*
+            echo "已为既有标签创建 release：$TAG"
+          else
+            gh release create "$TAG" \
+              --title "M3E Todo ${TAG}" \
+              --generate-notes \
+              --target "${GITHUB_SHA}" \
+              dist/*
+            echo "已创建 release 与标签：$TAG"
+          fi

@@ -1,0 +1,24 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - windows/**
+    - web/**
+    - android/**
+  language:
+    strict-casts: true
+  errors:
+    # Treat unused code as a build breaker so dead code does not accumulate.
+    unused_import: error
+    unused_local_variable: error
+
+linter:
+  rules:
+    - always_declare_return_types
+    - avoid_print
+    - prefer_final_locals
+    - prefer_single_quotes
+    - sort_child_properties_last
+    - unawaited_futures
+    - use_super_parameters

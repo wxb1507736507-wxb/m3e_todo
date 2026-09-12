@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Colours mirrored from the Flutter theme so the native window matches the app
+  instead of flashing a stock white frame before the first Dart frame lands.
+
+  Values come from `AppColorSchemes.light(AppColorSeed.violet).surface`, which
+  is what the default seed resolves to. They are duplicated here because the
+  Android window is painted before any Dart code runs, so it cannot read the
+  theme. If the default seed colour in `AppColorSchemes` ever changes, update
+  this file and `values-night/colors.xml` to match.
+-->
+<resources>
+    <color name="m3_surface">#FFF7FD</color>
+
+    <!-- Shown behind the window once the Flutter UI is up, at the edges the
+         app does not cover on devices without edge-to-edge. -->
+    <color name="m3_surface_container">#F5EBF6</color>
+</resources>

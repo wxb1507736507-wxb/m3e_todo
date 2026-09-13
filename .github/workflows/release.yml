@@ -313,20 +313,41 @@ jobs:
           #  2. 标签存在但 release 不存在（tag 推送触发）-> 直接为它建 release，
           #     此时不能再传 --target，否则 gh 会因为标签已存在而报错；
           #  3. 标签也不存在（手动触发）-> 从当前提交创建标签并发布。
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
-            echo "已更新既有 release：$TAG"
-          elif git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-            gh release create "$TAG" \
-              --title "M3E Todo ${TAG}" \
-              --generate-notes \
-              dist/*
-            echo "已为既有标签创建 release：$TAG"
-          else
-            gh release create "$TAG" \
-              --title "M3E Todo ${TAG}" \
-              --generate-notes \
-              --target "${GITHUB_SHA}" \
-              dist/*
-            echo "已创建 release 与标签：$TAG"
-          fi
+          #
+          # 为什么要包成函数再重试：Releases API 会偶发 5xx。v0.2.0 的首次发布
+          # 就是这样失败的——作业日志里只有 `HTTP 500 (.../releases)`，而同一时刻
+          # 用同样的参数直接调 API 却成功，说明是瞬时故障。发布是收尾动作，
+          # 不该因为一次瞬时故障让前面三个平台的构建白跑。
+          #
+          # 写成「先判断再操作」而不是简单重放命令，是为了让重试天然幂等：
+          # 若上一次已经建好 release 只是在传产物时失败，重试会走 upload 分支。
+          create_or_update() {
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" dist/* --clobber
+              echo "已更新既有 release：$TAG"
+            elif git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+              gh release create "$TAG" \
+                --title "M3E Todo ${TAG}" \
+                --generate-notes \
+                dist/*
+              echo "已为既有标签创建 release：$TAG"
+            else
+              gh release create "$TAG" \
+                --title "M3E Todo ${TAG}" \
+                --generate-notes \
+                --target "${GITHUB_SHA}" \
+                dist/*
+              echo "已创建 release 与标签：$TAG"
+            fi
+          }
+
+          for attempt in 1 2 3 4; do
+            if create_or_update; then
+              exit 0
+            fi
+            echo "::warning::发布尝试第 ${attempt} 次失败，$((attempt * 15)) 秒后重试"
+            sleep $((attempt * 15))
+          done
+
+          echo "::error::发布在 4 次尝试后仍然失败"
+          exit 1

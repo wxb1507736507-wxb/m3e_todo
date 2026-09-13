@@ -793,9 +793,9 @@ GitHub 不允许在 `if` 条件里直接引用 secrets，所以它们先经过 j
   如果这个版本在 GitHub 上取不到，改成 `stable` 或某个已发布的具体版本即可，这是唯一要改的地方。
 - Windows 构建在 `windows-latest` 上完成——runner 预装了带 C++ 桌面工作负载的
   Visual Studio，正好补上本地缺的那一环。
-- 工作流未在真实 GitHub 上运行过（本仓库尚未推送到 GitHub）。YAML 语法、
-  `sed` 转义、三条版本推导逻辑都在本地实测过，但各 action 在 runner 上的实际行为
-  只能等首次运行验证。
+- 工作流**尚未真正跑过**：仓库本身已经推到 GitHub，但还没有推过 `v*` 标签，也没有手动
+  触发过 `workflow_dispatch`，所以三条发布流程的 YAML 语法、`sed` 转义、三条版本推导逻辑
+  目前只在本地实测过，各 action 在 runner 上的实际行为只能等首次运行验证。
 
 ---
 

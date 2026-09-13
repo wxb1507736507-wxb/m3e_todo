@@ -1,7 +1,7 @@
 name: m3e_todo
 description: "A Material 3 Expressive todo app for Windows desktop."
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.2.1+4
 
 environment:
   sdk: ^3.13.3

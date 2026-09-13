@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive launcher icon (API 26+).
+
+  The logo's artwork reaches to within ~10% of the source image's edges, which is
+  wider than the adaptive icon safe zone (the central 66dp of the 108dp canvas).
+  Drawing the image edge to edge would therefore let the launcher's mask clip the
+  logo, so the artwork goes in the *foreground*, scaled into the safe zone, and
+  the background carries the same colours as a soft gradient — which is what keeps
+  the safe-zone margin from reading as a hard ring around the logo.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/ic_launcher_background"/>
+    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+</adaptive-icon>

@@ -324,6 +324,12 @@ jobs:
           create_or_update() {
             if gh release view "$TAG" >/dev/null 2>&1; then
               gh release upload "$TAG" dist/* --clobber
+              # `release view` 对**草稿**同样成功，而 `upload` 不会把草稿转正。
+              # 这正好是 v0.2.0 踩到的坑：上一次创建时 API 回了 500，但对象其实
+              # 已在服务端建好（草稿态），重试于是走了 upload 分支，产物传上去了、
+              # release 却始终不公开——按标签查询返回 404，只有带写权限的账号
+              # 才看得到。所以这里显式保证它是发布态。
+              gh release edit "$TAG" --draft=false
               echo "已更新既有 release：$TAG"
             elif git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
               gh release create "$TAG" \

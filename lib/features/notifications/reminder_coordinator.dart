@@ -68,24 +68,36 @@ class ReminderCoordinator {
     // Anything removed or changed is cancelled first, then the new or changed
     // ones are scheduled. Ids are stable, so an edited todo replaces its own
     // alarm rather than leaking a second one.
+    //
+    // Both directions are collected and sent as *one* call each: the native side
+    // has the same primitives, and a per-reminder round trip made a launch with
+    // dozens of dated todos do dozens of platform-channel hops while the first
+    // frames were still being built.
+    final List<int> toCancel = <int>[];
     for (final MapEntry<String, PendingReminder> entry in _scheduled.entries) {
       final PendingReminder? stillWanted = desired[entry.key];
       if (stillWanted == null || stillWanted != entry.value) {
-        await AppPlatform.cancelAlarm(_notificationId(entry.key));
+        toCancel.add(_notificationId(entry.key));
       }
     }
+    final List<PendingAlarm> toSchedule = <PendingAlarm>[];
     for (final MapEntry<String, PendingReminder> entry in desired.entries) {
       if (_scheduled[entry.key] == entry.value) {
         continue;
       }
-      await AppPlatform.scheduleAlarm(
-        notificationId: _notificationId(entry.key),
-        title: entry.value.title,
-        body: entry.value.body,
-        triggerAt: entry.value.triggerAt,
-        ring: entry.value.ring,
+      toSchedule.add(
+        PendingAlarm(
+          notificationId: _notificationId(entry.key),
+          title: entry.value.title,
+          body: entry.value.body,
+          triggerAt: entry.value.triggerAt,
+          ring: entry.value.ring,
+        ),
       );
     }
+
+    await AppPlatform.cancelAlarms(toCancel);
+    await AppPlatform.scheduleAlarms(toSchedule);
 
     _scheduled
       ..clear()

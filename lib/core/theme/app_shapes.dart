@@ -37,8 +37,6 @@ abstract final class AppShapes {
   /// Fully rounded. Clamped because [BorderRadius] validates its input.
   static const double full = 999;
 
-  static const BorderRadius noneRadius = BorderRadius.zero;
-
   /// A circular border radius of [value].
   static BorderRadius radius(double value) => BorderRadius.circular(value);
 

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_motion.dart';
+import '../../../../core/theme/app_shapes.dart';
 import '../../domain/entities/todo.dart';
 import '../../domain/usecases/delete_todo.dart';
 import '../controllers/todo_list_controller.dart';
@@ -50,7 +51,19 @@ class TodoListView extends ConsumerWidget {
           builder: (BuildContext context, Widget? _) {
             final double t =
                 AppMotion.spatialFast.curve.transform(animation.value);
-            return Transform.scale(scale: 1 + 0.02 * t, child: child);
+            // The lift is the only cue that a long press has turned into a drag:
+            // the row grows slightly and gains a shadow, so it reads as picked up
+            // off the list rather than merely highlighted.
+            return Transform.scale(
+              scale: 1 + 0.03 * t,
+              child: Material(
+                color: Colors.transparent,
+                elevation: 6 * t,
+                borderRadius: AppShapes.radius(AppShapes.large),
+                shadowColor: Theme.of(context).colorScheme.shadow,
+                child: child,
+              ),
+            );
           },
         );
       },

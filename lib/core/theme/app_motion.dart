@@ -83,17 +83,4 @@ abstract final class AppMotion {
   /// Deliberate property changes, such as a surface changing elevation.
   static final MotionSpec effectsSlow =
       _spring(token: 'effects.slow', stiffness: 800, dampingRatio: 1.0);
-
-  /// Classic curves, kept for the handful of places where a spring would be
-  /// overkill (simple fades, progress indicators).
-  static const Curve emphasized = Curves.easeInOutCubicEmphasized;
-  static const Curve decelerate = Curves.easeOutCubic;
-  static const Curve accelerate = Curves.easeInCubic;
-  static const Curve standard = Curves.easeInOut;
-
-  /// Near-instant feedback, e.g. ripple and focus rings.
-  static const Duration instant = Duration(milliseconds: 50);
-
-  /// Short confirmation animations.
-  static const Duration quick = Duration(milliseconds: 150);
 }

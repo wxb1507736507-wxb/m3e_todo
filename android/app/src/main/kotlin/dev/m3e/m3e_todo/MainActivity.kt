@@ -421,6 +421,30 @@ class MainActivity : FlutterActivity() {
                 AlarmStore.cancel(this, (arguments as Map<*, *>)["notificationId"] as Int)
                 result.success(null)
             }
+            // Batched forms of the two above. Scheduling used to cost one channel
+            // round trip per reminder, so a launch with a few dozen dated todos
+            // woke the platform thread that many times during startup; the same
+            // work now happens in a single hop.
+            "scheduleAlarms" -> {
+                for (entry in arguments as List<*>) {
+                    val args = entry as Map<*, *>
+                    AlarmStore.schedule(
+                        this,
+                        (args["notificationId"] as Number).toInt(),
+                        args["title"] as String,
+                        args["body"] as? String ?: "",
+                        (args["triggerAtMillis"] as Number).toLong(),
+                        args["ring"] as Boolean,
+                    )
+                }
+                result.success(null)
+            }
+            "cancelAlarms" -> {
+                for (entry in arguments as List<*>) {
+                    AlarmStore.cancel(this, (entry as Map<*, *>)["notificationId"] as Int)
+                }
+                result.success(null)
+            }
             "pickAttachment" -> {
                 pendingAttachmentResult = result
                 @Suppress("DEPRECATION")

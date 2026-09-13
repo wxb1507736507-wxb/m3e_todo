@@ -15,6 +15,34 @@ class PickedAttachment {
   final String? mime;
 }
 
+/// One alarm to hand to the native scheduler.
+///
+/// Exists so the batched call and the single call cannot drift apart: both
+/// serialise through [toChannelArgs].
+class PendingAlarm {
+  const PendingAlarm({
+    required this.notificationId,
+    required this.title,
+    required this.body,
+    required this.triggerAt,
+    required this.ring,
+  });
+
+  final int notificationId;
+  final String title;
+  final String body;
+  final DateTime triggerAt;
+  final bool ring;
+
+  Map<String, Object?> toChannelArgs() => <String, Object?>{
+        'notificationId': notificationId,
+        'title': title,
+        'body': body,
+        'triggerAtMillis': triggerAt.millisecondsSinceEpoch,
+        'ring': ring,
+      };
+}
+
 /// Typed Dart surface over the app's single native method channel.
 ///
 /// Every call degrades gracefully off Android: the app's reminder, picker and
@@ -106,19 +134,52 @@ abstract final class AppPlatform {
     required DateTime triggerAt,
     required bool ring,
   }) {
-    return _invoke<Object?>('scheduleAlarm', <String, Object?>{
-      'notificationId': notificationId,
-      'title': title,
-      'body': body,
-      'triggerAtMillis': triggerAt.millisecondsSinceEpoch,
-      'ring': ring,
-    });
+    return _invoke<Object?>(
+      'scheduleAlarm',
+      PendingAlarm(
+        notificationId: notificationId,
+        title: title,
+        body: body,
+        triggerAt: triggerAt,
+        ring: ring,
+      ).toChannelArgs(),
+    );
   }
 
   static Future<void> cancelAlarm(int notificationId) =>
       _invoke<Object?>('cancelAlarm', <String, Object?>{
         'notificationId': notificationId,
       });
+
+  /// Schedules several alarms in one call.
+  ///
+  /// The single-alarm form costs a channel round trip each, and keeping the
+  /// schedule in step after a launch with dozens of dated todos meant dozens of
+  /// trips — all of them landing on the platform thread while the first frames
+  /// were still being built. Batching makes it one.
+  static Future<void> scheduleAlarms(List<PendingAlarm> alarms) {
+    if (alarms.isEmpty) {
+      return Future<void>.value();
+    }
+    return _invoke<Object?>(
+      'scheduleAlarms',
+      <Object?>[for (final PendingAlarm alarm in alarms) alarm.toChannelArgs()],
+    );
+  }
+
+  /// Cancels several alarms in one call.
+  static Future<void> cancelAlarms(List<int> notificationIds) {
+    if (notificationIds.isEmpty) {
+      return Future<void>.value();
+    }
+    return _invoke<Object?>(
+      'cancelAlarms',
+      <Object?>[
+        for (final int id in notificationIds)
+          <String, Object?>{'notificationId': id},
+      ],
+    );
+  }
 
   // --- Pickers -----------------------------------------------------------------
 

@@ -542,7 +542,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              AppStrings.tipSubtask,
+              AppStrings.subtaskEmptyHint,
               style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
             ),
           )

@@ -31,11 +31,4 @@ abstract final class AppDateFormatter {
     }
     return '${date.year}年${date.month}月${date.day}日';
   }
-
-  /// A compact numeric date, used where space is tight.
-  static String numeric(DateTime date) {
-    return '${date.year}-${_two(date.month)}-${_two(date.day)}';
-  }
-
-  static String _two(int value) => value.toString().padLeft(2, '0');
 }

@@ -16,17 +16,14 @@ abstract final class AppStrings {
 
   static const String searchHint = '搜索待办';
   static const String clearSearch = '清除搜索';
-  static const String sortTooltip = '排序方式';
   static const String sortManual = '手动排序';
   static const String sortCreatedNewest = '最近创建';
   static const String sortDueSoonest = '最快到期';
   static const String sortPriorityFirst = '优先级优先';
-  static const String appearanceTooltip = '外观设置';
 
   // --- Summary -------------------------------------------------------------
 
   static String activeCount(int count) => '$count 项进行中';
-  static const String progressLabel = '完成进度';
   static String progressValue(int done, int total) => '$done / $total';
 
   // --- Due dates -----------------------------------------------------------
@@ -34,7 +31,6 @@ abstract final class AppStrings {
   static const String dueOverdue = '已逾期';
   static const String dueToday = '今天到期';
   static const String dueTomorrow = '明天到期';
-  static String dueInDays(int days) => '$days 天后到期';
 
   // --- Empty states --------------------------------------------------------
 
@@ -75,8 +71,6 @@ abstract final class AppStrings {
   static const String actionDelete = '删除';
   static const String actionMarkComplete = '标记为已完成';
   static const String actionMarkIncomplete = '标记为未完成';
-  static const String actionMoveUp = '上移';
-  static const String actionMoveDown = '下移';
   static const String undo = '撤销';
   static String deletedTodo(String title) => '已删除「$title」';
 
@@ -111,15 +105,12 @@ abstract final class AppStrings {
   static const String retry = '重试';
   static const String saveFailed = '保存失败，请重试';
 
-  // --- Shortcut hints ------------------------------------------------------
-
-  static const String shortcutModifier = 'Ctrl';
-
   // --- Subtasks --------------------------------------------------------------
 
   static const String subtasksLabel = '子备忘录';
   static const String addSubtask = '添加子选项';
-  static const String subtaskHint = '例如：番茄、鸡蛋';
+  static const String subtaskHint = '输入子选项';
+  static const String subtaskEmptyHint = '还没有子选项，点右上角 + 添加';
   static const String removeSubtask = '移除子选项';
   static String subtaskProgress(int done, int total) => '$done/$total';
 
@@ -133,7 +124,6 @@ abstract final class AppStrings {
   static const String attachmentUnsupported =
       '此平台暂不支持添加附件';
   static const String attachmentOpenFailed = '无法打开此附件';
-  static const String removeAttachment = '移除附件';
   static const String voiceRecording = '正在录音…';
   static const String voiceRecordStart = '开始录音';
   static const String voiceRecordStop = '完成';
@@ -200,7 +190,6 @@ abstract final class AppStrings {
   static const String ringtoneCustom = '自定义铃声';
   static const String ringtonePick = '选择铃声';
   static const String ringtonePreview = '试听';
-  static const String ringtoneStopPreview = '停止试听';
   static const String notificationPermissionNeeded =
       '尚未授予通知权限，点击此处授权';
   static const String exactAlarmNeeded = '精确提醒未获授权，提醒可能延迟约 1 小时，点击此处设置';
@@ -208,7 +197,7 @@ abstract final class AppStrings {
   static const String reminderTimeHint = '提醒在到期日上午 9:00 发送';
   static const String settingsSectionTips = '使用说明';
   static const String tipReorder = '在列表中长按待办即可拖动排序';
-  static const String tipSubtask = '编辑待办时可以添加子选项，例如买菜清单里的每种菜';
+  static const String tipSubtask = '编辑待办时可以添加子选项，把一件事拆成可勾选的步骤';
   static const String tipCalendar = '在「日历」页回顾历史待办，支持按日期跳转和搜索';
   static const String tipAttachment = '待办可以附加图片、视频、文档或语音备忘';
   static const String tipAppearance = '在编辑待办时可以自定义色块颜色与背景图片';

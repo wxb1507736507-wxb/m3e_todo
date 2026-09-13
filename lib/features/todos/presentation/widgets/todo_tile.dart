@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/platform/app_platform.dart';
@@ -120,7 +121,13 @@ class _TodoTileState extends State<TodoTile> {
                 children: <Widget>[
                   Checkbox(
                     value: completed,
-                    onChanged: (_) => widget.onToggle(),
+                    onChanged: (_) {
+                      // A short tick under the thumb. The checkbox is a small
+                      // target, so a haptic is what confirms the tap landed even
+                      // when the row itself barely moves.
+                      unawaited(HapticFeedback.selectionClick());
+                      widget.onToggle();
+                    },
                     semanticLabel: completed
                         ? AppStrings.actionMarkIncomplete
                         : AppStrings.actionMarkComplete,
@@ -278,7 +285,10 @@ class _SubtaskChecklist extends StatelessWidget {
         children: <Widget>[
           for (final subtask in todo.subtasks)
             InkWell(
-              onTap: () => onToggle(subtask.id),
+              onTap: () {
+                unawaited(HapticFeedback.selectionClick());
+                onToggle(subtask.id);
+              },
               borderRadius: AppShapes.radius(AppShapes.small),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
@@ -486,7 +496,12 @@ class _ActionsMenu extends StatelessWidget {
         ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.delete_outline),
-          onPressed: onDelete,
+          onPressed: () {
+            // Deleting is the one irreversible action here, so it gets the
+            // heavier tick rather than the selection one.
+            unawaited(HapticFeedback.mediumImpact());
+            onDelete();
+          },
           child: const Text(AppStrings.actionDelete),
         ),
       ],

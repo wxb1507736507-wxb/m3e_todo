@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_strings.dart';
@@ -23,8 +24,25 @@ class M3eTodoApp extends ConsumerWidget {
     return MaterialApp(
       title: AppStrings.appTitle,
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(settings.colorSeed),
-      darkTheme: AppTheme.dark(settings.colorSeed),
+      // AppStrings covers this app's own text, but the *platform* surfaces —
+      // most visibly the date picker behind every due date — are drawn by
+      // Material itself. Without these delegates they fall back to English
+      // inside an otherwise Chinese UI.
+      locale: const Locale('zh'),
+      supportedLocales: const <Locale>[Locale('zh'), Locale('en')],
+      localizationsDelegates: const <LocalizationsDelegate<Object>>[
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      theme: AppTheme.light(
+        settings.colorSeed,
+        translucent: settings.hasBackground,
+      ),
+      darkTheme: AppTheme.dark(
+        settings.colorSeed,
+        translucent: settings.hasBackground,
+      ),
       themeMode: AppColorSchemes.themeModeOf(settings.themeMode),
       home: const AppShell(),
     );

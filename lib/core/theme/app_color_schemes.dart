@@ -59,4 +59,26 @@ abstract final class AppColorSchemes {
       AppThemeMode.dark => ThemeMode.dark,
     };
   }
+
+  /// Builds every palette the appearance picker may need.
+  ///
+  /// Kept deliberately *unused* by the app: a warm-up loop was written on the
+  /// theory that the first open of the settings sheet was paying for five
+  /// unmemoised palettes. Measurement killed that theory — each palette costs
+  /// **~0.9ms**, so five of them are ~4.5ms out of a 29ms first-open frame. The
+  /// real cost is described in the README under 「新页面的第一次上屏」: it is
+  /// engine-level first-use work that shows up for whichever full-screen surface
+  /// is opened first (calendar 25ms, editor 28ms, settings 29ms), and
+  /// pre-computing palettes does not touch it.
+  ///
+  /// The loop was removed rather than kept 「以防万一」: a mechanism whose premise
+  /// the data disproved is a maintenance cost with no measured benefit. What
+  /// survives is the assumption worth guarding — that the cache really does make
+  /// repeats free — asserted in `test/core/theme/app_theme_test.dart`.
+  static void buildAll() {
+    for (final AppColorSeed seed in AppColorSeed.values) {
+      light(seed);
+      dark(seed);
+    }
+  }
 }

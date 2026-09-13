@@ -1,5 +1,7 @@
 import '../../../../core/utils/calendar.dart';
+import 'todo_attachment.dart';
 import 'todo_priority.dart';
+import 'todo_subtask.dart';
 
 /// Thrown when a todo would break the domain rule that a title is required.
 ///
@@ -33,6 +35,10 @@ class Todo {
     this.priority = TodoPriority.normal,
     this.dueDate,
     this.completedAt,
+    this.subtasks = const <TodoSubtask>[],
+    this.attachments = const <TodoAttachment>[],
+    this.accentColor,
+    this.backgroundImage,
   });
 
   /// Creates a todo from raw user input, applying the domain's normalisation
@@ -48,6 +54,10 @@ class Todo {
     String? notes,
     TodoPriority priority = TodoPriority.normal,
     DateTime? dueDate,
+    List<TodoSubtask> subtasks = const <TodoSubtask>[],
+    List<TodoAttachment> attachments = const <TodoAttachment>[],
+    int? accentColor,
+    String? backgroundImage,
   }) {
     final String normalizedTitle = title.trim();
     if (normalizedTitle.isEmpty) {
@@ -60,6 +70,10 @@ class Todo {
       notes: _normalizeNotes(notes),
       priority: priority,
       dueDate: dueDate == null ? null : startOfDay(dueDate),
+      subtasks: normalizeSubtasks(subtasks),
+      attachments: normalizeAttachments(attachments),
+      accentColor: accentColor,
+      backgroundImage: backgroundImage,
     );
   }
 
@@ -83,9 +97,27 @@ class Todo {
   /// When the task was completed, or `null` while it is still open.
   final DateTime? completedAt;
 
+  /// Checklist steps inside this todo. May be empty; never `null`.
+  final List<TodoSubtask> subtasks;
+
+  /// Files attached to this todo. May be empty; never `null`.
+  final List<TodoAttachment> attachments;
+
+  /// User-chosen tile colour as an ARGB32 integer, or `null` to follow the
+  /// theme. Stored as an int rather than a `Color` so the domain stays free of
+  /// Flutter imports.
+  final int? accentColor;
+
+  /// Absolute path of an optional background image for the tile.
+  final String? backgroundImage;
+
   bool get isCompleted => completedAt != null;
 
   bool get hasNotes => notes != null && notes!.isNotEmpty;
+
+  bool get hasSubtasks => subtasks.isNotEmpty;
+
+  bool get hasAttachments => attachments.isNotEmpty;
 
   /// Whether a still-open task's deadline has passed.
   bool isOverdue(DateTime now) {
@@ -112,6 +144,17 @@ class Todo {
     return due == null ? null : daysBetween(now, due);
   }
 
+  /// How many of the checklist steps are done. `(0, 0)` when there are none.
+  (int, int) subtaskProgress() {
+    if (subtasks.isEmpty) {
+      return (0, 0);
+    }
+    return (
+      subtasks.where((TodoSubtask subtask) => subtask.isCompleted).length,
+      subtasks.length,
+    );
+  }
+
   /// This todo marked complete at [moment].
   ///
   /// Idempotent: completing an already-complete todo keeps the original
@@ -120,15 +163,7 @@ class Todo {
     if (isCompleted) {
       return this;
     }
-    return Todo(
-      id: id,
-      title: title,
-      createdAt: createdAt,
-      notes: notes,
-      priority: priority,
-      dueDate: dueDate,
-      completedAt: moment,
-    );
+    return _withCompletion(moment);
   }
 
   /// This todo returned to the open state, clearing its completion timestamp.
@@ -136,30 +171,39 @@ class Todo {
     if (!isCompleted) {
       return this;
     }
-    return Todo(
-      id: id,
-      title: title,
-      createdAt: createdAt,
-      notes: notes,
-      priority: priority,
-      dueDate: dueDate,
-    );
+    return _withCompletion(null);
   }
 
   /// Flips completion state at [moment].
   Todo toggledAt(DateTime moment) =>
       isCompleted ? reopen() : completeAt(moment);
 
+  /// Flips the completion state of one checklist step at [moment].
+  ///
+  /// Silently returns this todo when [subtaskId] matches nothing, mirroring how
+  /// [toggledAt]'s caller tolerates a fast double tap.
+  Todo toggleSubtask(String subtaskId, DateTime moment) {
+    final List<TodoSubtask> updated = <TodoSubtask>[
+      for (final TodoSubtask subtask in subtasks)
+        if (subtask.id == subtaskId) subtask.toggledAt(moment) else subtask,
+    ];
+    return _withSubtasks(updated);
+  }
+
   /// Replaces every user-editable field at once.
   ///
-  /// The editor always submits the complete form state, so taking all four
-  /// values as required parameters removes any need for "clear this field"
-  /// sentinels.
+  /// The editor always submits the complete form state, so taking all values as
+  /// required parameters removes any need for "clear this field" sentinels —
+  /// passing an empty list explicitly clears subtasks or attachments.
   Todo edit({
     required String title,
     required String? notes,
     required TodoPriority priority,
     required DateTime? dueDate,
+    required List<TodoSubtask> subtasks,
+    required List<TodoAttachment> attachments,
+    required int? accentColor,
+    required String? backgroundImage,
   }) {
     final String normalizedTitle = title.trim();
     if (normalizedTitle.isEmpty) {
@@ -172,7 +216,51 @@ class Todo {
       notes: _normalizeNotes(notes),
       priority: priority,
       dueDate: dueDate == null ? null : startOfDay(dueDate),
+      subtasks: normalizeSubtasks(subtasks),
+      attachments: normalizeAttachments(attachments),
+      accentColor: accentColor,
+      backgroundImage: backgroundImage,
       completedAt: completedAt,
+    );
+  }
+
+  /// The same todo with its completion timestamp replaced by [completedAt].
+  ///
+  /// A plain `copyWith` cannot do this: a `null` argument would be
+  /// indistinguishable from "leave it alone", so reopening a todo could never
+  /// actually clear the timestamp. Assigning the value unconditionally — and
+  /// exposing only these two named intents — removes the ambiguity instead of
+  /// papering over it with a sentinel.
+  Todo _withCompletion(DateTime? completedAt) {
+    return Todo(
+      id: id,
+      title: title,
+      createdAt: createdAt,
+      notes: notes,
+      priority: priority,
+      dueDate: dueDate,
+      completedAt: completedAt,
+      subtasks: subtasks,
+      attachments: attachments,
+      accentColor: accentColor,
+      backgroundImage: backgroundImage,
+    );
+  }
+
+  /// The same todo with its checklist replaced by [subtasks].
+  Todo _withSubtasks(List<TodoSubtask> subtasks) {
+    return Todo(
+      id: id,
+      title: title,
+      createdAt: createdAt,
+      notes: notes,
+      priority: priority,
+      dueDate: dueDate,
+      completedAt: completedAt,
+      subtasks: subtasks,
+      attachments: attachments,
+      accentColor: accentColor,
+      backgroundImage: backgroundImage,
     );
   }
 
@@ -188,12 +276,27 @@ class Todo {
         other.notes == notes &&
         other.priority == priority &&
         other.dueDate == dueDate &&
-        other.completedAt == completedAt;
+        other.completedAt == completedAt &&
+        _listEquals(other.subtasks, subtasks) &&
+        _listEquals(other.attachments, attachments) &&
+        other.accentColor == accentColor &&
+        other.backgroundImage == backgroundImage;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, createdAt, notes, priority, dueDate, completedAt);
+  int get hashCode => Object.hash(
+        id,
+        title,
+        createdAt,
+        notes,
+        priority,
+        dueDate,
+        completedAt,
+        Object.hashAll(subtasks),
+        Object.hashAll(attachments),
+        accentColor,
+        backgroundImage,
+      );
 
   @override
   String toString() =>
@@ -202,5 +305,20 @@ class Todo {
   static String? _normalizeNotes(String? notes) {
     final String trimmed = notes?.trim() ?? '';
     return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static bool _listEquals<T>(List<T> a, List<T> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 }

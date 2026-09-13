@@ -40,6 +40,13 @@ class TodoListController extends AsyncNotifier<List<Todo>> {
     return _publish(() => ref.read(toggleTodoProvider)(id));
   }
 
+  /// Flips one checklist step of the todo with [id].
+  Future<void> toggleSubtask(String todoId, String subtaskId) {
+    return _publish(
+      () => ref.read(toggleSubtaskProvider)(todoId, subtaskId),
+    );
+  }
+
   Future<void> reorder(int oldIndex, int newIndex) {
     return _publish(() => ref.read(reorderTodosProvider)(oldIndex, newIndex));
   }

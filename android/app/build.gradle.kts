@@ -73,6 +73,12 @@ kotlin {
     }
 }
 
+dependencies {
+    // FileProvider (sharing attachments with gallery/video apps) lives here;
+    // the Flutter embedding does not guarantee androidx.core on its own.
+    implementation("androidx.core:core-ktx:1.13.1")
+}
+
 flutter {
     source = "../.."
 }

@@ -31,6 +31,10 @@ final class AddTodo extends TodoMutation {
         notes: draft.notes,
         priority: draft.priority,
         dueDate: draft.dueDate,
+        subtasks: draft.subtasks,
+        attachments: draft.attachments,
+        accentColor: draft.accentColor,
+        backgroundImage: draft.backgroundImage,
       );
       return <Todo>[todo, ...current];
     });

@@ -1,4 +1,6 @@
+import 'todo_attachment.dart';
 import 'todo_priority.dart';
+import 'todo_subtask.dart';
 
 /// Raw, not-yet-validated input coming from the editor form.
 ///
@@ -11,6 +13,10 @@ class TodoDraft {
     this.notes,
     this.priority = TodoPriority.normal,
     this.dueDate,
+    this.subtasks = const <TodoSubtask>[],
+    this.attachments = const <TodoAttachment>[],
+    this.accentColor,
+    this.backgroundImage,
   });
 
   final String title;
@@ -18,6 +24,21 @@ class TodoDraft {
   final TodoPriority priority;
   final DateTime? dueDate;
 
+  /// Checklist steps as assembled by the editor; blank rows are dropped by the
+  /// domain when the draft is applied.
+  final List<TodoSubtask> subtasks;
+
+  /// Files the editor picked; the files themselves are already copied into the
+  /// app's attachments directory by the time a draft is submitted.
+  final List<TodoAttachment> attachments;
+
+  /// ARGB32 tile colour, or `null` to follow the theme.
+  final int? accentColor;
+
+  /// Absolute path of the tile background image, or `null` for none.
+  final String? backgroundImage;
+
   @override
-  String toString() => 'TodoDraft("$title", $priority, due: $dueDate)';
+  String toString() => 'TodoDraft("$title", $priority, due: $dueDate, '
+      '${subtasks.length} subtasks, ${attachments.length} attachments)';
 }

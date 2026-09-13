@@ -114,4 +114,103 @@ abstract final class AppStrings {
   // --- Shortcut hints ------------------------------------------------------
 
   static const String shortcutModifier = 'Ctrl';
+
+  // --- Subtasks --------------------------------------------------------------
+
+  static const String subtasksLabel = '子备忘录';
+  static const String addSubtask = '添加子选项';
+  static const String subtaskHint = '例如：番茄、鸡蛋';
+  static const String removeSubtask = '移除子选项';
+  static String subtaskProgress(int done, int total) => '$done/$total';
+
+  // --- Attachments -------------------------------------------------------------
+
+  static const String attachmentsLabel = '附件';
+  static const String attachImage = '图片';
+  static const String attachVideo = '视频';
+  static const String attachDocument = '文档';
+  static const String attachVoice = '语音';
+  static const String attachmentUnsupported =
+      '此平台暂不支持添加附件';
+  static const String attachmentOpenFailed = '无法打开此附件';
+  static const String removeAttachment = '移除附件';
+  static const String voiceRecording = '正在录音…';
+  static const String voiceRecordStart = '开始录音';
+  static const String voiceRecordStop = '完成';
+  static const String voiceRecordCancel = '取消';
+  static const String voiceRecordFailed = '录音失败，请检查麦克风权限';
+
+  // --- Appearance --------------------------------------------------------------
+
+  static const String accentColorLabel = '色块颜色';
+  static const String accentColorNone = '跟随主题';
+  static const String backgroundImageLabel = '背景图片';
+  static const String pickBackgroundImage = '选择图片';
+  static const String clearBackgroundImage = '移除背景图';
+  static const String cropBackgroundImage = '裁剪';
+
+  // --- Cropper -------------------------------------------------------------------
+
+  static const String cropTitle = '裁剪图片';
+  static const String cropApply = '完成';
+  static const String cropHint = '双指缩放、拖动调整范围，框内即为保留部分';
+  static const String cropFailed = '图片处理失败，请重试';
+  static const String cropAspectOriginal = '原图';
+  static const String cropAspectScreen = '屏幕';
+  static const String cropAspectSquare = '1:1';
+  static const String cropAspectStandard = '4:3';
+  static const String cropAspectWide = '16:9';
+  static const String cropAspectPortrait = '9:16';
+
+  // --- App background ---------------------------------------------------------------
+
+  static const String settingsSectionBackground = '应用背景';
+  static const String appBackgroundNone = '未设置背景图，应用使用主题底色';
+  static const String appBackgroundPick = '选择背景图';
+  static const String appBackgroundChange = '更换';
+  static const String appBackgroundRemove = '移除';
+  static const String backgroundDimLabel = '遮罩浓度';
+  static String backgroundDimValue(int percent) => '$percent%';
+
+  // --- Calendar -----------------------------------------------------------------
+
+  static const String navCalendar = '日历';
+  static const String calendarTitle = '日历回顾';
+  static const String calendarSearchHint = '搜索历史待办';
+  static const String calendarToday = '今天';
+  static const String calendarPreviousMonth = '上个月';
+  static const String calendarNextMonth = '下个月';
+  static const String calendarJumpToDate = '跳转到指定日期';
+  static const String calendarNoTodos = '这一天没有待办记录';
+  static String calendarMonthLabel(int year, int month) => '$year年$month月';
+  static const String calendarDueLegend = '到期';
+  static const String calendarCompletedLegend = '完成';
+
+  // --- Settings -------------------------------------------------------------------
+
+  static const String settingsTooltip = '设置';
+  static const String settingsTitle = '设置';
+  static const String settingsSectionAppearance = '外观';
+  static const String settingsSectionReminders = '到期提醒';
+  static const String reminderModeLabel = '提醒方式';
+  static const String reminderModeRing = '响铃';
+  static const String reminderModeSilent = '仅消息';
+  static const String ringtoneLabel = '铃声';
+  static const String ringtoneSystem = '跟随系统';
+  static const String ringtoneCustom = '自定义铃声';
+  static const String ringtonePick = '选择铃声';
+  static const String ringtonePreview = '试听';
+  static const String ringtoneStopPreview = '停止试听';
+  static const String notificationPermissionNeeded =
+      '尚未授予通知权限，点击此处授权';
+  static const String exactAlarmNeeded = '精确提醒未获授权，提醒可能延迟约 1 小时，点击此处设置';
+  static const String notificationTest = '发送测试通知';
+  static const String reminderTimeHint = '提醒在到期日上午 9:00 发送';
+  static const String settingsSectionTips = '使用说明';
+  static const String tipReorder = '在列表中长按待办即可拖动排序';
+  static const String tipSubtask = '编辑待办时可以添加子选项，例如买菜清单里的每种菜';
+  static const String tipCalendar = '在「日历」页回顾历史待办，支持按日期跳转和搜索';
+  static const String tipAttachment = '待办可以附加图片、视频、文档或语音备忘';
+  static const String tipAppearance = '在编辑待办时可以自定义色块颜色与背景图片';
+  static const String tipAppBackground = '设置 →「应用背景」可以给整个应用换背景图，图片可裁剪';
 }

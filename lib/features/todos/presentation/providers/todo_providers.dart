@@ -17,6 +17,7 @@ import '../../domain/usecases/delete_todo.dart';
 import '../../domain/usecases/load_todos.dart';
 import '../../domain/usecases/reorder_todos.dart';
 import '../../domain/usecases/restore_todo.dart';
+import '../../domain/usecases/toggle_subtask.dart';
 import '../../domain/usecases/toggle_todo.dart';
 import '../../domain/usecases/update_todo.dart';
 import '../controllers/todo_filter_controller.dart';
@@ -87,6 +88,14 @@ final Provider<ToggleTodo> toggleTodoProvider = Provider<ToggleTodo>(
     clock: ref.watch(clockProvider),
   ),
   name: 'toggleTodo',
+);
+
+final Provider<ToggleSubtask> toggleSubtaskProvider = Provider<ToggleSubtask>(
+  (ref) => ToggleSubtask(
+    ref.watch(todoRepositoryProvider),
+    clock: ref.watch(clockProvider),
+  ),
+  name: 'toggleSubtask',
 );
 
 final Provider<DeleteTodo> deleteTodoProvider = Provider<DeleteTodo>(

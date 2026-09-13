@@ -5,12 +5,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_strings.dart';
-import '../features/settings/presentation/appearance_sheet.dart';
+import '../core/platform/app_platform.dart';
+import '../features/calendar/presentation/calendar_page.dart';
+import '../features/notifications/reminder_coordinator.dart';
+import '../features/settings/domain/app_settings.dart';
+import '../features/settings/presentation/settings_controller.dart';
+import '../features/settings/presentation/settings_sheet.dart';
+import '../features/todos/domain/entities/todo.dart';
 import '../features/todos/domain/entities/todo_filter.dart';
 import '../features/todos/domain/entities/todo_stats.dart';
 import '../features/todos/presentation/pages/todo_page.dart';
 import '../features/todos/presentation/providers/todo_providers.dart';
 import '../features/todos/presentation/widgets/todo_editor_sheet.dart';
+import 'app_background.dart';
 
 /// Width at or above which the navigation rail replaces the bottom bar.
 ///
@@ -21,6 +28,10 @@ const double kRailBreakpoint = 720;
 
 /// The application frame: navigation, app bar, shortcuts and the new-todo
 /// action.
+///
+/// Navigation has four destinations: the three status filters plus the calendar
+/// review. Selecting a status shows the list; selecting the calendar swaps the
+/// body for [CalendarPage] while leaving the filters untouched.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
@@ -29,14 +40,44 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  /// Order of the navigation destinations, and the single mapping from index to
-  /// status. Driving the rail and the bottom bar from one list is what stops the
-  /// two from disagreeing on a narrow window.
   static const List<TodoStatusFilter> _statuses = <TodoStatusFilter>[
     TodoStatusFilter.all,
     TodoStatusFilter.active,
     TodoStatusFilter.completed,
   ];
+
+  /// Index of the calendar pseudo-destination (after the three statuses).
+  static const int _calendarIndex = 3;
+
+  int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final List<Todo>? todos = ref.read(todoListProvider).value;
+      if (todos != null) {
+        unawaited(ref.read(reminderCoordinatorProvider).sync(todos));
+      }
+      // Ask for the notification permission up front on Android 13+: a
+      // reminder that cannot show itself is worse than one more dialog at
+      // first launch.
+      unawaited(_ensureNotificationPermission());
+    });
+  }
+
+  Future<void> _ensureNotificationPermission() async {
+    if (!AppPlatform.isAndroid) {
+      return;
+    }
+    if (!await AppPlatform.notificationsEnabled()) {
+      await AppPlatform.requestNotificationPermission();
+    }
+  }
 
   void _createTodo() => unawaited(showTodoEditor(context));
 
@@ -81,11 +122,43 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Reminder schedule wiring: listening in build (rather than initState) is
+    // the Riverpod-blessed way for a StatefulWidget, and both listeners below
+    // only fire on actual changes.
+    ref.listen<AsyncValue<List<Todo>>>(
+      todoListProvider,
+      (AsyncValue<List<Todo>>? previous, AsyncValue<List<Todo>> next) {
+        final List<Todo>? todos = next.value;
+        if (todos != null) {
+          unawaited(ref.read(reminderCoordinatorProvider).sync(todos));
+        }
+      },
+    );
+    ref.listen<AppSettings>(
+      settingsProvider,
+      (AppSettings? previous, AppSettings next) {
+        if (previous == null ||
+            previous.reminderMode != next.reminderMode ||
+            previous.ringtoneUri != next.ringtoneUri) {
+          unawaited(ref.read(reminderCoordinatorProvider).resync());
+        }
+      },
+    );
+
     final TodoStatusFilter status = ref.watch(
       todoFilterProvider.select((TodoFilter filter) => filter.status),
     );
     final TodoStats? stats = ref.watch(todoStatsProvider).value;
-    final int selectedIndex = _statuses.indexOf(status);
+    final AppSettings settings = ref.watch(settingsProvider);
+
+    // The selected destination only maps to a status for the first three
+    // entries; the calendar keeps whichever filter was last active.
+    if (_selectedIndex < _statuses.length) {
+      final int statusIndex = _statuses.indexOf(status);
+      if (statusIndex >= 0) {
+        _selectedIndex = statusIndex;
+      }
+    }
 
     // Shortcuts are registered on the shell rather than on individual widgets so
     // they work wherever focus happens to be. While a modal sheet is open the
@@ -103,41 +176,51 @@ class _AppShellState extends ConsumerState<AppShell> {
           builder: (BuildContext context, BoxConstraints constraints) {
             final bool useRail = constraints.maxWidth >= kRailBreakpoint;
 
-            return Scaffold(
-              appBar: AppBar(
-                title: const Text(AppStrings.appTitle),
-                actions: <Widget>[
-                  if ((stats?.completed ?? 0) > 0)
-                    IconButton(
-                      icon: const Icon(Icons.cleaning_services_outlined),
-                      tooltip: AppStrings.clearCompleted,
-                      onPressed: () => unawaited(
-                        _clearCompleted(stats!.completed),
-                      ),
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.palette_outlined),
-                    tooltip: AppStrings.appearanceTooltip,
-                    onPressed: () => unawaited(showAppearanceSheet(context)),
+            return AppBackground(
+              imagePath: settings.backgroundImage,
+              dim: settings.backgroundDim,
+              child: Scaffold(
+                appBar: AppBar(
+                  // The title follows the destination, so the calendar says so
+                  // instead of leaving the user to infer it from the grid.
+                  title: Text(
+                    _selectedIndex == _calendarIndex
+                        ? AppStrings.calendarTitle
+                        : AppStrings.appTitle,
                   ),
-                  const SizedBox(width: 8),
-                ],
-              ),
-              body: useRail
-                  ? Row(
-                      children: <Widget>[
-                        _buildRail(context, selectedIndex, stats),
-                        const VerticalDivider(width: 1),
-                        const Expanded(child: TodoPage()),
-                      ],
-                    )
-                  : const TodoPage(),
-              bottomNavigationBar:
-                  useRail ? null : _buildBottomBar(selectedIndex, stats),
-              floatingActionButton: FloatingActionButton.extended(
-                onPressed: _createTodo,
-                icon: const Icon(Icons.add),
-                label: const Text(AppStrings.newTodo),
+                  actions: <Widget>[
+                    if ((stats?.completed ?? 0) > 0)
+                      IconButton(
+                        icon: const Icon(Icons.cleaning_services_outlined),
+                        tooltip: AppStrings.clearCompleted,
+                        onPressed: () => unawaited(
+                          _clearCompleted(stats!.completed),
+                        ),
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.settings_outlined),
+                      tooltip: AppStrings.settingsTooltip,
+                      onPressed: () => unawaited(showSettingsSheet(context)),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+                body: useRail
+                    ? Row(
+                        children: <Widget>[
+                          _buildRail(context, stats),
+                          const VerticalDivider(width: 1),
+                          Expanded(child: _buildBody()),
+                        ],
+                      )
+                    : _buildBody(),
+                bottomNavigationBar:
+                    useRail ? null : _buildBottomBar(stats),
+                floatingActionButton: FloatingActionButton.extended(
+                  onPressed: _createTodo,
+                  icon: const Icon(Icons.add),
+                  label: const Text(AppStrings.newTodo),
+                ),
               ),
             );
           },
@@ -146,18 +229,22 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  void _selectStatus(int index) {
+  Widget _buildBody() =>
+      _selectedIndex == _calendarIndex ? const CalendarPage() : const TodoPage();
+
+  void _selectDestination(int index) {
+    if (index == _calendarIndex) {
+      setState(() => _selectedIndex = index);
+      return;
+    }
+    setState(() => _selectedIndex = index);
     ref.read(todoFilterProvider.notifier).setStatus(_statuses[index]);
   }
 
-  Widget _buildRail(
-    BuildContext context,
-    int selectedIndex,
-    TodoStats? stats,
-  ) {
+  Widget _buildRail(BuildContext context, TodoStats? stats) {
     return NavigationRail(
-      selectedIndex: selectedIndex,
-      onDestinationSelected: _selectStatus,
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: _selectDestination,
       labelType: NavigationRailLabelType.all,
       destinations: <NavigationRailDestination>[
         NavigationRailDestination(
@@ -187,14 +274,19 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
           label: const Text(AppStrings.navCompleted),
         ),
+        const NavigationRailDestination(
+          icon: Icon(Icons.calendar_month_outlined),
+          selectedIcon: Icon(Icons.calendar_month),
+          label: Text(AppStrings.navCalendar),
+        ),
       ],
     );
   }
 
-  Widget _buildBottomBar(int selectedIndex, TodoStats? stats) {
+  Widget _buildBottomBar(TodoStats? stats) {
     return NavigationBar(
-      selectedIndex: selectedIndex,
-      onDestinationSelected: _selectStatus,
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: _selectDestination,
       destinations: <Widget>[
         NavigationDestination(
           icon: _badged(const Icon(Icons.inbox_outlined), stats?.total ?? 0),
@@ -222,6 +314,11 @@ class _AppShellState extends ConsumerState<AppShell> {
             stats?.completed ?? 0,
           ),
           label: AppStrings.navCompleted,
+        ),
+        const NavigationDestination(
+          icon: Icon(Icons.calendar_month_outlined),
+          selectedIcon: Icon(Icons.calendar_month),
+          label: AppStrings.navCalendar,
         ),
       ],
     );

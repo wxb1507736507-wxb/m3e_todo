@@ -1,5 +1,7 @@
 import '../../domain/entities/todo.dart';
+import '../../domain/entities/todo_attachment.dart';
 import '../../domain/entities/todo_priority.dart';
+import '../../domain/entities/todo_subtask.dart';
 
 /// Translates between [Todo] and the JSON shape written to disk.
 ///
@@ -8,7 +10,12 @@ import '../../domain/entities/todo_priority.dart';
 /// one file.
 abstract final class TodoModel {
   /// Bumped whenever the stored shape changes incompatibly.
-  static const int schemaVersion = 1;
+  ///
+  /// Version 2 adds `subtasks`, `attachments`, `accentColor` and
+  /// `backgroundImage`. All four are optional on read, so a version-1 file
+  /// loads unchanged and a version-2 file still opens in an older build — the
+  /// extra fields are simply ignored there.
+  static const int schemaVersion = 2;
 
   static Map<String, Object?> toJson(Todo todo) {
     return <String, Object?>{
@@ -22,6 +29,17 @@ abstract final class TodoModel {
       if (todo.dueDate != null) 'dueDate': todo.dueDate!.toIso8601String(),
       if (todo.completedAt != null)
         'completedAt': todo.completedAt!.toIso8601String(),
+      if (todo.subtasks.isNotEmpty)
+        'subtasks': <Object?>[
+          for (final TodoSubtask subtask in todo.subtasks) _subtaskJson(subtask),
+        ],
+      if (todo.attachments.isNotEmpty)
+        'attachments': <Object?>[
+          for (final TodoAttachment attachment in todo.attachments)
+            _attachmentJson(attachment),
+        ],
+      if (todo.accentColor != null) 'accentColor': todo.accentColor,
+      if (todo.backgroundImage != null) 'backgroundImage': todo.backgroundImage,
     };
   }
 
@@ -54,12 +72,102 @@ abstract final class TodoModel {
       priority: _readPriority(json),
       dueDate: _readDate(json, 'dueDate'),
       completedAt: _readDate(json, 'completedAt'),
+      subtasks: _readSubtasks(json),
+      attachments: _readAttachments(json),
+      accentColor: _readInt(json, 'accentColor'),
+      backgroundImage: _readString(json, 'backgroundImage'),
     );
+  }
+
+  static Map<String, Object?> _subtaskJson(TodoSubtask subtask) {
+    return <String, Object?>{
+      'id': subtask.id,
+      'title': subtask.title,
+      if (subtask.completedAt != null)
+        'completedAt': subtask.completedAt!.toIso8601String(),
+    };
+  }
+
+  static Map<String, Object?> _attachmentJson(TodoAttachment attachment) {
+    return <String, Object?>{
+      'id': attachment.id,
+      'type': attachment.type.name,
+      'path': attachment.path,
+      'name': attachment.name,
+      if (attachment.mime != null) 'mime': attachment.mime,
+    };
+  }
+
+  static List<TodoSubtask> _readSubtasks(Map<String, Object?> json) {
+    final Object? raw = json['subtasks'];
+    if (raw is! List) {
+      return const <TodoSubtask>[];
+    }
+    final List<TodoSubtask> subtasks = <TodoSubtask>[];
+    for (final Object? entry in raw) {
+      if (entry is! Map) {
+        continue;
+      }
+      final Map<String, Object?> subtaskJson = Map<String, Object?>.from(entry);
+      final String? id = _readString(subtaskJson, 'id');
+      final String? title = _readString(subtaskJson, 'title');
+      if (id == null || id.isEmpty || title == null || title.trim().isEmpty) {
+        continue;
+      }
+      subtasks.add(TodoSubtask(
+        id: id,
+        title: title,
+        completedAt: _readDate(subtaskJson, 'completedAt'),
+      ));
+    }
+    return subtasks;
+  }
+
+  static List<TodoAttachment> _readAttachments(Map<String, Object?> json) {
+    final Object? raw = json['attachments'];
+    if (raw is! List) {
+      return const <TodoAttachment>[];
+    }
+    final List<TodoAttachment> attachments = <TodoAttachment>[];
+    for (final Object? entry in raw) {
+      if (entry is! Map) {
+        continue;
+      }
+      final Map<String, Object?> attachmentJson = Map<String, Object?>.from(entry);
+      final String? id = _readString(attachmentJson, 'id');
+      final String? path = _readString(attachmentJson, 'path');
+      if (id == null || id.isEmpty || path == null || path.isEmpty) {
+        continue;
+      }
+      attachments.add(TodoAttachment(
+        id: id,
+        type: _readAttachmentType(attachmentJson),
+        path: path,
+        name: _readString(attachmentJson, 'name') ?? path,
+        mime: _readString(attachmentJson, 'mime'),
+      ));
+    }
+    return attachments;
+  }
+
+  static TodoAttachmentType _readAttachmentType(Map<String, Object?> json) {
+    final String? raw = _readString(json, 'type');
+    for (final TodoAttachmentType type in TodoAttachmentType.values) {
+      if (type.name == raw) {
+        return type;
+      }
+    }
+    return TodoAttachmentType.document;
   }
 
   static String? _readString(Map<String, Object?> json, String key) {
     final Object? value = json[key];
     return value is String ? value : null;
+  }
+
+  static int? _readInt(Map<String, Object?> json, String key) {
+    final Object? value = json[key];
+    return value is int ? value : null;
   }
 
   static DateTime? _readDate(Map<String, Object?> json, String key) {

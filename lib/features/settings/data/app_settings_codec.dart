@@ -6,13 +6,25 @@ import '../domain/app_settings.dart';
 /// declarations for readability cannot silently change what an existing file
 /// means.
 abstract final class AppSettingsCodec {
-  static const int schemaVersion = 1;
+  /// Version 3 adds `backgroundImage` and `backgroundDim`.
+  ///
+  /// Both are optional on read, so a version-2 file loads unchanged and a
+  /// version-3 file still opens in an older build, where the extra fields are
+  /// simply ignored.
+  static const int schemaVersion = 3;
 
   static Map<String, Object?> toJson(AppSettings settings) {
     return <String, Object?>{
       'version': schemaVersion,
       'themeMode': settings.themeMode.name,
       'colorSeed': settings.colorSeed.name,
+      'reminderMode': settings.reminderMode.name,
+      // Absent rather than null on disk: absent means "follow the system".
+      if (settings.ringtoneUri != null) 'ringtoneUri': settings.ringtoneUri,
+      // Same rule: absent means "no background, use the theme surface".
+      if (settings.backgroundImage != null)
+        'backgroundImage': settings.backgroundImage,
+      'backgroundDim': settings.backgroundDim,
     };
   }
 
@@ -36,7 +48,34 @@ abstract final class AppSettingsCodec {
         json['colorSeed'],
         AppColorSeed.violet,
       ),
+      reminderMode: _enumByName(
+        ReminderMode.values,
+        json['reminderMode'],
+        ReminderMode.ring,
+      ),
+      ringtoneUri: json['ringtoneUri'] is String ? json['ringtoneUri'] as String : null,
+      backgroundImage:
+          json['backgroundImage'] is String ? json['backgroundImage'] as String : null,
+      backgroundDim: _unitInterval(
+        json['backgroundDim'],
+        AppSettings.defaultBackgroundDim,
+      ),
     );
+  }
+
+  /// Reads a `[0, 1]` fraction, clamping rather than rejecting.
+  ///
+  /// A hand-edited or truncated value should not be able to paint the app's
+  /// surface fully transparent (dim above 1) or fully occluded (below 0).
+  static double _unitInterval(Object? raw, double fallback) {
+    if (raw is! num) {
+      return fallback;
+    }
+    final double value = raw.toDouble();
+    if (value.isNaN) {
+      return fallback;
+    }
+    return value.clamp(0.0, 1.0);
   }
 
   static T _enumByName<T extends Enum>(

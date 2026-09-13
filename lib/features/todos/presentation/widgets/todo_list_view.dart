@@ -14,11 +14,10 @@ import 'todo_tile.dart';
 
 /// The scrollable list of todos.
 ///
-/// Always a [ReorderableListView], even when reordering is currently disabled:
-/// the only thing that starts a drag is the handle inside [TodoTile], and that
-/// handle is simply not built when a sort rule owns the order. Using one widget
-/// for both cases keeps spacing and drag behaviour identical instead of drifting
-/// apart between two code paths.
+/// Reordering starts with a **long press anywhere on a row**: each item is
+/// wrapped in a [ReorderableDelayedDragStartListener], which is simply not
+/// built when a sort rule owns the order. No visible drag handle — the whole
+/// row is the affordance, which is also what a thumb expects on a phone.
 class TodoListView extends ConsumerWidget {
   const TodoListView({
     required this.todos,
@@ -57,25 +56,45 @@ class TodoListView extends ConsumerWidget {
       },
       itemBuilder: (BuildContext context, int index) {
         final Todo todo = todos[index];
-        return Padding(
+        // RepaintBoundary: repainting one row (a checkbox animation, an image
+        // decode) must not repaint its neighbours. With background images in
+        // the mix this is what keeps scrolling cheap on weak GPUs.
+        return RepaintBoundary(
           key: ValueKey<String>(todo.id),
-          padding: const EdgeInsets.only(bottom: 8),
-          child: TodoTile(
-            todo: todo,
-            now: now,
-            dragIndex: allowReorder ? index : null,
-            onToggle: () => unawaited(
-              _guard(
-                ScaffoldMessenger.of(context),
-                () => ref.read(todoListProvider.notifier).toggle(todo.id),
-              ),
-            ),
-            onEdit: () => showTodoEditor(context, existing: todo),
-            onDelete: () =>
-                unawaited(_delete(context, ref, todo)),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: allowReorder
+                ? ReorderableDelayedDragStartListener(
+                    index: index,
+                    child: _tile(context, ref, todo),
+                  )
+                : _tile(context, ref, todo),
           ),
         );
       },
+    );
+  }
+
+  Widget _tile(BuildContext context, WidgetRef ref, Todo todo) {
+    return TodoTile(
+      todo: todo,
+      now: now,
+      onToggle: () => unawaited(
+        _guard(
+          ScaffoldMessenger.of(context),
+          () => ref.read(todoListProvider.notifier).toggle(todo.id),
+        ),
+      ),
+      onToggleSubtask: (String subtaskId) => unawaited(
+        _guard(
+          ScaffoldMessenger.of(context),
+          () => ref
+              .read(todoListProvider.notifier)
+              .toggleSubtask(todo.id, subtaskId),
+        ),
+      ),
+      onEdit: () => showTodoEditor(context, existing: todo),
+      onDelete: () => unawaited(_delete(context, ref, todo)),
     );
   }
 

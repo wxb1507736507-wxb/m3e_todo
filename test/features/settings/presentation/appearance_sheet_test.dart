@@ -35,11 +35,26 @@ void main() {
       buildTestApp(repository: FakeTodoRepository(), dataDirectory: tempDir),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.palette_outlined));
+    // Appearance no longer has its own app-bar button: the app bar now opens
+    // the integrated settings sheet, and the appearance controls live in its
+    // second section.
+    await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
   }
 
-  testWidgets('opens from the app bar', (WidgetTester tester) async {
+  /// Scrolls [finder] into the sheet's viewport before tapping it. The sheet is
+  /// taller than the test window, so the lower controls start off-screen and a
+  /// bare `tap` would miss them.
+  Future<void> tapInSheet(WidgetTester tester, Finder finder) async {
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    await tester.tap(finder);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the settings entry point shows the appearance controls', (
+    WidgetTester tester,
+  ) async {
     await openSheet(tester);
 
     expect(find.byType(AppearanceSheet), findsOneWidget);
@@ -52,8 +67,7 @@ void main() {
     await openSheet(tester);
     expect(appOf(tester).themeMode, ThemeMode.system);
 
-    await tester.tap(find.text(AppStrings.themeDark));
-    await tester.pumpAndSettle();
+    await tapInSheet(tester, find.text(AppStrings.themeDark));
 
     expect(appOf(tester).themeMode, ThemeMode.dark);
   });
@@ -64,8 +78,7 @@ void main() {
     await openSheet(tester);
     final Color before = appOf(tester).theme!.colorScheme.primary;
 
-    await tester.tap(find.text(AppStrings.colorSeedRose));
-    await tester.pumpAndSettle();
+    await tapInSheet(tester, find.text(AppStrings.colorSeedRose));
 
     expect(appOf(tester).theme!.colorScheme.primary, isNot(before));
   });

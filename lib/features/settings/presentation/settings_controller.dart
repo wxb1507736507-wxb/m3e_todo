@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/platform/app_platform.dart';
 import '../../../core/storage/document_store.dart';
 import '../../../core/storage/storage_providers.dart';
 import '../data/settings_repository.dart';
@@ -52,6 +54,66 @@ class SettingsController extends Notifier<AppSettings> {
       return;
     }
     _apply(state.copyWith(colorSeed: seed));
+  }
+
+  /// Switches between ringing and silent reminders, and re-points the native
+  /// notification channel so the change takes effect for future alarms.
+  Future<void> setReminderMode(ReminderMode mode) async {
+    if (state.reminderMode == mode) {
+      return;
+    }
+    _apply(state.copyWith(reminderMode: mode));
+  }
+
+  /// Sets the ring-channel sound to [uri], or back to the system default when
+  /// `null`. Applies natively straight away because the channel must exist with
+  /// the right sound *before* the next alarm fires.
+  Future<void> setRingtone(String? uri) async {
+    _apply(state.copyWith(ringtoneUri: uri, clearRingtone: uri == null));
+    await AppPlatform.setRingtone(uri);
+  }
+
+  /// Previews the given ringtone (or the system default) once.
+  Future<void> previewRingtone(String? uri) async {
+    await AppPlatform.playRingtone(uri);
+  }
+
+  Future<void> stopPreview() => AppPlatform.stopRingtone();
+
+  /// Sets the application-wide background image, or clears it when [path] is
+  /// null.
+  ///
+  /// The previous file is deleted: the cropper always writes a *new* file, so
+  /// replacing a background (or removing one) would otherwise leave the old copy
+  /// in the app directory with nothing referencing it.
+  Future<void> setBackgroundImage(String? path) async {
+    final String? previous = state.backgroundImage;
+    _apply(
+      state.copyWith(
+        backgroundImage: path,
+        clearBackgroundImage: path == null,
+      ),
+    );
+    if (previous != null && previous != path) {
+      await _deleteQuietly(previous);
+    }
+  }
+
+  /// Sets how strongly the theme surface covers the background image.
+  void setBackgroundDim(double dim) {
+    final double clamped = dim.clamp(0.0, 1.0);
+    if (state.backgroundDim == clamped) {
+      return;
+    }
+    _apply(state.copyWith(backgroundDim: clamped));
+  }
+
+  static Future<void> _deleteQuietly(String path) async {
+    try {
+      await File(path).delete();
+    } on Object {
+      // Already gone, or not ours to delete.
+    }
   }
 
   Future<void>? _pendingWrite;

@@ -110,4 +110,78 @@ void main() {
       colorSeed: AppColorSeed.teal,
     ));
   });
+
+  group('application background', () {
+    test('persists the image and the scrim strength', () async {
+      final SettingsController controller =
+          container.read(settingsProvider.notifier);
+
+      await controller.setBackgroundImage('/tmp/background.png');
+      controller.setBackgroundDim(0.6);
+      await controller.pendingWrite;
+
+      final AppSettings stored = await repository().load();
+      expect(stored.backgroundImage, '/tmp/background.png');
+      expect(stored.backgroundDim, 0.6);
+      expect(stored.hasBackground, isTrue);
+    });
+
+    test('clamps the scrim into [0, 1] instead of trusting the caller', () {
+      final SettingsController controller =
+          container.read(settingsProvider.notifier);
+
+      controller.setBackgroundDim(4);
+      expect(container.read(settingsProvider).backgroundDim, 1.0);
+
+      controller.setBackgroundDim(-3);
+      expect(container.read(settingsProvider).backgroundDim, 0.0);
+    });
+
+    test('removing the background deletes the file it replaced', () async {
+      final File image = File('${tempDir.path}${Platform.pathSeparator}bg.png')
+        ..writeAsStringSync('not really a png');
+      final SettingsController controller =
+          container.read(settingsProvider.notifier);
+
+      await controller.setBackgroundImage(image.path);
+      expect(image.existsSync(), isTrue);
+
+      await controller.setBackgroundImage(null);
+      // The settings write is fire-and-forget by design, so wait for it before
+      // the temp directory is torn down: on Windows an in-flight write holds the
+      // file open and the cleanup would fail with a sharing violation.
+      await controller.pendingWrite;
+
+      expect(container.read(settingsProvider).backgroundImage, isNull);
+      // The cropper always writes a fresh file, so a replaced or removed
+      // background would otherwise linger in the app directory unreferenced.
+      expect(image.existsSync(), isFalse);
+    });
+
+    test('a version-2 file still loads, with the new field defaulted', () async {
+      // Written by the previous release: no background keys at all.
+      settingsFile().writeAsStringSync(
+        '{"version":2,"themeMode":"dark","colorSeed":"rose",'
+        '"reminderMode":"silent"}',
+      );
+
+      final AppSettings stored = await repository().load();
+
+      expect(stored.themeMode, AppThemeMode.dark);
+      expect(stored.colorSeed, AppColorSeed.rose);
+      expect(stored.backgroundImage, isNull);
+      expect(stored.backgroundDim, AppSettings.defaultBackgroundDim);
+    });
+
+    test('a nonsense scrim value falls back rather than breaking the app', () async {
+      settingsFile().writeAsStringSync(
+        '{"version":3,"backgroundDim":"very dim","backgroundImage":17}',
+      );
+
+      final AppSettings stored = await repository().load();
+
+      expect(stored.backgroundDim, AppSettings.defaultBackgroundDim);
+      expect(stored.backgroundImage, isNull);
+    });
+  });
 }

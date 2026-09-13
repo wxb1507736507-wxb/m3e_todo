@@ -8,10 +8,16 @@ environment:
 
 # Deliberately dependency-light:
 #  * flutter_riverpod      - state management + dependency injection
+#  * flutter_localizations - SDK package, not a hosted one. AppStrings holds every
+#    line of *this app's* text, but the platform surfaces (the date picker behind
+#    every due date, mainly) are drawn by Material and would otherwise be English
+#    inside a Chinese UI. It is the one addition that reaches outside the SDK.
 #  * (no plugin packages)  - persistence is plain dart:io JSON, so the app does
 #    not require Windows Developer Mode for plugin symlinks.
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   flutter_riverpod: ^3.4.3
   web: ^1.1.1

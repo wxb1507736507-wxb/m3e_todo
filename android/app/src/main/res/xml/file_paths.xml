@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paths the FileProvider may share. Attachments (and voice memos) live in
+     filesDir/attachments; sharing is read-only and per-URI. -->
+<paths>
+    <files-path
+        name="attachments"
+        path="attachments/"/>
+</paths>

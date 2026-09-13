@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
+import 'package:m3e_todo/features/todos/domain/entities/todo_attachment.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_priority.dart';
+import 'package:m3e_todo/features/todos/domain/entities/todo_subtask.dart';
 
 import '../../../support/sample_todo.dart';
 
@@ -79,6 +81,10 @@ void main() {
         notes: '备注',
         priority: TodoPriority.high,
         dueDate: DateTime(2026, 4, 1, 23, 59),
+        subtasks: const <TodoSubtask>[],
+        attachments: const <TodoAttachment>[],
+        accentColor: null,
+        backgroundImage: null,
       );
 
       expect(edited.id, 'keep-me');
@@ -96,6 +102,10 @@ void main() {
         notes: null,
         priority: TodoPriority.low,
         dueDate: null,
+        subtasks: const <TodoSubtask>[],
+        attachments: const <TodoAttachment>[],
+        accentColor: null,
+        backgroundImage: null,
       );
       expect(edited.isCompleted, isTrue);
       expect(edited.completedAt, testNow);
@@ -108,6 +118,10 @@ void main() {
           notes: null,
           priority: TodoPriority.normal,
           dueDate: null,
+          subtasks: const <TodoSubtask>[],
+          attachments: const <TodoAttachment>[],
+          accentColor: null,
+          backgroundImage: null,
         ),
         throwsA(isA<TodoValidationException>()),
       );

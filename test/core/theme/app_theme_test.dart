@@ -97,4 +97,57 @@ void main() {
     expect(AppColorSchemes.themeModeOf(AppThemeMode.light), ThemeMode.light);
     expect(AppColorSchemes.themeModeOf(AppThemeMode.dark), ThemeMode.dark);
   });
+
+  test('building every palette is idempotent — the second pass is free', () {
+    AppColorSchemes.buildAll();
+    // Identity, not equality: this is what makes a theme rebuild cheap, and it
+    // is the one property the (removed) warm-up loop depended on.
+    for (final AppColorSeed seed in AppColorSeed.values) {
+      expect(
+        identical(AppColorSchemes.light(seed), AppColorSchemes.light(seed)),
+        isTrue,
+      );
+      expect(
+        identical(AppColorSchemes.dark(seed), AppColorSchemes.dark(seed)),
+        isTrue,
+      );
+    }
+  });
+
+  group('translucent chrome (application background)', () {
+    // With a background image the scaffold must let the image through, and the
+    // bars must stay *translucent but not transparent*: the app bar carries the
+    // title and the navigation bar carries labels, and neither is readable over
+    // an arbitrary photo at full strength.
+    final ThemeData theme = AppTheme.light(AppColorSeed.violet, translucent: true);
+
+    test('lets the scaffold show the background through', () {
+      expect(theme.scaffoldBackgroundColor, Colors.transparent);
+    });
+
+    test('keeps the app bar and navigation bars translucent', () {
+      final Color bar = theme.appBarTheme.backgroundColor!;
+      expect(bar.a, greaterThan(0.5));
+      expect(bar.a, lessThan(1.0));
+
+      final Color rail = theme.navigationRailTheme.backgroundColor!;
+      expect(rail.a, lessThan(1.0));
+      final Color navBar = theme.navigationBarTheme.backgroundColor!;
+      expect(navBar.a, lessThan(1.0));
+    });
+
+    test('leaves menus and dialogs opaque', () {
+      // Only the chrome gets out of the way; anything that floats above the app
+      // keeps a solid surface so its content stays readable.
+      expect(theme.canvasColor, theme.colorScheme.surface);
+      expect(theme.dialogTheme.backgroundColor?.a, 1.0);
+      expect(theme.bottomSheetTheme.backgroundColor?.a, 1.0);
+    });
+
+    test('an opaque theme is unchanged by the new parameter', () {
+      final ThemeData plain = AppTheme.light(AppColorSeed.violet);
+      expect(plain.scaffoldBackgroundColor, plain.colorScheme.surface);
+      expect(plain.appBarTheme.backgroundColor?.a, 1.0);
+    });
+  });
 }

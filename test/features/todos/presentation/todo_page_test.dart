@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/core/constants/app_strings.dart';
 import 'package:m3e_todo/features/categories/domain/entities/category.dart';
+import 'package:m3e_todo/features/categories/presentation/widgets/category_sheet.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_reminder.dart';
 import 'package:m3e_todo/features/todos/presentation/widgets/todo_editor_sheet.dart';
@@ -366,6 +367,56 @@ void main() {
     await tester.pumpAndSettle();
 
     expect((await repository.loadAll()).single.categoryId, 'c1');
+  });
+
+  testWidgets('a folder can be made while filing, and is selected for it', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTodoRepository repository = FakeTodoRepository();
+    final FakeCategoryRepository categories = FakeCategoryRepository();
+
+    await tester.pumpWidget(
+      buildTestApp(repository: repository, categoryRepository: categories),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '写周报');
+
+    // The picker is there even with no folders at all: it is also how one gets
+    // made, and the moment you want a new one is the moment you are filing.
+    final Finder newFolder = find.text(AppStrings.categoryNew);
+    await tester.ensureVisible(newFolder);
+    await tester.pumpAndSettle();
+    await tester.tap(newFolder);
+    await tester.pumpAndSettle();
+
+    // Name it in the folder sheet.
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(CategorySheet),
+        matching: find.byType(TextFormField),
+      ),
+      '工作',
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byType(CategorySheet),
+        matching: find.text(AppStrings.create),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // It comes back selected, and saving files the todo under it.
+    await tester.ensureVisible(find.text(AppStrings.create));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AppStrings.create));
+    await tester.pumpAndSettle();
+
+    final Todo stored = (await repository.loadAll()).single;
+    expect((await categories.loadAll()).single.name, '工作');
+    expect(stored.categoryId, (await categories.loadAll()).single.id);
   });
 
   testWidgets('deleting a todo removes it from the list and offers undo', (

@@ -9,8 +9,15 @@ import '../providers/category_providers.dart';
 import '../../domain/entities/category.dart';
 
 /// Opens the editor for a folder: name and colour, plus delete when editing.
-Future<void> showCategorySheet(BuildContext context, {Category? existing}) {
-  return showModalBottomSheet<void>(
+///
+/// Returns the folder that was created or edited, or `null` if the sheet was
+/// dismissed — which lets a caller that opened it *to file something* select
+/// what the user just made instead of making them pick it again.
+Future<Category?> showCategorySheet(
+  BuildContext context, {
+  Category? existing,
+}) {
+  return showModalBottomSheet<Category>(
     context: context,
     isScrollControlled: true,
     builder: (_) => CategorySheet(existing: existing),
@@ -72,16 +79,18 @@ class _CategorySheetState extends ConsumerState<CategorySheet> {
 
     try {
       final Category? existing = widget.existing;
+      final Category saved;
       if (existing == null) {
-        await controller.add(name: _nameController.text, color: _color);
+        saved = await controller.add(name: _nameController.text, color: _color);
       } else {
         await controller.edit(
           existing.id,
           name: _nameController.text,
           color: _color,
         );
+        saved = existing.edited(name: _nameController.text, color: _color);
       }
-      navigator.pop();
+      navigator.pop(saved);
     } on Object catch (error) {
       if (!mounted) {
         return;

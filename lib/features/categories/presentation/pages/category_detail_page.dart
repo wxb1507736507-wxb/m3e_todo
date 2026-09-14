@@ -14,6 +14,7 @@ import '../../../todos/presentation/widgets/todo_editor_sheet.dart';
 import '../../../todos/presentation/widgets/todo_list_view.dart';
 import '../../domain/entities/category.dart';
 import '../providers/category_providers.dart';
+import '../widgets/category_sheet.dart';
 
 /// What the folder is showing.
 enum _Pane { todos, notes }
@@ -58,11 +59,20 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
     // One pass each: the folder test and the query test together, and the same
     // rule the folders screen counts by — an id whose folder no longer exists
     // counts as unfiled.
+    final List<Category> categories =
+        ref.watch(categoriesProvider).value ?? const <Category>[];
     final Set<String> known = <String>{
-      for (final Category category
-          in ref.watch(categoriesProvider).value ?? const <Category>[])
-        category.id,
+      for (final Category category in categories) category.id,
     };
+    // Read through the store rather than from the widget's snapshot, so renaming
+    // the folder updates the title of the page you are standing on. The snapshot
+    // is only the fallback for the frame in which a deleted folder is still open.
+    final Category? folder = categoryId == null
+        ? null
+        : categories
+                .where((Category entry) => entry.id == categoryId)
+                .firstOrNull ??
+            widget.category;
     final String needle = _query.trim().toLowerCase();
     final List<Todo> visibleTodos = <Todo>[
       for (final Todo todo in todos)
@@ -79,7 +89,18 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.category?.name ?? AppStrings.categoryUnfiled),
+        title: Text(folder?.name ?? AppStrings.categoryUnfiled),
+        actions: <Widget>[
+          if (folder != null)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: AppStrings.categoryEdit,
+              onPressed: () => unawaited(
+                showCategorySheet(context, existing: folder),
+              ),
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => unawaited(_create(categoryId)),

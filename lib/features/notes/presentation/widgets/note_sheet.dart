@@ -8,8 +8,7 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/platform/app_platform.dart';
 import '../../../../core/utils/app_date_formatter.dart';
 import '../../../../core/utils/calendar.dart';
-import '../../../categories/domain/entities/category.dart';
-import '../../../categories/presentation/providers/category_providers.dart';
+import '../../../categories/presentation/widgets/category_picker.dart';
 import '../../../todos/domain/entities/todo_attachment.dart';
 import '../../../todos/presentation/providers/todo_providers.dart';
 import '../../../todos/presentation/widgets/attachment_actions.dart';
@@ -258,8 +257,6 @@ class _NoteSheetState extends ConsumerState<NoteSheet> {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
     final DateTime now = ref.read(clockProvider)();
-    final List<Category> categories =
-        ref.watch(categoriesProvider).value ?? const <Category>[];
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -315,38 +312,15 @@ class _NoteSheetState extends ConsumerState<NoteSheet> {
                           border: InputBorder.none,
                         ),
                       ),
-                      if (categories.isNotEmpty) ...<Widget>[
-                        const Divider(),
-                        Text(
-                          AppStrings.categoryPickLabel,
-                          style: text.labelLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: <Widget>[
-                            ChoiceChip(
-                              label: const Text(AppStrings.categoryUnfiled),
-                              selected: _categoryId == null,
-                              onSelected: (_) =>
-                                  setState(() => _categoryId = null),
-                            ),
-                            for (final Category category in categories)
-                              ChoiceChip(
-                                avatar: category.color == null
-                                    ? null
-                                    : CircleAvatar(
-                                        backgroundColor: Color(category.color!),
-                                      ),
-                                label: Text(category.name),
-                                selected: _categoryId == category.id,
-                                onSelected: (_) =>
-                                    setState(() => _categoryId = category.id),
-                              ),
-                          ],
-                        ),
-                      ],
+                      // Always shown, because it is also how a folder gets
+                      // made: the moment you want a new one is the moment you
+                      // are filing something.
+                      const Divider(),
+                      CategoryPicker(
+                        value: _categoryId,
+                        onChanged: (String? id) =>
+                            setState(() => _categoryId = id),
+                      ),
                       const Divider(),
                       Text(AppStrings.attachmentsLabel, style: text.labelLarge),
                       const SizedBox(height: 8),

@@ -10,8 +10,7 @@ import '../../../../core/theme/app_palette.dart';
 import '../../../../core/theme/app_shapes.dart';
 import '../../../../core/utils/app_date_formatter.dart';
 import '../../../../core/utils/color_utils.dart';
-import '../../../categories/domain/entities/category.dart';
-import '../../../categories/presentation/providers/category_providers.dart';
+import '../../../categories/presentation/widgets/category_picker.dart';
 import '../../../media/presentation/color_extract_page.dart';
 import '../../../media/presentation/image_crop_page.dart';
 import '../../../notifications/domain/reminder.dart';
@@ -595,44 +594,14 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
 
   // --- Sections ----------------------------------------------------------------------
 
-  /// Which folder this todo is filed under.
+  /// Which folder this todo is filed under, and a way to make a new one.
   ///
   /// Chips rather than a dropdown: a handful of folders is the norm, and seeing
   /// them all at once is how you notice the one you meant to use.
   Widget _buildCategorySection(TextTheme text, ColorScheme colors) {
-    final List<Category> categories =
-        ref.watch(categoriesProvider).value ?? const <Category>[];
-    if (categories.isEmpty) {
-      // Nothing to file under yet: offering an empty row would only raise a
-      // question the user cannot answer from here.
-      return const SizedBox.shrink();
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(AppStrings.categoryPickLabel, style: text.labelLarge),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: <Widget>[
-            ChoiceChip(
-              label: const Text(AppStrings.categoryUnfiled),
-              selected: _categoryId == null,
-              onSelected: (_) => setState(() => _categoryId = null),
-            ),
-            for (final Category category in categories)
-              ChoiceChip(
-                avatar: category.color == null
-                    ? null
-                    : CircleAvatar(backgroundColor: Color(category.color!)),
-                label: Text(category.name),
-                selected: _categoryId == category.id,
-                onSelected: (_) => setState(() => _categoryId = category.id),
-              ),
-          ],
-        ),
-      ],
+    return CategoryPicker(
+      value: _categoryId,
+      onChanged: (String? id) => setState(() => _categoryId = id),
     );
   }
 

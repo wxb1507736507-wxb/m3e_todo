@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/platform/app_platform.dart';
-import '../domain/crop_geometry.dart';
+import '../domain/crop_frame.dart';
 
 /// What a crop produced: a new file in the app's private directory.
 class CroppedImage {
@@ -26,20 +26,31 @@ class CroppedImage {
   String toString() => 'CroppedImage($path, ${width}x$height)';
 }
 
-/// The shapes the crop window can take.
+/// The shapes the frame can take.
 ///
-/// [original] keeps the source's own shape (so the user zooms/pans to trim edges
-/// without changing proportions), [screen] matches the device window — which is
-/// what an application-wide background wants, since it is drawn `cover` across
-/// the whole page.
-enum CropAspect { original, screen, square, standard, wide, portrait }
+/// [free] locks nothing and is the only one that lets the user pick a rectangle
+/// the app did not think of — which is the point of a cropper, so it sits first
+/// in the bar. [original] keeps the source's own shape, [screen] matches the
+/// device window (what an application-wide background wants, since it is drawn
+/// `cover` across the whole page).
+enum CropAspect { free, original, screen, square, standard, wide, portrait }
 
-/// Largest side a crop is decoded or written at.
+/// Largest side a crop is decoded at.
 ///
 /// Bounds two costs at once: a 50 MP photo is not held as a 200 MB bitmap, and a
 /// crop never produces a file larger than the app can usefully draw.
 const int _maxEdge = 2048;
 const double _maxOutputEdge = 1440;
+
+/// How far the picture may be magnified while framing.
+///
+/// The frame is chosen by eye, so a few times magnification is a precision aid,
+/// not a microscope: past this the picture is a wall of blurred pixels and the
+/// user has lost sight of what they are cropping.
+const double _maxZoom = 8;
+
+/// How close to a corner a touch has to land to grab it, in logical pixels.
+const double _handleTouch = 32;
 
 /// Opens the cropper for the image at [sourcePath].
 ///
@@ -47,7 +58,7 @@ const double _maxOutputEdge = 1440;
 Future<CroppedImage?> cropImage(
   BuildContext context, {
   required String sourcePath,
-  CropAspect initialAspect = CropAspect.original,
+  CropAspect initialAspect = CropAspect.free,
 }) {
   return Navigator.of(context).push<CroppedImage>(
     MaterialPageRoute<CroppedImage>(
@@ -71,7 +82,7 @@ Future<CroppedImage?> cropImage(
 /// every background change.
 Future<CroppedImage?> pickAndCropImage(
   BuildContext context, {
-  CropAspect initialAspect = CropAspect.original,
+  CropAspect initialAspect = CropAspect.free,
 }) async {
   final PickedAttachment? picked = await AppPlatform.pickAttachment('image');
   if (picked == null || !context.mounted) {
@@ -94,16 +105,26 @@ Future<void> _deleteQuietly(String path) async {
   }
 }
 
-/// Full-screen cropper: pan and zoom the photo, then keep what the frame shows.
+/// What a drag on the picture is doing.
+enum _DragMode { none, move, resize, draw, view }
+
+/// Full-screen cropper: the whole picture is shown, the frame is drawn on top of
+/// it, and the user drags the frame.
+///
+/// The older arrangement — a fixed window with the picture sliding behind it —
+/// could only ever trim the edges of a rectangle the app had chosen, and hid the
+/// parts of the picture the user was cutting away. Here the picture is fitted
+/// whole onto the screen and the frame moves over it, so "keep this bit" is a
+/// thing the user can point at.
 ///
 /// The gestures are handled explicitly rather than with [InteractiveViewer]
-/// because the crop needs the exact transform to compute which source pixels are
-/// visible; owning the transform keeps that arithmetic in one place
-/// ([CropGeometry]) where it can be unit-tested.
+/// because the crop needs the exact transform to know which source pixels are
+/// inside the frame; owning it keeps that arithmetic in one place
+/// ([CropView]) where it can be unit-tested.
 class ImageCropPage extends StatefulWidget {
   const ImageCropPage({
     required this.sourcePath,
-    this.initialAspect = CropAspect.original,
+    this.initialAspect = CropAspect.free,
     super.key,
   });
 
@@ -118,11 +139,26 @@ class _ImageCropPageState extends State<ImageCropPage> {
   ui.Image? _image;
   Object? _loadError;
 
-  CropAspect _aspect = CropAspect.original;
-  CropGeometry? _geometry;
+  CropAspect _aspect = CropAspect.free;
 
-  /// Geometry at the moment the current gesture started.
-  CropGeometry? _gestureStart;
+  /// The part of the picture to keep, in image pixels. `null` until the picture
+  /// has loaded and its size is known.
+  Rect? _frame;
+
+  /// Where the picture sits on screen, and how far it is zoomed in.
+  CropView? _view;
+  double _zoom = 1;
+
+  /// Gesture bookkeeping, all of it in the coordinates it is named after.
+  _DragMode _mode = _DragMode.none;
+  CropHandle? _handle;
+  CropView? _viewStart;
+  Rect? _frameStart;
+  Offset? _dragOrigin;
+
+  /// How far the finger has travelled since the gesture started, in viewport
+  /// pixels. Tells a selection apart from a tap.
+  double _dragTravel = 0;
 
   bool _busy = false;
 
@@ -158,17 +194,25 @@ class _ImageCropPageState extends State<ImageCropPage> {
       );
       // Only one axis is given, so the aspect ratio is preserved.
       final ui.Codec codec = await descriptor.instantiateCodec(
-        targetWidth:
-            descriptor.width >= descriptor.height ? (descriptor.width * factor).round() : null,
-        targetHeight:
-            descriptor.height > descriptor.width ? (descriptor.height * factor).round() : null,
+        targetWidth: descriptor.width >= descriptor.height
+            ? (descriptor.width * factor).round()
+            : null,
+        targetHeight: descriptor.height > descriptor.width
+            ? (descriptor.height * factor).round()
+            : null,
       );
       final ui.Image image = (await codec.getNextFrame()).image;
       if (!mounted) {
         image.dispose();
         return;
       }
-      setState(() => _image = image);
+      // The frame is settled here rather than during layout: the size line under
+      // the picture is built before the layout pass that would know the picture's
+      // size, and a frame created there would leave that line blank.
+      setState(() {
+        _image = image;
+        _frame = _initialFrameFor(image);
+      });
     } on Object catch (error) {
       if (mounted) {
         setState(() => _loadError = error);
@@ -176,8 +220,17 @@ class _ImageCropPageState extends State<ImageCropPage> {
     }
   }
 
-  double _aspectValue(CropAspect aspect, Size imageSize, Size screenSize) {
+  Size get _imageSize {
+    final ui.Image image = _image!;
+    return Size(image.width.toDouble(), image.height.toDouble());
+  }
+
+  Rect get _imageBounds => Offset.zero & _imageSize;
+
+  /// The aspect the frame is locked to, or `null` when it is free.
+  double? _aspectValue(CropAspect aspect, Size imageSize, Size screenSize) {
     return switch (aspect) {
+      CropAspect.free => null,
       CropAspect.original => imageSize.width / imageSize.height,
       CropAspect.screen => screenSize.width / screenSize.height,
       CropAspect.square => 1,
@@ -187,64 +240,232 @@ class _ImageCropPageState extends State<ImageCropPage> {
     };
   }
 
-  /// The largest rectangle of the chosen shape that fits in [available].
-  Size _windowFor(double aspect, Size available) {
-    double width = available.width;
-    double height = width / aspect;
-    if (height > available.height) {
-      height = available.height;
-      width = height * aspect;
+  double? get _lockedAspect {
+    final ui.Image? image = _image;
+    if (image == null) {
+      return null;
     }
-    return Size(width, height);
+    return _aspectValue(
+      _aspect,
+      _imageSize,
+      MediaQuery.sizeOf(context),
+    );
   }
 
-  /// Rebuilds the geometry whenever the window shape or the available space
-  /// changes, keeping the current zoom.
-  CropGeometry _geometryFor(ui.Image image, Size window) {
-    final CropGeometry? current = _geometry;
-    if (current != null && current.windowSize == window) {
+  /// Builds the view for [viewport], keeping the user's zoom.
+  CropView _viewFor(Size imageSize, Size viewport) {
+    final CropView? current = _view;
+    if (current != null &&
+        current.viewportSize == viewport &&
+        current.imageSize == imageSize) {
       return current;
     }
-    // A new window shape starts fresh and centred: the previous offset was
-    // valid for a different rectangle and could leave a gap.
-    final CropGeometry fresh = CropGeometry(
-      windowSize: window,
-      imageSize: Size(image.width.toDouble(), image.height.toDouble()),
+    // A different viewport makes the old offset meaningless, but the zoom is the
+    // user's own choice and survives.
+    final CropView fresh = CropView(
+      viewportSize: viewport,
+      imageSize: imageSize,
+      zoom: _zoom,
     );
-    return fresh.withOffset(fresh.centredOffset);
+    final CropView centred = fresh.withOffset(fresh.centredOffset);
+    _view = centred;
+    return centred;
+  }
+
+  /// The frame to start from: the whole picture when free, otherwise the largest
+  /// rectangle of the chosen shape.
+  Rect _initialFrameFor(ui.Image image) {
+    final Rect bounds = Offset.zero &
+        Size(image.width.toDouble(), image.height.toDouble());
+    final double? aspect = _aspectValue(
+      _aspect,
+      bounds.size,
+      MediaQuery.sizeOf(context),
+    );
+    return aspect == null ? bounds : centredRectIn(bounds, aspect);
+  }
+
+  /// Re-shapes the frame for a newly chosen aspect.
+  ///
+  /// Free keeps whatever is framed and only unlocks the corners — switching to
+  /// "anything goes" must not throw away the selection the user just made. A
+  /// fixed shape is re-fitted around the frame's current centre, so the part of
+  /// the picture being looked at stays the part being looked at.
+  Rect _refitFrame(double? aspect) {
+    final Rect bounds = _imageBounds;
+    final Rect current = _frame ?? bounds;
+    if (aspect == null) {
+      return current;
+    }
+    final Rect fitted = centredRectIn(bounds, aspect);
+    return translateRect(fitted, current.center - fitted.center, bounds);
+  }
+
+  CropHandle? _handleAt(Offset point, Rect frame) {
+    for (final CropHandle handle in CropHandle.values) {
+      if ((point - cornerFor(handle, frame)).distance <= _handleTouch) {
+        return handle;
+      }
+    }
+    return null;
   }
 
   void _onScaleStart(ScaleStartDetails details) {
-    _gestureStart = _geometry;
+    final CropView? view = _view;
+    final Rect? frame = _frame;
+    if (view == null || frame == null) {
+      return;
+    }
+    _viewStart = view;
+    _frameStart = frame;
+    _dragOrigin = details.localFocalPoint;
+    _dragTravel = 0;
+
+    if (details.pointerCount > 1) {
+      // Two fingers always mean "look closer", wherever they land.
+      _mode = _DragMode.view;
+      return;
+    }
+    final Offset point = details.localFocalPoint;
+    final Rect shown = view.viewportRect(frame);
+    final CropHandle? grabbed = _handleAt(point, shown);
+    // The frame itself is forgiving about being grabbed: a finger aiming at an
+    // edge lands a few pixels off it, and missing means the frame the user was
+    // moving is replaced by a new box instead.
+    _mode = grabbed != null
+        ? _DragMode.resize
+        : shown.contains(point)
+            ? _DragMode.move
+            : _DragMode.draw;
+    _handle = grabbed;
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    final CropGeometry? start = _gestureStart;
-    if (start == null) {
+    final CropView? start = _viewStart;
+    final Rect? frameStart = _frameStart;
+    final Offset? origin = _dragOrigin;
+    if (start == null || frameStart == null || origin == null) {
       return;
     }
-    final double nextScale = (start.scale * details.scale).clamp(1.0, 6.0);
-    // Keep the image point that was under the fingers under them still: this is
-    // what makes pinch-zoom feel anchored, and it also carries the pan, because
-    // `localFocalPoint` moves with the gesture.
-    final Offset focalInImage = (details.localFocalPoint - start.offset) /
-        start.effectiveScale;
-    final CropGeometry scaled = start.withScale(nextScale);
-    final Offset desired =
-        details.localFocalPoint - focalInImage * scaled.effectiveScale;
-    setState(() => _geometry = scaled.withOffset(desired));
+    final Rect bounds = Offset.zero & start.imageSize;
+    _dragTravel = math.max(
+      _dragTravel,
+      (details.localFocalPoint - origin).distance,
+    );
+
+    // A pinch that began as a one-finger drag becomes a view gesture the moment
+    // the second finger lands; `details.scale` is still 1 at that point, so the
+    // gesture can be re-based on the view as it stands.
+    if (details.pointerCount > 1 && _mode != _DragMode.view) {
+      _mode = _DragMode.view;
+      _viewStart = _view;
+      _dragOrigin = details.localFocalPoint;
+      return;
+    }
+
+    switch (_mode) {
+      case _DragMode.view:
+        final double zoom = (start.zoom * details.scale).clamp(1.0, _maxZoom);
+        final CropView scaled = start.withZoom(zoom);
+        // Keep the picture point that is under the fingers under them: that is
+        // what makes a pinch feel anchored rather than slippery.
+        final Offset focal = start.toImage(details.localFocalPoint);
+        setState(() {
+          _zoom = zoom;
+          _view = scaled.withOffset(
+            details.localFocalPoint - focal * scaled.effectiveScale,
+          );
+        });
+      case _DragMode.move:
+        final Offset delta =
+            (details.localFocalPoint - origin) / start.effectiveScale;
+        setState(() => _frame = translateRect(frameStart, delta, bounds));
+      case _DragMode.resize:
+        setState(() {
+          _frame = resizeRect(
+            rect: frameStart,
+            handle: _handle!,
+            point: start.toImage(details.localFocalPoint),
+            bounds: bounds,
+            aspect: _lockedAspect,
+            minSide: kCropMinSide / start.effectiveScale,
+          );
+        });
+      case _DragMode.draw:
+        setState(() {
+          // No minimum while the finger is down: the box should follow it
+          // exactly, and a drag too small to be a selection is dropped on
+          // release instead of being inflated into one.
+          _frame = drawRect(
+            from: start.toImage(origin),
+            to: start.toImage(details.localFocalPoint),
+            bounds: bounds,
+            aspect: _lockedAspect,
+          );
+        });
+      case _DragMode.none:
+        break;
+    }
+  }
+
+  void _onScaleEnd(ScaleEndDetails details) {
+    final CropView? view = _view;
+    final Rect? frame = _frame;
+    if (_mode == _DragMode.draw && view != null) {
+      // A tap is not a selection: rather than replace a frame the user built
+      // with one the size of a fingertip, a drag that never went anywhere is
+      // dropped. Measured on the gesture, not on the frame it produced — a
+      // frame that came out at the minimum size is still a frame the finger
+      // barely drew.
+      if (_dragTravel < kCropMinSide) {
+        final Rect? before = _frameStart;
+        setState(() => _frame = before);
+      }
+    } else if (_mode == _DragMode.view && view != null && frame != null) {
+      // Zooming can leave the frame off-screen, which looks exactly like losing
+      // it. Panning the picture until the frame is back in view costs nothing
+      // and removes the dead end.
+      setState(() => _view = _keepFrameVisible(view, frame));
+    }
+    _mode = _DragMode.none;
+    _handle = null;
+    _viewStart = null;
+    _frameStart = null;
+    _dragOrigin = null;
+  }
+
+  CropView _keepFrameVisible(CropView view, Rect frame) {
+    const double inset = 32;
+    final Rect shown = view.viewportRect(frame);
+    final Size viewport = view.viewportSize;
+    double axis(double value, double extent) => value.clamp(
+          math.min(inset, extent / 2),
+          math.max(extent - inset, extent / 2),
+        );
+    final Offset target = Offset(
+      axis(shown.center.dx, viewport.width),
+      axis(shown.center.dy, viewport.height),
+    );
+    if (target == shown.center) {
+      return view;
+    }
+    return view.withOffset(view.offset + (target - shown.center));
   }
 
   Future<void> _confirm() async {
     final ui.Image? image = _image;
-    final CropGeometry? geometry = _geometry;
-    if (image == null || geometry == null || _busy) {
+    final CropView? view = _view;
+    final Rect? frame = _frame;
+    if (image == null || view == null || frame == null || _busy) {
       return;
     }
     setState(() => _busy = true);
     try {
-      final Rect source = geometry.sourceRect;
-      final Size output = geometry.outputSize(maxLongSide: _maxOutputEdge);
+      final Rect source = sourceRectFor(frame, _imageSize);
+      if (source.isEmpty) {
+        throw StateError('empty crop');
+      }
+      final Size output = outputSizeFor(source, maxLongSide: _maxOutputEdge);
       final ui.PictureRecorder recorder = ui.PictureRecorder();
       Canvas(recorder).drawImageRect(
         image,
@@ -338,132 +559,194 @@ class _ImageCropPageState extends State<ImageCropPage> {
             )
           : image == null
               ? const Center(child: CircularProgressIndicator())
-              : Column(
-                  children: <Widget>[
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (BuildContext context, BoxConstraints box) {
-                          final Size window = _windowFor(
-                            _aspectValue(_aspect, Size(image.width.toDouble(),
-                                image.height.toDouble()), MediaQuery.sizeOf(context)),
-                            Size(box.maxWidth - 32, box.maxHeight - 32),
-                          );
-                          final CropGeometry geometry = _geometryFor(image, window);
-                          // Built during layout, so the first frame already has
-                          // geometry; assigning here (rather than in a post-frame
-                          // callback) avoids a frame where nothing is painted.
-                          _geometry = geometry;
-                          return Center(
-                            child: SizedBox(
-                              width: window.width,
-                              height: window.height,
-                              child: GestureDetector(
-                                onScaleStart: _onScaleStart,
-                                onScaleUpdate: _onScaleUpdate,
-                                child: _CropViewport(image: image, geometry: geometry),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    _AspectBar(
-                      selected: _aspect,
-                      onSelected: (CropAspect aspect) {
-                        setState(() {
-                          _aspect = aspect;
-                          _geometry = null;
-                        });
-                      },
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                      child: Text(
-                        AppStrings.cropHint,
-                        style: text.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                ),
+              : _buildEditor(context, image, colors, text),
     );
   }
-}
 
-/// Draws the image at its current transform, cropped to the window, plus the
-/// thirds grid that helps line a crop up.
-class _CropViewport extends StatelessWidget {
-  const _CropViewport({required this.image, required this.geometry});
-
-  final ui.Image image;
-  final CropGeometry geometry;
-
-  @override
-  Widget build(BuildContext context) {
-    final Size child = geometry.childSize;
-    return ClipRect(
-      child: Stack(
-        children: <Widget>[
-          Positioned(
-            left: geometry.offset.dx,
-            top: geometry.offset.dy,
-            width: child.width,
-            height: child.height,
-            // `fill` on purpose: the child box already has the exact pixel size
-            // the geometry asked for, so fitting must not scale it again.
-            child: RawImage(image: image, fit: BoxFit.fill),
+  Widget _buildEditor(
+    BuildContext context,
+    ui.Image image,
+    ColorScheme colors,
+    TextTheme text,
+  ) {
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints box) {
+              final CropView view = _viewFor(
+                Size(image.width.toDouble(), image.height.toDouble()),
+                Size(box.maxWidth, box.maxHeight),
+              );
+              // Built during layout, so the first frame of the picture already
+              // knows where it sits and how far it is zoomed.
+              final Rect frame = _frame ?? (Offset.zero & _imageSize);
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onScaleStart: _onScaleStart,
+                onScaleUpdate: _onScaleUpdate,
+                onScaleEnd: _onScaleEnd,
+                child: ClipRect(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      Positioned.fromRect(
+                        rect: view.displayRect,
+                        // `fill` on purpose: the box is already the exact size
+                        // the view asked for, so fitting must not scale again.
+                        child: RawImage(image: image, fit: BoxFit.fill),
+                      ),
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _CropOverlayPainter(
+                            frame: view.viewportRect(frame),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(painter: _CropFramePainter()),
-            ),
+        ),
+        _buildSizeLine(text, colors),
+        _AspectBar(
+          selected: _aspect,
+          onSelected: (CropAspect aspect) {
+            setState(() {
+              _aspect = aspect;
+              _frame = _refitFrame(
+                _aspectValue(aspect, _imageSize, MediaQuery.sizeOf(context)),
+              );
+            });
+          },
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+          child: Text(
+            AppStrings.cropHint,
+            style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            textAlign: TextAlign.center,
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  /// Says how big the kept part will be.
+  ///
+  /// Worth the line: the frame is drawn over a picture that may itself have been
+  /// shrunk on the way in, so "how many pixels am I keeping" is not something
+  /// the user can work out by looking.
+  Widget _buildSizeLine(TextTheme text, ColorScheme colors) {
+    final Rect? frame = _frame;
+    if (frame == null) {
+      return const SizedBox.shrink();
+    }
+    final Size output = outputSizeFor(
+      sourceRectFor(frame, _imageSize),
+      maxLongSide: _maxOutputEdge,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Text(
+        '${AppStrings.cropOutputPrefix} ${output.width.round()} × '
+        '${output.height.round()}',
+        style: text.labelMedium?.copyWith(color: colors.onSurfaceVariant),
       ),
     );
   }
 }
 
-/// Grid lines and corner marks for the crop frame.
-class _CropFramePainter extends CustomPainter {
+/// Dims everything outside the frame, and draws the frame's own chrome.
+///
+/// The dimming is the whole reason the frame can be moved: the part being kept
+/// is the bright part, and what is being cut away stays visible around it
+/// instead of being hidden by the edges of the screen.
+class _CropOverlayPainter extends CustomPainter {
+  const _CropOverlayPainter({required this.frame});
+
+  /// The frame, in viewport coordinates.
+  final Rect frame;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint line = Paint()
-      ..color = Colors.white.withValues(alpha: 0.55)
+    canvas.drawPath(
+      Path.combine(
+        PathOperation.difference,
+        Path()..addRect(Offset.zero & size),
+        Path()..addRect(frame),
+      ),
+      Paint()..color = Colors.black.withValues(alpha: 0.58),
+    );
+
+    // Rule of thirds, inside the frame: the usual help for lining a subject up.
+    final Paint thirds = Paint()
+      ..color = Colors.white.withValues(alpha: 0.3)
       ..strokeWidth = 1;
-    // Rule of thirds.
     for (int i = 1; i < 3; i++) {
-      final double dx = size.width * i / 3;
-      final double dy = size.height * i / 3;
-      canvas.drawLine(Offset(dx, 0), Offset(dx, size.height), line);
-      canvas.drawLine(Offset(0, dy), Offset(size.width, dy), line);
+      final double dx = frame.left + frame.width * i / 3;
+      final double dy = frame.top + frame.height * i / 3;
+      canvas.drawLine(Offset(dx, frame.top), Offset(dx, frame.bottom), thirds);
+      canvas.drawLine(Offset(frame.left, dy), Offset(frame.right, dy), thirds);
     }
 
-    final Paint corner = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 3
+    // Frame and handles are drawn twice — a dark line under a light one — so
+    // they stay visible over a white sky and a black shirt alike.
+    final RRect edge = RRect.fromRectAndRadius(
+      frame,
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(
+      edge,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5
+        ..color = Colors.black.withValues(alpha: 0.35),
+    );
+    canvas.drawRRect(
+      edge,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = Colors.white,
+    );
+
+    // Corner grips, drawn as the two arms of an L that meet on the corner the
+    // finger has to grab.
+    final double arm = math.min(20, math.min(frame.width, frame.height) / 2);
+    final Paint gripShadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.35)
+      ..strokeWidth = 7
       ..strokeCap = StrokeCap.round;
-    const double arm = 18;
-    final Rect r = Offset.zero & size;
-    // Four L-shaped marks, drawn just inside the frame.
-    for (final (Offset point, Offset horizontal, Offset vertical) in <(Offset, Offset, Offset)>[
-      (r.topLeft, const Offset(arm, 0), const Offset(0, arm)),
-      (r.topRight, const Offset(-arm, 0), const Offset(0, arm)),
-      (r.bottomLeft, const Offset(arm, 0), const Offset(0, -arm)),
-      (r.bottomRight, const Offset(-arm, 0), const Offset(0, -arm)),
+    final Paint grip = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 4.5
+      ..strokeCap = StrokeCap.round;
+    for (final (Offset corner, double sx, double sy)
+        in <(Offset, double, double)>[
+      (frame.topLeft, 1, 1),
+      (frame.topRight, -1, 1),
+      (frame.bottomLeft, 1, -1),
+      (frame.bottomRight, -1, -1),
     ]) {
-      canvas.drawLine(point, point + horizontal, corner);
-      canvas.drawLine(point, point + vertical, corner);
+      for (final Offset tip in <Offset>[
+        corner + Offset(sx * arm, 0),
+        corner + Offset(0, sy * arm),
+      ]) {
+        canvas.drawLine(corner, tip, gripShadow);
+        canvas.drawLine(corner, tip, grip);
+      }
     }
   }
 
   @override
-  bool shouldRepaint(_CropFramePainter oldDelegate) => false;
+  bool shouldRepaint(_CropOverlayPainter oldDelegate) =>
+      oldDelegate.frame != frame;
 }
 
-/// The aspect-ratio chooser under the frame.
+/// The shape chooser under the picture.
 class _AspectBar extends StatelessWidget {
   const _AspectBar({required this.selected, required this.onSelected});
 
@@ -471,6 +754,7 @@ class _AspectBar extends StatelessWidget {
   final ValueChanged<CropAspect> onSelected;
 
   static const Map<CropAspect, String> _labels = <CropAspect, String>{
+    CropAspect.free: AppStrings.cropAspectFree,
     CropAspect.original: AppStrings.cropAspectOriginal,
     CropAspect.screen: AppStrings.cropAspectScreen,
     CropAspect.square: AppStrings.cropAspectSquare,

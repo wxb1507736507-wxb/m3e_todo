@@ -165,8 +165,10 @@ abstract final class AppStrings {
 
   static const String cropTitle = '裁剪图片';
   static const String cropApply = '完成';
-  static const String cropHint = '双指缩放、拖动调整范围，框内即为保留部分';
+  static const String cropHint = '拖动可重新框选，拖动角点调整大小，双指缩放查看细节';
+  static const String cropOutputPrefix = '保留';
   static const String cropFailed = '图片处理失败，请重试';
+  static const String cropAspectFree = '自由';
   static const String cropAspectOriginal = '原图';
   static const String cropAspectScreen = '屏幕';
   static const String cropAspectSquare = '1:1';

@@ -17,6 +17,7 @@ import android.media.MediaRecorder
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
@@ -508,21 +509,55 @@ class MainActivity : FlutterActivity() {
 
     // --- Attachment picking -----------------------------------------------------
 
+    /**
+     * The intent that asks the user for one file of [kind].
+     *
+     * Pictures go through the device's own gallery first: asking for a picture
+     * means the photos already on the phone, and the system document picker
+     * opens on a file tree — folders, "Recent", cloud providers — which is a
+     * detour for anyone who just wants their camera roll. Everything else (and
+     * any device with no gallery app at all) still uses the document picker,
+     * which is the only thing guaranteed to be there.
+     */
     private fun attachmentIntent(kind: String): Intent =
+        when (kind) {
+            "image" -> galleryIntent() ?: documentIntent("image/*")
+            "video" -> documentIntent("video/*")
+            "audio" -> documentIntent("audio/*")
+            else -> documentIntent("*/*")
+        }
+
+    /**
+     * The best picture browser this device has, or `null` if it has none.
+     *
+     * Ordered by how little the user has to think about it:
+     *
+     *  1. Android 13's photo picker — one screen of thumbnails, and it grants
+     *     read access to the single picture chosen, so no storage permission is
+     *     ever requested;
+     *  2. the same picker backported through Play services, which covers Android
+     *     11 and 12 on devices that have it;
+     *  3. the gallery app itself, through the old `ACTION_PICK`.
+     */
+    private fun galleryIntent(): Intent? {
+        val candidates = listOf(
+            Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*"),
+            Intent("com.google.android.gms.provider.action.PICK_IMAGES").setType("image/*"),
+            Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+                .setType("image/*"),
+        )
+        return candidates.firstOrNull { candidate ->
+            runCatching { candidate.resolveActivity(packageManager) != null }.getOrDefault(false)
+        }
+    }
+
+    private fun documentIntent(mime: String): Intent =
         Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             // Document-style pickers copy the file through us, so no storage
             // permission is ever needed.
             type = "*/*"
-            putExtra(
-                Intent.EXTRA_MIME_TYPES,
-                when (kind) {
-                    "image" -> arrayOf("image/*")
-                    "video" -> arrayOf("video/*")
-                    "audio" -> arrayOf("audio/*")
-                    else -> arrayOf("*/*")
-                },
-            )
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(mime))
         }
 
     @Deprecated("Deprecated in Java")

@@ -17,6 +17,7 @@ Todo sampleTodo({
   TodoReminder reminder = TodoReminder.followApp,
   String? ringtoneUri,
   ReminderLead? reminderLead,
+  String? categoryId,
 }) {
   return Todo(
     id: id,
@@ -30,6 +31,7 @@ Todo sampleTodo({
     reminder: reminder,
     ringtoneUri: ringtoneUri,
     reminderLead: reminderLead,
+    categoryId: categoryId,
   );
 }
 

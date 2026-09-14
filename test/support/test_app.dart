@@ -7,6 +7,8 @@ import 'package:m3e_todo/core/storage/app_directories.dart';
 import 'package:m3e_todo/core/storage/json_file_store.dart';
 import 'package:m3e_todo/core/storage/storage_providers.dart';
 import 'package:m3e_todo/features/categories/domain/repositories/category_repository.dart';
+import 'package:m3e_todo/features/notes/domain/repositories/note_repository.dart';
+import 'package:m3e_todo/features/notes/presentation/providers/note_providers.dart';
 import 'package:m3e_todo/features/categories/presentation/providers/category_providers.dart';
 import 'package:m3e_todo/features/settings/domain/app_settings.dart';
 import 'package:m3e_todo/features/settings/presentation/settings_controller.dart';
@@ -28,6 +30,7 @@ Widget buildTestApp({
   AppSettings settings = const AppSettings(),
   Directory? dataDirectory,
   CategoryRepository? categoryRepository,
+  NoteRepository? noteRepository,
 }) {
   // Always redirected away from the real per-user directory. A test must never
   // be able to read or overwrite the developer's actual todos, and defaulting to
@@ -47,6 +50,8 @@ Widget buildTestApp({
       // the real repository reads a file, which a widget test should not wait for.
       if (categoryRepository != null)
         categoryRepositoryProvider.overrideWithValue(categoryRepository),
+      if (noteRepository != null)
+        noteRepositoryProvider.overrideWithValue(noteRepository),
     ],
     child: const M3eTodoApp(),
   );

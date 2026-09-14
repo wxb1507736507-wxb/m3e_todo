@@ -43,6 +43,9 @@ abstract final class AppStrings {
   static const String categoryUnfiled = '未分类';
   static const String categorySearchHint = '在这个分类里搜索';
   static const String categoryFolderEmpty = '这个分类里还没有待办';
+  static const String categoryPaneTodos = '待办';
+  static const String noteFolderEmpty = '这个分类里还没有随笔';
+  static const String noteSearchEmpty = '没有找到匹配的随笔';
   static const String categoryPickLabel = '分类';
 
   static String categoryDeleted(String name) => '已删除分类「$name」';

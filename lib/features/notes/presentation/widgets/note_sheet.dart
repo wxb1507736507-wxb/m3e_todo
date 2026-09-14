@@ -19,28 +19,44 @@ import '../providers/note_providers.dart';
 /// Opens the editor for a note.
 ///
 /// Pass [existing] to edit one; omit it to write a new note for [date], which is
-/// the day the calendar is showing.
+/// the day the calendar is showing. [initialCategoryId] files a new note under
+/// the folder it was written from.
 Future<void> showNoteSheet(
   BuildContext context, {
   Note? existing,
   required DateTime date,
+  String? initialCategoryId,
 }) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder: (_) => NoteSheet(existing: existing, date: date),
+    builder: (_) => NoteSheet(
+      existing: existing,
+      date: date,
+      initialCategoryId: initialCategoryId,
+    ),
   );
 }
 
 /// Writes and edits a note: words, a folder, and whatever was picked or recorded.
 class NoteSheet extends ConsumerStatefulWidget {
-  const NoteSheet({required this.date, this.existing, super.key});
+  const NoteSheet({
+    required this.date,
+    this.existing,
+    this.initialCategoryId,
+    super.key,
+  });
 
   final Note? existing;
 
   /// Which day the note belongs to. The calendar's selected day, so a note
   /// written while looking at the 3rd is filed under the 3rd.
   final DateTime date;
+
+  /// The folder a *new* note should be filed under, when it was written from
+  /// inside one. Ignored while editing: an existing note keeps its own folder
+  /// unless the user changes it.
+  final String? initialCategoryId;
 
   @override
   ConsumerState<NoteSheet> createState() => _NoteSheetState();
@@ -66,7 +82,9 @@ class _NoteSheetState extends ConsumerState<NoteSheet> {
     final Note? existing = widget.existing;
     _bodyController = TextEditingController(text: existing?.body ?? '');
     _date = existing?.date ?? startOfDay(widget.date);
-    _categoryId = existing?.categoryId;
+    // A note can be written *inside* a folder, so the folder it was written
+    // from is the sensible default rather than unfiled.
+    _categoryId = existing?.categoryId ?? widget.initialCategoryId;
     _attachments = List<TodoAttachment>.of(
       existing?.attachments ?? const <TodoAttachment>[],
     );
@@ -222,11 +240,16 @@ class _NoteSheetState extends ConsumerState<NoteSheet> {
       return;
     }
     final NavigatorState navigator = Navigator.of(context);
-    await ref.read(notesProvider.notifier).remove(existing.id);
-    // The note is gone, so its files are unreferenced: the controller reports
-    // them, and this sheet is the one that created them.
+    final List<String> orphaned =
+        await ref.read(notesProvider.notifier).remove(existing.id);
+    // The note is gone, so nothing references its files any more: the controller
+    // hands back the paths and this is where they are deleted. `_newFiles` is
+    // cleared first so dispose() does not try to delete them a second time.
     _newFiles.clear();
     _saved = true;
+    for (final String path in orphaned) {
+      _deleteFile(path);
+    }
     navigator.pop();
   }
 

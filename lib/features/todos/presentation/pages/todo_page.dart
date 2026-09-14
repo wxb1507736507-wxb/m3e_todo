@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
+import '../../../categories/presentation/widgets/category_bar.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../domain/entities/todo.dart';
 import '../../domain/entities/todo_filter.dart';
@@ -36,8 +37,15 @@ class TodoPage extends ConsumerWidget {
           // make the numbers visibly jump on every launch. An empty list shows
           // no summary at all — the empty state below already explains itself,
           // and "0 项进行中" above it would be noise.
-          if (stats != null && stats.total > 0)
+          if (stats != null && stats.total > 0) ...<Widget>[
             TodoSummaryHeader(stats: stats),
+            // A strip, not a screen: it is how the list is *read*, so it stays
+            // on the same line of sight as the list and stays far smaller than
+            // the tiles it sits above. Hidden while the list is empty, where it
+            // would have nothing to summarise.
+            const CategoryBar(),
+            const SizedBox(height: 10),
+          ],
           Expanded(
             child: visible.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -89,6 +97,15 @@ class TodoPage extends ConsumerWidget {
         icon: Icons.search_off,
         title: AppStrings.emptySearchTitle,
         body: AppStrings.emptySearchBody,
+      );
+    }
+    // A folder that has nothing in it — or has nothing matching the current
+    // status tab — says so rather than reusing "you have not written anything".
+    if (filter.hasCategory) {
+      return const TodoEmptyState(
+        icon: Icons.folder_open,
+        title: AppStrings.categoryEmpty,
+        body: AppStrings.categoryEmptyBody,
       );
     }
 

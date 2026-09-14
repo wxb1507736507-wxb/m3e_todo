@@ -41,6 +41,10 @@ abstract final class AppStrings {
   static const String categoryColorLabel = '标记颜色';
   static const String categoryDeleteHint = '删除分类不会删除里面的待办，它们会回到「未分类」';
   static const String categoryUnfiled = '未分类';
+  static const String categoryAll = '全部';
+  static const String categoryStripHint = '点分类即可只看这一类，长按可改名';
+  static const String categoryEmpty = '这个分类里还没有待办';
+  static const String categoryEmptyBody = '换一个分类看看，或者把待办归到这里';
   static const String categorySearchHint = '在这个分类里搜索';
   static const String categoryFolderEmpty = '这个分类里还没有待办';
   static const String categoryPaneTodos = '待办';

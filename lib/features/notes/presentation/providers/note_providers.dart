@@ -91,6 +91,28 @@ class NotesController extends AsyncNotifier<List<Note>> {
     ];
   }
 
+  /// Removes [categoryId] from every note filed under it.
+  ///
+  /// The same cleanup the todos get when a folder is deleted: a note left
+  /// pointing at a folder that no longer exists would be invisible from every
+  /// view.
+  Future<void> clearCategory(String categoryId) {
+    return _replace(
+      (List<Note> current) => <Note>[
+        for (final Note note in current)
+          if (note.categoryId == categoryId)
+            note.edit(
+              date: note.date,
+              body: note.body,
+              categoryId: null,
+              attachments: note.attachments,
+            )
+          else
+            note,
+      ],
+    );
+  }
+
   Future<void> _replace(List<Note> Function(List<Note> current) change) async {
     final List<Note> current = await future;
     final List<Note> updated = change(current);

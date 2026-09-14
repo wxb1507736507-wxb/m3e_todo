@@ -13,6 +13,7 @@ import '../../domain/entities/todo_stats.dart';
 import '../../domain/repositories/todo_repository.dart';
 import '../../domain/usecases/add_todo.dart';
 import '../../domain/usecases/clear_completed_todos.dart';
+import '../../domain/usecases/clear_todo_category.dart';
 import '../../domain/usecases/delete_todo.dart';
 import '../../domain/usecases/load_todos.dart';
 import '../../domain/usecases/reorder_todos.dart';
@@ -111,6 +112,12 @@ final Provider<RestoreTodo> restoreTodoProvider = Provider<RestoreTodo>(
 final Provider<ReorderTodos> reorderTodosProvider = Provider<ReorderTodos>(
   (ref) => ReorderTodos(ref.watch(todoRepositoryProvider)),
   name: 'reorderTodos',
+);
+
+final Provider<ClearTodoCategory> clearCategoryProvider =
+    Provider<ClearTodoCategory>(
+  (ref) => ClearTodoCategory(ref.watch(todoRepositoryProvider)),
+  name: 'clearTodoCategory',
 );
 
 final Provider<ClearCompletedTodos> clearCompletedTodosProvider =

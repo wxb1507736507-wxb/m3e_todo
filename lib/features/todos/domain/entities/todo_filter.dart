@@ -1,3 +1,4 @@
+import '../../../categories/domain/entities/category.dart';
 import 'todo.dart';
 
 /// Which slice of the list the user wants to see.
@@ -28,6 +29,7 @@ class TodoFilter {
     this.status = TodoStatusFilter.all,
     this.sort = TodoSortOrder.manual,
     this.query = '',
+    this.categoryId,
   });
 
   final TodoStatusFilter status;
@@ -36,13 +38,22 @@ class TodoFilter {
   /// Free-text search, matched case-insensitively against title and notes.
   final String query;
 
+  /// Which folder the list is narrowed to: a folder id, [kUnfiledCategoryId] for
+  /// entries with no folder, or `null` for everything. Driven by the category
+  /// strip above the list.
+  final String? categoryId;
+
   bool get hasQuery => query.trim().isNotEmpty;
+
+  /// Whether the list is narrowed to one folder.
+  bool get hasCategory => categoryId != null;
 
   /// Whether nothing has been narrowed down yet.
   bool get isPristine =>
       status == TodoStatusFilter.all &&
       sort == TodoSortOrder.manual &&
-      !hasQuery;
+      !hasQuery &&
+      !hasCategory;
 
   /// Reordering by hand only makes sense while the list is not being re-sorted
   /// by a rule; the list view uses this to enable or disable drag handles.
@@ -52,15 +63,21 @@ class TodoFilter {
     TodoStatusFilter? status,
     TodoSortOrder? sort,
     String? query,
+    String? categoryId,
+    bool clearCategory = false,
   }) {
     return TodoFilter(
       status: status ?? this.status,
       sort: sort ?? this.sort,
       query: query ?? this.query,
+      // The sentinel separates "show everything" from "leave it alone", which a
+      // plain nullable parameter cannot express — `null` is a real choice here.
+      categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
     );
   }
 
-  /// Returns [todos] narrowed by status and query, then ordered by [sort].
+  /// Returns [todos] narrowed by status, folder and query, then ordered by
+  /// [sort].
   List<Todo> apply(List<Todo> todos) {
     final String needle = query.trim().toLowerCase();
     final List<Todo> visible = todos
@@ -80,6 +97,9 @@ class TodoFilter {
       TodoStatusFilter.completed => todo.isCompleted,
     };
     if (!statusMatches) {
+      return false;
+    }
+    if (!categoryMatches(todo.categoryId, categoryId)) {
       return false;
     }
     if (needle.isEmpty) {
@@ -135,13 +155,15 @@ class TodoFilter {
     return other is TodoFilter &&
         other.status == status &&
         other.sort == sort &&
-        other.query == query;
+        other.query == query &&
+        other.categoryId == categoryId;
   }
 
   @override
-  int get hashCode => Object.hash(status, sort, query);
+  int get hashCode => Object.hash(status, sort, query, categoryId);
 
   @override
   String toString() =>
-      'TodoFilter(status: $status, sort: $sort, query: "$query")';
+      'TodoFilter(status: $status, sort: $sort, query: "$query", '
+      'category: $categoryId)';
 }

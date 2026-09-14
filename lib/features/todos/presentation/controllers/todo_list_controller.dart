@@ -117,6 +117,23 @@ class TodoListController extends AsyncNotifier<List<Todo>> {
     return result.removedCount;
   }
 
+  /// Removes [categoryId] from every todo filed under it.
+  ///
+  /// Called when a folder is deleted. Clearing the folder here rather than
+  /// teaching every view to treat an unknown id as unfiled keeps the data
+  /// honest: nothing is left pointing at something that no longer exists, and
+  /// "unfiled" stays a single, unambiguous state.
+  Future<void> clearCategory(String categoryId) {
+    final List<Todo>? current = state.value;
+    if (current == null ||
+        !current.any((Todo todo) => todo.categoryId == categoryId)) {
+      return Future<void>.value();
+    }
+    return _publish(
+      () => ref.read(clearCategoryProvider)(categoryId),
+    );
+  }
+
   /// Re-reads everything from storage, used by the retry affordance after a
   /// failed load.
   void reload() => ref.invalidateSelf();

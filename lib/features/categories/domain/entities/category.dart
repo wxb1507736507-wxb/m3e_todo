@@ -1,3 +1,28 @@
+/// The id the category strip uses for entries with no folder.
+///
+/// A reserved word rather than a second filter field: a real folder's id is
+/// generated (timestamp plus noise), so this can never collide with one, and it
+/// keeps "which category am I looking at?" a single nullable value — `null` for
+/// everything, this for the unfiled pile, an id for one folder.
+const String kUnfiledCategoryId = 'unfiled';
+
+/// Whether an entry filed under [entryCategoryId] belongs to [scope].
+///
+/// [scope] is a folder id, [kUnfiledCategoryId], or `null` for everything.
+///
+/// Deliberately simple, because deleting a folder clears that folder from the
+/// entries that were in it: nothing is left pointing at a folder that no longer
+/// exists, so this never has to guess what a dangling id was supposed to mean.
+bool categoryMatches(String? entryCategoryId, String? scope) {
+  if (scope == null) {
+    return true;
+  }
+  if (scope == kUnfiledCategoryId) {
+    return entryCategoryId == null;
+  }
+  return entryCategoryId == scope;
+}
+
 /// A folder a todo — or a note — can be filed under.
 ///
 /// Deliberately flat: one level, like the contact groups this is modelled on.

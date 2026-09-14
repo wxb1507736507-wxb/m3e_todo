@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_palette.dart';
+import '../../../notes/presentation/providers/note_providers.dart';
+import '../../../todos/presentation/providers/todo_providers.dart';
 import '../providers/category_providers.dart';
 import '../../domain/entities/category.dart';
 
@@ -102,6 +104,12 @@ class _CategorySheetState extends ConsumerState<CategorySheet> {
     }
   }
 
+  /// Deletes the folder and unfiles everything in it.
+  ///
+  /// The entries go first: the folder must not disappear while todos still point
+  /// at it, or a failure halfway would leave records naming something that no
+  /// longer exists. Nothing is destroyed — a folder is a label, so removing it
+  /// only takes the label off, and the entries stay in the list as unfiled.
   Future<void> _delete() async {
     final Category? existing = widget.existing;
     if (existing == null) {
@@ -109,7 +117,26 @@ class _CategorySheetState extends ConsumerState<CategorySheet> {
     }
     final NavigatorState navigator = Navigator.of(context);
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    await ref.read(categoriesProvider.notifier).remove(existing.id);
+    final bool filtering = ref.read(todoFilterProvider).categoryId == existing.id;
+
+    try {
+      await ref.read(todoListProvider.notifier).clearCategory(existing.id);
+      await ref.read(notesProvider.notifier).clearCategory(existing.id);
+      await ref.read(categoriesProvider.notifier).remove(existing.id);
+      // A filter on a folder that no longer exists would match nothing and
+      // leave the list looking broken, so fall back to showing everything.
+      if (filtering) {
+        ref.read(todoFilterProvider.notifier).setCategory(null);
+      }
+    } on Object catch (error) {
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('${AppStrings.saveFailed}：$error')),
+      );
+      return;
+    }
     navigator.pop();
     messenger.showSnackBar(
       SnackBar(content: Text(AppStrings.categoryDeleted(existing.name))),
@@ -199,10 +226,14 @@ class _CategorySheetState extends ConsumerState<CategorySheet> {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(
-                AppStrings.categoryDeleteHint,
-                style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-              ),
+              // Only where it applies: the create sheet has no delete button, so
+              // explaining what deleting does would answer a question the user
+              // has not been offered.
+              if (widget.existing != null)
+                Text(
+                  AppStrings.categoryDeleteHint,
+                  style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+                ),
             ],
           ),
         ),

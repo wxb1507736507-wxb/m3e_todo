@@ -8,6 +8,8 @@ import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_shapes.dart';
 import '../../../core/utils/app_date_formatter.dart';
 import '../../../core/utils/calendar.dart';
+import '../../categories/domain/entities/category.dart';
+import '../../categories/presentation/providers/category_providers.dart';
 import '../../notes/domain/entities/note.dart';
 import '../../notes/presentation/providers/note_providers.dart';
 import '../../notes/presentation/widgets/note_sheet.dart';
@@ -230,6 +232,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                               .watch(notesOnDayProvider(dayKey(_selectedDay)))
                               .value ??
                           const <Note>[],
+                      // The folders by id: a note filed under one wears its
+                      // colour here, which is what keeps the label a label
+                      // rather than a setting nothing shows.
+                      categories: ref.watch(categoriesByIdProvider),
                       onWriteNote: () => unawaited(
                         showNoteSheet(context, date: _selectedDay),
                       ),
@@ -637,6 +643,7 @@ class _DayDetails extends StatelessWidget {
     required this.todos,
     required this.specialDays,
     required this.notes,
+    required this.categories,
     required this.onWriteNote,
     required this.onOpenNote,
     required this.now,
@@ -652,6 +659,9 @@ class _DayDetails extends StatelessWidget {
   /// What was written on this day. A note belongs to a day, so the calendar is
   /// where it is found again — that is the whole filing system.
   final List<Note> notes;
+
+  /// Folders by id, for the colour a filed note is marked with.
+  final Map<String, Category> categories;
 
   final VoidCallback onWriteNote;
   final ValueChanged<Note> onOpenNote;
@@ -765,10 +775,34 @@ class _DayDetails extends StatelessWidget {
                 ),
                 label: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 200),
-                  child: Text(
-                    note.preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      // A filed note says so with its folder's colour, the same
+                      // mark the strip above the list uses. A folder with no
+                      // colour of its own falls back to the outline colour
+                      // rather than disappearing.
+                      if (note.categoryId != null) ...<Widget>[
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: categories[note.categoryId]?.color == null
+                                ? Theme.of(context).colorScheme.outline
+                                : Color(categories[note.categoryId]!.color!),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: Text(
+                          note.preview,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 onPressed: () => onOpenNote(note),

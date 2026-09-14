@@ -35,5 +35,17 @@ class TodoFilterController extends Notifier<TodoFilter> {
 
   void clearQuery() => setQuery('');
 
+  /// Narrows the list to one folder, to the unfiled pile, or to everything when
+  /// [categoryId] is `null`.
+  void setCategory(String? categoryId) {
+    if (state.categoryId == categoryId) {
+      return;
+    }
+    state = state.copyWith(
+      categoryId: categoryId,
+      clearCategory: categoryId == null,
+    );
+  }
+
   void reset() => state = const TodoFilter();
 }

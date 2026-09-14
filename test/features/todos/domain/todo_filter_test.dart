@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:m3e_todo/features/categories/domain/entities/category.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_filter.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_priority.dart';
@@ -103,6 +104,69 @@ void main() {
       expect(
         filter.apply(todos).map((Todo t) => t.id),
         <String>['high-new', 'high-old', 'low'],
+      );
+    });
+  });
+
+  group('folder scope', () {
+    final List<Todo> todos = <Todo>[
+      sampleTodo(id: 'work-1', categoryId: 'work'),
+      sampleTodo(id: 'work-2', categoryId: 'work'),
+      sampleTodo(id: 'home-1', categoryId: 'home'),
+      sampleTodo(id: 'unfiled-1'),
+    ];
+
+    test('no folder means every folder', () {
+      expect(const TodoFilter().apply(todos), hasLength(4));
+    });
+
+    test('a folder keeps only what is filed under it', () {
+      const TodoFilter filter = TodoFilter(categoryId: 'work');
+      expect(filter.apply(todos).map((Todo t) => t.id), <String>[
+        'work-1',
+        'work-2',
+      ]);
+    });
+
+    test('the unfiled scope is the absence of a folder, not a folder', () {
+      // Todos with no folder at all are the ones a user means by "unfiled";
+      // a todo in a folder that no longer exists is not, and cannot be — its
+      // folder is cleared when the folder is deleted.
+      const TodoFilter filter = TodoFilter(categoryId: kUnfiledCategoryId);
+      expect(filter.apply(todos).map((Todo t) => t.id), <String>['unfiled-1']);
+    });
+
+    test('a folder combines with a status rather than replacing it', () {
+      final List<Todo> mixed = <Todo>[
+        sampleTodo(id: 'open', categoryId: 'work'),
+        sampleTodo(
+          id: 'done',
+          categoryId: 'work',
+          completedAt: DateTime(2026, 3, 2),
+        ),
+      ];
+      const TodoFilter filter = TodoFilter(
+        categoryId: 'work',
+        status: TodoStatusFilter.active,
+      );
+      expect(filter.apply(mixed).map((Todo t) => t.id), <String>['open']);
+    });
+
+    test('a chosen folder is not pristine, and clearing it is', () {
+      const TodoFilter filed = TodoFilter(categoryId: 'work');
+      expect(filed.isPristine, isFalse);
+      expect(filed.copyWith(clearCategory: true).isPristine, isTrue);
+    });
+
+    test('equality covers the folder, so switching folders rebuilds', () {
+      expect(
+        const TodoFilter(categoryId: 'work') ==
+            const TodoFilter(categoryId: 'home'),
+        isFalse,
+      );
+      expect(
+        const TodoFilter(categoryId: 'work') == const TodoFilter(),
+        isFalse,
       );
     });
   });

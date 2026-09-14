@@ -58,6 +58,7 @@ void main() {
         reminder: TodoReminder.followApp,
         ringtoneUri: null,
         reminderLead: null,
+        categoryId: null,
       );
 
       final Map<String, Object?> json = TodoModel.toJson(original);
@@ -107,6 +108,7 @@ void main() {
         reminder: TodoReminder.ring,
         ringtoneUri: 'content://media/internal/audio/media/42',
         reminderLead: ReminderLead.threeDays,
+        categoryId: null,
       );
 
       final Map<String, Object?> json = TodoModel.toJson(original);

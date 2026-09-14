@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_shapes.dart';
 import '../../../core/utils/app_date_formatter.dart';
 import '../../../core/utils/calendar.dart';
+import '../../notes/domain/entities/note.dart';
+import '../../notes/presentation/providers/note_providers.dart';
+import '../../notes/presentation/widgets/note_sheet.dart';
 import '../../todos/domain/entities/todo.dart';
 import '../../todos/presentation/providers/todo_providers.dart';
 import '../domain/entities/special_day.dart';
@@ -30,6 +34,16 @@ class CalendarPage extends ConsumerStatefulWidget {
 }
 
 class _CalendarPageState extends ConsumerState<CalendarPage> {
+  /// How many months can be swiped either side of the month the app opened in:
+  /// ten years each way, which is more than a calendar needs and cheap, because
+  /// a [PageView] only builds the pages near the one on screen.
+  static const int _pageRadius = 120;
+
+  /// The month the page index is measured from.
+  late final DateTime _anchor;
+
+  late final PageController _pageController;
+
   /// First day of the shown month.
   late DateTime _month;
 
@@ -50,25 +64,71 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     final DateTime now = ref.read(clockProvider)();
     _month = DateTime(now.year, now.month);
     _selectedDay = startOfDay(now);
+    _anchor = DateTime(now.year, now.month);
+    _pageController = PageController(initialPage: _pageRadius);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
-  void _shiftMonth(int delta) {
+  /// The month a page index stands for.
+  DateTime _monthForPage(int page) =>
+      DateTime(_anchor.year, _anchor.month + (page - _pageRadius));
+
+  /// The page index a month stands for.
+  int _pageForMonth(DateTime month) =>
+      _pageRadius + (month.year - _anchor.year) * 12 + (month.month - _anchor.month);
+
+  /// Moves the grid to [month] — a swipe, an arrow, "today", or a date jump all
+  /// end up here, so there is one definition of what changing month means.
+  void _showMonth(DateTime month, {bool animate = true}) {
+    final int page = _pageForMonth(month);
+    if (page < 0 || page > _pageRadius * 2) {
+      // Older than the grid reaches; moving the anchor would be the fix, but a
+      // calendar that cannot show a month ten years out has no business
+      // pretending otherwise.
+      return;
+    }
+    if (page == _pageController.page?.round() && month == _month) {
+      return;
+    }
+    // Applied immediately rather than when the slide lands: tapping the arrow
+    // twice in quick succession has to count two months from where the user has
+    // already decided to go, not from wherever the grid happens to be.
+    if (month != _month) {
+      _onMonthChanged(month);
+    }
+    if (!_pageController.hasClients) {
+      return;
+    }
+    if (animate) {
+      unawaited(
+        _pageController.animateToPage(
+          page,
+          duration: AppMotion.effectsDefault.duration,
+          curve: AppMotion.effectsDefault.curve,
+        ),
+      );
+    } else {
+      _pageController.jumpToPage(page);
+    }
+  }
+
+  /// Applies the month a swipe landed on, and picks a sensible day inside it.
+  void _onMonthChanged(DateTime month) {
+    final DateTime now = ref.read(clockProvider)();
+    final bool isCurrentMonth =
+        month.year == now.year && month.month == now.month;
     setState(() {
-      _month = DateTime(_month.year, _month.month + delta);
-      // Landing on a month with no selected day: select the 1st, unless it is
-      // the current month, where "today" is the useful default.
-      final DateTime now = ref.read(clockProvider)();
-      final bool isCurrentMonth =
-          _month.year == now.year && _month.month == now.month;
-      _selectedDay = isCurrentMonth
-          ? startOfDay(now)
-          : DateTime(_month.year, _month.month, 1);
+      _month = month;
+      // The day the details pane shows has to be inside the month on screen:
+      // today if this is the current month, otherwise the 1st.
+      _selectedDay =
+          isCurrentMonth ? startOfDay(now) : DateTime(month.year, month.month, 1);
     });
   }
 
@@ -85,18 +145,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     if (picked == null || !mounted) {
       return;
     }
-    setState(() {
-      _month = DateTime(picked.year, picked.month);
-      _selectedDay = startOfDay(picked);
-    });
+    setState(() => _selectedDay = startOfDay(picked));
+    _showMonth(DateTime(picked.year, picked.month));
   }
 
   void _goToday() {
     final DateTime now = ref.read(clockProvider)();
-    setState(() {
-      _month = DateTime(now.year, now.month);
-      _selectedDay = startOfDay(now);
-    });
+    setState(() => _selectedDay = startOfDay(now));
+    _showMonth(DateTime(now.year, now.month));
   }
 
   @override
@@ -119,26 +175,45 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         children: <Widget>[
           _buildMonthHeader(context),
           const SizedBox(height: 8),
-          _MonthGrid(
-            month: _month,
-            now: now,
-            counts: _DayCounts.from(todos),
-            specialDayKeys: <int>{
-              for (final SpecialDay day in specialDays)
-                if (day.repeatsYearly)
-                  // A yearly date marks its month and day in *every* month view,
-                  // which is the point of entering it once.
-                  day.monthDayKey
-                else
-                  dayKey(day.date),
-            },
-            yearlySpecialDayKeys: <int>{
-              for (final SpecialDay day in specialDays)
-                if (day.repeatsYearly) day.monthDayKey,
-            },
-            selectedDay: _selectedDay,
-            onDaySelected: (DateTime day) =>
-                setState(() => _selectedDay = day),
+          // The weekday row never changes, so it is drawn once above the
+          // swipeable grid rather than rebuilt inside every month page.
+          const _WeekdayHeader(),
+          const SizedBox(height: 4),
+          // A page per month, so the grid can be swiped: a calendar you cannot
+          // flick through is a calendar nobody uses. Fixed height, because a
+          // month of five rows next to one of six would otherwise make the whole
+          // page jump as the finger moves.
+          SizedBox(
+            height: _MonthGrid.heightForRows(_MonthGrid.maxRows),
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: _pageRadius * 2 + 1,
+              onPageChanged: (int page) => _onMonthChanged(_monthForPage(page)),
+              itemBuilder: (BuildContext context, int page) {
+                final DateTime month = _monthForPage(page);
+                return _MonthGrid(
+                  month: month,
+                  now: now,
+                  counts: _DayCounts.from(todos),
+                  specialDayKeys: <int>{
+                    for (final SpecialDay day in specialDays)
+                      if (day.repeatsYearly)
+                        // A yearly date marks its month and day in *every* month
+                        // view, which is the point of entering it once.
+                        day.monthDayKey
+                      else
+                        dayKey(day.date),
+                  },
+                  yearlySpecialDayKeys: <int>{
+                    for (final SpecialDay day in specialDays)
+                      if (day.repeatsYearly) day.monthDayKey,
+                  },
+                  selectedDay: _selectedDay,
+                  onDaySelected: (DateTime day) =>
+                      setState(() => _selectedDay = day),
+                );
+              },
+            ),
           ),
           const SizedBox(height: 10),
           _buildPaneSwitch(context),
@@ -151,6 +226,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                       day: _selectedDay,
                       todos: todos,
                       specialDays: _specialDaysOn(_selectedDay, specialDays),
+                      notes: ref
+                              .watch(notesOnDayProvider(dayKey(_selectedDay)))
+                              .value ??
+                          const <Note>[],
+                      onWriteNote: () => unawaited(
+                        showNoteSheet(context, date: _selectedDay),
+                      ),
+                      onOpenNote: (Note note) => unawaited(
+                        showNoteSheet(context, existing: note, date: note.date),
+                      ),
                       now: now,
                     )
                   : _SearchResults(
@@ -232,7 +317,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         IconButton(
           icon: const Icon(Icons.chevron_left),
           tooltip: AppStrings.calendarPreviousMonth,
-          onPressed: () => _shiftMonth(-1),
+          onPressed: () => _showMonth(DateTime(_month.year, _month.month - 1)),
         ),
         Expanded(
           child: Center(
@@ -245,7 +330,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         IconButton(
           icon: const Icon(Icons.chevron_right),
           tooltip: AppStrings.calendarNextMonth,
-          onPressed: () => _shiftMonth(1),
+          onPressed: () => _showMonth(DateTime(_month.year, _month.month + 1)),
         ),
         TextButton(onPressed: _goToday, child: const Text(AppStrings.calendarToday)),
         IconButton(
@@ -349,6 +434,32 @@ class _Cell {
   final bool hasSpecialDay;
 }
 
+/// The `一二三四五六日` row above the grid, which never changes.
+class _WeekdayHeader extends StatelessWidget {
+  const _WeekdayHeader();
+
+  static const List<String> _weekdays = <String>['一', '二', '三', '四', '五', '六', '日'];
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Row(
+      children: <Widget>[
+        for (final String weekday in _weekdays)
+          Expanded(
+            child: Center(
+              child: Text(
+                weekday,
+                style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _MonthGrid extends StatelessWidget {
   const _MonthGrid({
     required this.month,
@@ -360,13 +471,26 @@ class _MonthGrid extends StatelessWidget {
     required this.onDaySelected,
   });
 
-  static const List<String> _weekdays = <String>['一', '二', '三', '四', '五', '六', '日'];
-
   /// Reused for every blank cell, so a month that starts mid-week does not
   /// allocate a fresh widget for each leading gap.
   static const Widget _blank = SizedBox(height: _cellHeight);
 
   static const double _cellHeight = 44;
+
+  /// One cell plus the one-pixel inset that separates it from its neighbours —
+  /// the row height the grid actually occupies.
+  static const double _rowHeight = _cellHeight + 2;
+
+  /// The most rows a month can need (a 31-day month starting on a Sunday in a
+  /// Monday-first grid).
+  static const int maxRows = 6;
+
+  /// The height [rows] rows of cells take.
+  ///&#10;  /// The weekday header is drawn once above the swiping grid rather than inside
+  /// every page: it never changes, and leaving it out keeps this height a pure
+  /// multiple of the cell height instead of something that shifts with the text
+  /// scale.
+  static double heightForRows(int rows) => _rowHeight * rows;
 
   final DateTime month;
   final DateTime now;
@@ -383,29 +507,11 @@ class _MonthGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme text = Theme.of(context).textTheme;
     final List<_Cell?> cells = _resolveCells();
     final int rows = cells.length ~/ 7;
 
     return Column(
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            for (final String weekday in _weekdays)
-              Expanded(
-                child: Center(
-                  child: Text(
-                    weekday,
-                    style: text.labelSmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
         for (int row = 0; row < rows; row++)
           Row(
             children: <Widget>[
@@ -530,6 +636,9 @@ class _DayDetails extends StatelessWidget {
     required this.day,
     required this.todos,
     required this.specialDays,
+    required this.notes,
+    required this.onWriteNote,
+    required this.onOpenNote,
     required this.now,
   });
 
@@ -539,6 +648,13 @@ class _DayDetails extends StatelessWidget {
   /// Birthdays and the like falling on this day, so tapping the 3rd of October
   /// shows the birthday as well as the tasks.
   final List<SpecialDay> specialDays;
+
+  /// What was written on this day. A note belongs to a day, so the calendar is
+  /// where it is found again — that is the whole filing system.
+  final List<Note> notes;
+
+  final VoidCallback onWriteNote;
+  final ValueChanged<Note> onOpenNote;
 
   final DateTime now;
 
@@ -564,17 +680,33 @@ class _DayDetails extends StatelessWidget {
       }
     }
 
-    if (due.isEmpty && completed.isEmpty && specialDays.isEmpty) {
-      return Center(
-        child: Text(
-          AppStrings.calendarNoTodos,
-          style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+    if (due.isEmpty && completed.isEmpty && specialDays.isEmpty && notes.isEmpty) {
+      // Scrollable: on a short window the pane can be shorter than this column,
+      // and a placeholder that overflows is worse than one that scrolls.
+      return SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                AppStrings.calendarNoTodos,
+                style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: onWriteNote,
+                icon: const Icon(Icons.edit_note),
+                label: const Text(AppStrings.noteAdd),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     return ListView(
       children: <Widget>[
+        ..._noteSection(context),
         if (specialDays.isNotEmpty) ...<Widget>[
           _legend(context, Icons.cake_outlined, AppStrings.specialDaySection),
           for (final SpecialDay special in specialDays)
@@ -595,6 +727,56 @@ class _DayDetails extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  /// The day's notes as tappable tags, with the way to add one.
+  List<Widget> _noteSection(BuildContext context) {
+    return <Widget>[
+      Row(
+        children: <Widget>[
+          Expanded(child: _legend(context, Icons.edit_note, AppStrings.noteSection)),
+          TextButton.icon(
+            onPressed: onWriteNote,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text(AppStrings.noteAdd),
+          ),
+        ],
+      ),
+      if (notes.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(left: 22, bottom: 4),
+          child: Text(
+            AppStrings.noteNone,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+        )
+      else
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            for (final Note note in notes)
+              ActionChip(
+                avatar: Icon(
+                  note.hasAttachments ? Icons.attach_file : Icons.notes,
+                  size: 16,
+                ),
+                label: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(
+                    note.preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                onPressed: () => onOpenNote(note),
+              ),
+          ],
+        ),
+      const SizedBox(height: 4),
+    ];
   }
 
   Widget _legend(BuildContext context, IconData icon, String label) {

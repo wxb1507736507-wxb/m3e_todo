@@ -15,10 +15,11 @@ abstract final class TodoModel {
   ///
   /// Version 2 adds `subtasks`, `attachments`, `accentColor` and
   /// `backgroundImage`; version 3 adds `textColor`; version 4 adds the per-todo
-  /// `reminder` and `ringtoneUri`; version 5 adds `reminderLead`. Every one of them is optional on read, so an
+  /// `reminder` and `ringtoneUri`; version 5 adds `reminderLead`; version 6
+  /// adds `categoryId`. Every one of them is optional on read, so an
   /// older file loads unchanged and a newer one still opens in an older build —
   /// the fields it does not know are ignored.
-  static const int schemaVersion = 5;
+  static const int schemaVersion = 6;
 
   static Map<String, Object?> toJson(Todo todo) {
     return <String, Object?>{
@@ -50,6 +51,7 @@ abstract final class TodoModel {
         'reminder': todo.reminder.name,
       if (todo.ringtoneUri != null) 'ringtoneUri': todo.ringtoneUri,
       if (todo.reminderLead != null) 'reminderLead': todo.reminderLead!.name,
+      if (todo.categoryId != null) 'categoryId': todo.categoryId,
     };
   }
 
@@ -90,6 +92,7 @@ abstract final class TodoModel {
       reminder: _readReminder(json),
       ringtoneUri: _readString(json, 'ringtoneUri'),
       reminderLead: _readReminderLead(json),
+      categoryId: _readString(json, 'categoryId'),
     );
   }
 

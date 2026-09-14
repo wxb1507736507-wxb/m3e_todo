@@ -11,6 +11,41 @@ abstract final class AppStrings {
   static const String navAll = '全部';
   static const String navActive = '进行中';
   static const String navCompleted = '已完成';
+  static const String navCategories = '分类';
+
+  // --- Notes (随笔) -------------------------------------------------------------------
+
+  static const String noteSection = '随笔';
+  static const String noteNew = '写随笔';
+  static const String noteEdit = '编辑随笔';
+  static const String noteBodyHint = '记录点什么：今天发生了什么，想到了什么…';
+  static const String noteChangeDate = '改日期';
+  static const String noteToday = '今天';
+  static const String noteTomorrow = '明天';
+  static const String noteEmpty = '写点内容或添加一个附件再保存';
+  static const String noteNone = '这一天还没有随笔';
+  static const String noteAdd = '写一篇';
+  static const String noteDeleted = '已删除这篇随笔';
+
+  /// How many attachments a note carries, when it has any.
+  static String noteAttachmentCount(int count) => '$count 个附件';
+
+  // --- Folders (categories) ---------------------------------------------------------
+
+  static const String categoriesEmpty = '还没有分类。点右下角新建一个文件夹，把待办分门别类放进去';
+  static const String categoryNew = '新建分类';
+  static const String categoryEdit = '编辑分类';
+  static const String categoryNameLabel = '分类名称';
+  static const String categoryNameHint = '例如：工作、生活、学习';
+  static const String categoryNameRequired = '请填写分类名称';
+  static const String categoryColorLabel = '标记颜色';
+  static const String categoryDeleteHint = '删除分类不会删除里面的待办，它们会回到「未分类」';
+  static const String categoryUnfiled = '未分类';
+  static const String categorySearchHint = '在这个分类里搜索';
+  static const String categoryFolderEmpty = '这个分类里还没有待办';
+  static const String categoryPickLabel = '分类';
+
+  static String categoryDeleted(String name) => '已删除分类「$name」';
 
   // --- Toolbar -------------------------------------------------------------
 

@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants/app_strings.dart';
 import '../core/platform/app_platform.dart';
 import '../features/calendar/domain/entities/special_day.dart';
+import '../features/categories/presentation/pages/categories_page.dart';
+import '../features/categories/presentation/widgets/category_sheet.dart';
 import '../features/calendar/presentation/calendar_page.dart';
 import '../features/calendar/presentation/providers/special_day_providers.dart';
 import '../features/notifications/reminder_coordinator.dart';
@@ -49,8 +51,11 @@ class _AppShellState extends ConsumerState<AppShell> {
     TodoStatusFilter.completed,
   ];
 
-  /// Index of the calendar pseudo-destination (after the three statuses).
-  static const int _calendarIndex = 3;
+  /// Index of the folders destination (after the three statuses).
+  static const int _categoriesIndex = 3;
+
+  /// Index of the calendar pseudo-destination (last).
+  static const int _calendarIndex = 4;
 
   int _selectedIndex = 0;
 
@@ -79,7 +84,15 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
   }
 
-  void _createTodo() => unawaited(showTodoEditor(context));
+  /// What the floating action button does here: a todo on the list, a folder on
+  /// the folders screen, nothing on the calendar (which adds its own).
+  void _primaryAction() {
+    if (_selectedIndex == _categoriesIndex) {
+      unawaited(showCategorySheet(context));
+      return;
+    }
+    unawaited(showTodoEditor(context));
+  }
 
   void _focusSearch() => ref.read(searchFocusNodeProvider).requestFocus();
 
@@ -175,7 +188,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.keyN, control: true):
-            _createTodo,
+            _primaryAction,
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
             _focusSearch,
       },
@@ -231,9 +244,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                 bottomNavigationBar:
                     useRail ? null : _buildBottomBar(stats),
                 floatingActionButton: FloatingActionButton.extended(
-                  onPressed: _createTodo,
+                  onPressed: _primaryAction,
                   icon: const Icon(Icons.add),
-                  label: const Text(AppStrings.newTodo),
+                  label: Text(
+                    _selectedIndex == _categoriesIndex
+                        ? AppStrings.categoryNew
+                        : AppStrings.newTodo,
+                  ),
                 ),
               ),
             );
@@ -243,11 +260,18 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  Widget _buildBody() =>
-      _selectedIndex == _calendarIndex ? const CalendarPage() : const TodoPage();
+  Widget _buildBody() {
+    if (_selectedIndex == _calendarIndex) {
+      return const CalendarPage();
+    }
+    if (_selectedIndex == _categoriesIndex) {
+      return const CategoriesPage();
+    }
+    return const TodoPage();
+  }
 
   void _selectDestination(int index) {
-    if (index == _calendarIndex) {
+    if (index == _calendarIndex || index == _categoriesIndex) {
       setState(() => _selectedIndex = index);
       return;
     }
@@ -287,6 +311,11 @@ class _AppShellState extends ConsumerState<AppShell> {
             stats?.completed ?? 0,
           ),
           label: const Text(AppStrings.navCompleted),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.folder_outlined),
+          selectedIcon: const Icon(Icons.folder),
+          label: const Text(AppStrings.navCategories),
         ),
         const NavigationRailDestination(
           icon: Icon(Icons.calendar_month_outlined),
@@ -328,6 +357,11 @@ class _AppShellState extends ConsumerState<AppShell> {
             stats?.completed ?? 0,
           ),
           label: AppStrings.navCompleted,
+        ),
+        const NavigationDestination(
+          icon: Icon(Icons.folder_outlined),
+          selectedIcon: Icon(Icons.folder),
+          label: AppStrings.navCategories,
         ),
         const NavigationDestination(
           icon: Icon(Icons.calendar_month_outlined),

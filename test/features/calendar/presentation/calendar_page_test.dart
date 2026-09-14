@@ -16,6 +16,15 @@ Future<void> openCalendar(
   WidgetTester tester, {
   List<Todo> todos = const <Todo>[],
 }) async {
+  // A window tall enough for the page to lay out as it does on a phone: the
+  // grid reserves six rows so it cannot jump while swiping, which is more than
+  // the 600-pixel default the test binding starts with. Wider than the rail
+  // breakpoint, so the destinations are still in the NavigationRail.
+  tester.view.physicalSize = const Size(800, 1400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
   await tester.pumpWidget(
     buildTestApp(repository: FakeTodoRepository(todos)),
   );
@@ -142,6 +151,29 @@ void main() {
     await tester.tap(find.byTooltip(AppStrings.calendarPreviousMonth));
     await tester.pumpAndSettle();
     expect(find.text(AppStrings.calendarMonthLabel(2026, 2)), findsOneWidget);
+  });
+
+  testWidgets('the grid can be swiped from month to month', (
+    WidgetTester tester,
+  ) async {
+    await openCalendar(tester);
+
+    // A calendar you cannot flick through is a calendar nobody uses: the arrows
+    // are for precision, the swipe is for browsing.
+    await tester.drag(find.byType(PageView), const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    expect(find.text(AppStrings.calendarMonthLabel(2026, 4)), findsOneWidget);
+
+    await tester.drag(find.byType(PageView), const Offset(400, 0));
+    await tester.pumpAndSettle();
+    expect(find.text(AppStrings.calendarMonthLabel(2026, 3)), findsOneWidget);
+
+    // Two flicks back, each landing a month away.
+    await tester.drag(find.byType(PageView), const Offset(400, 0));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(PageView), const Offset(400, 0));
+    await tester.pumpAndSettle();
+    expect(find.text(AppStrings.calendarMonthLabel(2026, 1)), findsOneWidget);
   });
 
   testWidgets('the today action comes back after wandering off', (

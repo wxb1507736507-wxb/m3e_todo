@@ -6,6 +6,8 @@ import 'package:m3e_todo/app/app.dart';
 import 'package:m3e_todo/core/storage/app_directories.dart';
 import 'package:m3e_todo/core/storage/json_file_store.dart';
 import 'package:m3e_todo/core/storage/storage_providers.dart';
+import 'package:m3e_todo/features/categories/domain/repositories/category_repository.dart';
+import 'package:m3e_todo/features/categories/presentation/providers/category_providers.dart';
 import 'package:m3e_todo/features/settings/domain/app_settings.dart';
 import 'package:m3e_todo/features/settings/presentation/settings_controller.dart';
 import 'package:m3e_todo/features/todos/domain/repositories/todo_repository.dart';
@@ -25,6 +27,7 @@ Widget buildTestApp({
   DateTime? now,
   AppSettings settings = const AppSettings(),
   Directory? dataDirectory,
+  CategoryRepository? categoryRepository,
 }) {
   // Always redirected away from the real per-user directory. A test must never
   // be able to read or overwrite the developer's actual todos, and defaulting to
@@ -40,6 +43,10 @@ Widget buildTestApp({
       documentStoreFactoryProvider.overrideWithValue(
         (String name) => JsonFileStore(directory.childFile(name)),
       ),
+      // Folders are opted into per test: most tests do not care about them, and
+      // the real repository reads a file, which a widget test should not wait for.
+      if (categoryRepository != null)
+        categoryRepositoryProvider.overrideWithValue(categoryRepository),
     ],
     child: const M3eTodoApp(),
   );

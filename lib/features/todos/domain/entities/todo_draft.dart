@@ -23,6 +23,7 @@ class TodoDraft {
     this.reminder = TodoReminder.followApp,
     this.ringtoneUri,
     this.reminderLead,
+    this.categoryId,
   });
 
   final String title;
@@ -56,6 +57,9 @@ class TodoDraft {
 
   /// How early the reminder arrives, or `null` to follow the app default.
   final ReminderLead? reminderLead;
+
+  /// The folder to file this under, or `null` for unfiled.
+  final String? categoryId;
 
   @override
   String toString() => 'TodoDraft("$title", $priority, due: $dueDate, '

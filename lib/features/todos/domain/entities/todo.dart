@@ -45,6 +45,7 @@ class Todo {
     this.reminder = TodoReminder.followApp,
     this.ringtoneUri,
     this.reminderLead,
+    this.categoryId,
   });
 
   /// Creates a todo from raw user input, applying the domain's normalisation
@@ -68,6 +69,7 @@ class Todo {
     TodoReminder reminder = TodoReminder.followApp,
     String? ringtoneUri,
     ReminderLead? reminderLead,
+    String? categoryId,
   }) {
     final String normalizedTitle = title.trim();
     if (normalizedTitle.isEmpty) {
@@ -88,6 +90,7 @@ class Todo {
       reminder: reminder,
       ringtoneUri: ringtoneUri,
       reminderLead: reminderLead,
+      categoryId: categoryId,
     );
   }
 
@@ -145,6 +148,14 @@ class Todo {
   /// How early this todo's reminder arrives, or `null` to follow the app-wide
   /// default — the same "follow unless I say otherwise" rule as [reminder].
   final ReminderLead? reminderLead;
+
+  /// The folder this todo is filed under, or `null` for unfiled.
+  ///
+  /// A plain id rather than the folder itself: the category is a separate
+  /// collection with its own lifecycle, and the todo must survive a folder being
+  /// renamed or deleted. Deleting a folder unfiles its todos rather than
+  /// deleting them.
+  final String? categoryId;
 
   bool get isCompleted => completedAt != null;
 
@@ -243,6 +254,7 @@ class Todo {
     required TodoReminder reminder,
     required String? ringtoneUri,
     required ReminderLead? reminderLead,
+    required String? categoryId,
   }) {
     final String normalizedTitle = title.trim();
     if (normalizedTitle.isEmpty) {
@@ -291,6 +303,7 @@ class Todo {
       reminder: reminder,
       ringtoneUri: ringtoneUri,
       reminderLead: reminderLead,
+      categoryId: categoryId,
     );
   }
 
@@ -312,6 +325,7 @@ class Todo {
       reminder: reminder,
       ringtoneUri: ringtoneUri,
       reminderLead: reminderLead,
+      categoryId: categoryId,
     );
   }
 
@@ -335,7 +349,8 @@ class Todo {
         other.backgroundImage == backgroundImage &&
         other.reminder == reminder &&
         other.ringtoneUri == ringtoneUri &&
-        other.reminderLead == reminderLead;
+        other.reminderLead == reminderLead &&
+        other.categoryId == categoryId;
   }
 
   @override
@@ -355,6 +370,7 @@ class Todo {
         reminder,
         ringtoneUri,
         reminderLead,
+        categoryId,
       );
 
   @override

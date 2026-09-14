@@ -10,6 +10,8 @@ import '../../../../core/theme/app_palette.dart';
 import '../../../../core/theme/app_shapes.dart';
 import '../../../../core/utils/app_date_formatter.dart';
 import '../../../../core/utils/color_utils.dart';
+import '../../../categories/domain/entities/category.dart';
+import '../../../categories/presentation/providers/category_providers.dart';
 import '../../../media/presentation/color_extract_page.dart';
 import '../../../media/presentation/image_crop_page.dart';
 import '../../../notifications/domain/reminder.dart';
@@ -32,13 +34,20 @@ import 'color_field.dart';
 /// A modal bottom sheet rather than a dialog: the list stays visible behind the
 /// form, which matters on a desktop window where the list is the context for
 /// whatever is being edited.
-Future<void> showTodoEditor(BuildContext context, {Todo? existing}) {
+Future<void> showTodoEditor(
+  BuildContext context, {
+  Todo? existing,
+  String? initialCategoryId,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     constraints: const BoxConstraints(maxWidth: 560),
-    builder: (BuildContext context) => TodoEditorSheet(existing: existing),
+    builder: (BuildContext context) => TodoEditorSheet(
+      existing: existing,
+      initialCategoryId: initialCategoryId,
+    ),
   );
 }
 
@@ -61,10 +70,19 @@ class _SubtaskRow {
 /// submit, so an abandoned edit leaves no trace and the stored collection is
 /// written at most once per save.
 class TodoEditorSheet extends ConsumerStatefulWidget {
-  const TodoEditorSheet({this.existing, super.key});
+  const TodoEditorSheet({
+    this.existing,
+    this.initialCategoryId,
+    super.key,
+  });
 
   /// The todo being edited, or `null` when creating a new one.
   final Todo? existing;
+
+  /// The folder a *new* todo should be filed under, when it was created from
+  /// inside one. Ignored while editing: an existing todo keeps its own folder
+  /// unless the user changes it.
+  final String? initialCategoryId;
 
   @override
   ConsumerState<TodoEditorSheet> createState() => _TodoEditorSheetState();
@@ -79,6 +97,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
   TodoReminder _reminder = TodoReminder.followApp;
   String? _ringtoneUri;
   ReminderLead? _reminderLead;
+  String? _categoryId;
   List<_SubtaskRow> _subtaskRows = <_SubtaskRow>[];
   List<TodoAttachment> _attachments = <TodoAttachment>[];
   int? _accentColor;
@@ -119,6 +138,9 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
     _reminder = existing?.reminder ?? TodoReminder.followApp;
     _ringtoneUri = existing?.ringtoneUri;
     _reminderLead = existing?.reminderLead;
+    // A todo can be created *inside* a folder, so the folder it was created from
+    // is the sensible default rather than "unfiled".
+    _categoryId = existing?.categoryId ?? widget.initialCategoryId;
     _subtaskRows = <_SubtaskRow>[
       for (final TodoSubtask subtask in existing?.subtasks ?? const <TodoSubtask>[])
         _SubtaskRow(
@@ -383,6 +405,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
       reminder: _reminder,
       ringtoneUri: _ringtoneUri,
       reminderLead: _reminderLead,
+      categoryId: _categoryId,
     );
 
     try {
@@ -527,6 +550,8 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
                         ],
                       ),
                       const SizedBox(height: 24),
+                      _buildCategorySection(text, colors),
+                      const SizedBox(height: 24),
                       _buildReminderSection(text, colors),
                       const SizedBox(height: 24),
                       _buildSubtasksSection(text, colors),
@@ -569,6 +594,47 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
   }
 
   // --- Sections ----------------------------------------------------------------------
+
+  /// Which folder this todo is filed under.
+  ///
+  /// Chips rather than a dropdown: a handful of folders is the norm, and seeing
+  /// them all at once is how you notice the one you meant to use.
+  Widget _buildCategorySection(TextTheme text, ColorScheme colors) {
+    final List<Category> categories =
+        ref.watch(categoriesProvider).value ?? const <Category>[];
+    if (categories.isEmpty) {
+      // Nothing to file under yet: offering an empty row would only raise a
+      // question the user cannot answer from here.
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(AppStrings.categoryPickLabel, style: text.labelLarge),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            ChoiceChip(
+              label: const Text(AppStrings.categoryUnfiled),
+              selected: _categoryId == null,
+              onSelected: (_) => setState(() => _categoryId = null),
+            ),
+            for (final Category category in categories)
+              ChoiceChip(
+                avatar: category.color == null
+                    ? null
+                    : CircleAvatar(backgroundColor: Color(category.color!)),
+                label: Text(category.name),
+                selected: _categoryId == category.id,
+                onSelected: (_) => setState(() => _categoryId = category.id),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
 
   /// The per-todo reminder choice: whether this one rings, and with what sound.
   ///
@@ -741,7 +807,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
           runSpacing: 8,
           children: <Widget>[
             for (final TodoAttachment attachment in _attachments)
-              _AttachmentChip(
+              AttachmentChip(
                 attachment: attachment,
                 onOpen: () => unawaited(_openAttachment(attachment)),
                 onRemove: () => _removeAttachment(attachment),
@@ -874,36 +940,5 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
 
 enum _AttachmentKind { image, video, document, voice }
 
-class _AttachmentChip extends StatelessWidget {
-  const _AttachmentChip({
-    required this.attachment,
-    required this.onOpen,
-    required this.onRemove,
-  });
 
-  final TodoAttachment attachment;
-  final VoidCallback onOpen;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme text = Theme.of(context).textTheme;
-
-    return InputChip(
-      avatar: AttachmentThumb(attachment: attachment, size: 28),
-      label: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 140),
-        child: Text(
-          attachment.name,
-          overflow: TextOverflow.ellipsis,
-          style: text.labelMedium,
-        ),
-      ),
-      backgroundColor: colors.surfaceContainerHigh,
-      onDeleted: onRemove,
-      onPressed: onOpen,
-    );
-  }
-}
 

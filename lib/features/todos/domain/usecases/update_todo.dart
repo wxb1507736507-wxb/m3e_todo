@@ -28,6 +28,7 @@ final class UpdateTodo extends TodoMutation {
               reminder: draft.reminder,
               ringtoneUri: draft.ringtoneUri,
               reminderLead: draft.reminderLead,
+              categoryId: draft.categoryId,
             )
           else
             todo,

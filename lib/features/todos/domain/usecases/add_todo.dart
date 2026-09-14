@@ -39,6 +39,7 @@ final class AddTodo extends TodoMutation {
         reminder: draft.reminder,
         ringtoneUri: draft.ringtoneUri,
         reminderLead: draft.reminderLead,
+        categoryId: draft.categoryId,
       );
       return <Todo>[todo, ...current];
     });

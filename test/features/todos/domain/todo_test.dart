@@ -90,6 +90,7 @@ void main() {
         reminder: TodoReminder.followApp,
         ringtoneUri: null,
         reminderLead: null,
+        categoryId: null,
       );
 
       expect(edited.id, 'keep-me');
@@ -117,6 +118,7 @@ void main() {
         reminder: TodoReminder.followApp,
         ringtoneUri: null,
         reminderLead: null,
+        categoryId: null,
       );
       expect(coloured.accentColor, isNotNull);
 
@@ -133,6 +135,7 @@ void main() {
         reminder: TodoReminder.followApp,
         ringtoneUri: null,
         reminderLead: null,
+        categoryId: null,
       );
       expect(cleared.accentColor, isNull);
       expect(cleared.textColor, isNull);
@@ -153,6 +156,7 @@ void main() {
         reminder: TodoReminder.followApp,
         ringtoneUri: null,
         reminderLead: null,
+        categoryId: null,
       );
       expect(edited.isCompleted, isTrue);
       expect(edited.completedAt, testNow);
@@ -173,6 +177,7 @@ void main() {
           reminder: TodoReminder.followApp,
           ringtoneUri: null,
           reminderLead: null,
+          categoryId: null,
         ),
         throwsA(isA<TodoValidationException>()),
       );

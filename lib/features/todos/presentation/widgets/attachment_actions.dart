@@ -176,6 +176,44 @@ class _VoiceRecordDialogState extends ConsumerState<_VoiceRecordDialog> {
   }
 }
 
+/// One attachment as a chip: preview, name, open on tap, remove on the cross.
+///
+/// Shared by the todo editor and the note editor — an attachment is an
+/// attachment, and the two must not drift into looking like different things.
+class AttachmentChip extends StatelessWidget {
+  const AttachmentChip({
+    required this.attachment,
+    required this.onOpen,
+    required this.onRemove,
+    super.key,
+  });
+
+  final TodoAttachment attachment;
+  final VoidCallback onOpen;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+
+    return InputChip(
+      avatar: AttachmentThumb(attachment: attachment, size: 28),
+      label: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 140),
+        child: Text(
+          attachment.name,
+          overflow: TextOverflow.ellipsis,
+          style: text.labelMedium,
+        ),
+      ),
+      backgroundColor: colors.surfaceContainerHigh,
+      onDeleted: onRemove,
+      onPressed: onOpen,
+    );
+  }
+}
+
 /// Small square preview for an image attachment; other types get a type icon.
 ///
 /// Images decode at thumbnail size ([cacheWidth]) rather than at full sensor

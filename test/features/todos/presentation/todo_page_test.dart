@@ -2,10 +2,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/core/constants/app_strings.dart';
+import 'package:m3e_todo/features/categories/domain/entities/category.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_reminder.dart';
 import 'package:m3e_todo/features/todos/presentation/widgets/todo_editor_sheet.dart';
 
+import '../../../support/fake_category_repository.dart';
 import '../../../support/fake_todo_repository.dart';
 import '../../../support/sample_todo.dart';
 import '../../../support/test_app.dart';
@@ -331,6 +333,41 @@ void main() {
     );
   });
 
+  testWidgets('the editor files a todo under a folder', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    // A folder to file under: the editor only offers the picker when there is
+    // something to choose.
+    final FakeTodoRepository repository = FakeTodoRepository();
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: repository,
+        categoryRepository: FakeCategoryRepository(<Category>[
+          Category.create(id: 'c1', name: '工作'),
+        ]),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '写周报');
+
+    // Scrolled into view rather than dragged there: `ensureVisible` asks the
+    // sheet's own scrollable, so the test does not have to guess which of the
+    // several scrollables in the tree is the right one.
+    final Finder folder = find.text('工作');
+    await tester.ensureVisible(folder);
+    await tester.pumpAndSettle();
+    await tester.tap(folder);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(AppStrings.create));
+    await tester.pumpAndSettle();
+
+    expect((await repository.loadAll()).single.categoryId, 'c1');
+  });
+
   testWidgets('deleting a todo removes it from the list and offers undo', (
     WidgetTester tester,
   ) async {
@@ -371,6 +408,7 @@ Future<void> _chooseColor(WidgetTester tester, String label) async {
   await tester.tap(swatch);
   await tester.pumpAndSettle();
 }
+
 
 /// A phone-sized window: narrow enough for the bottom navigation bar and for the
 /// row heights a thumb actually drags.

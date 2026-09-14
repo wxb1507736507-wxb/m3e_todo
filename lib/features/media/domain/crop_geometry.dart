@@ -129,6 +129,20 @@ class CropGeometry {
     return rect.intersect(Offset.zero & imageSize);
   }
 
+  /// The source pixel under [viewportPoint].
+  ///
+  /// The inverse of [sourceRect]: the colour sampler needs to turn a tap into an
+  /// image pixel, the cropper needs to turn the frame into a source rectangle,
+  /// and both must agree on the same transform — which is why neither derives
+  /// one of its own.
+  Offset imagePointFor(Offset viewportPoint) {
+    final Offset point = (viewportPoint - offset) / effectiveScale;
+    return Offset(
+      point.dx.clamp(0, imageSize.width),
+      point.dy.clamp(0, imageSize.height),
+    );
+  }
+
   /// Output pixel size for [sourceRect], bounded so a crop of a 50 MP photo does
   /// not produce a 50 MP file.
   Size outputSize({double maxLongSide = 1440}) {

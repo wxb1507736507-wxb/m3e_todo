@@ -23,6 +23,7 @@ final class UpdateTodo extends TodoMutation {
               subtasks: draft.subtasks,
               attachments: draft.attachments,
               accentColor: draft.accentColor,
+              textColor: draft.textColor,
               backgroundImage: draft.backgroundImage,
             )
           else

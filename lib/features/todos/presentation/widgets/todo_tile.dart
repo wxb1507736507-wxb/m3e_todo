@@ -10,6 +10,7 @@ import '../../../../core/platform/app_platform.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_shapes.dart';
 import '../../../../core/utils/app_date_formatter.dart';
+import '../../../../core/utils/color_utils.dart';
 import '../../domain/entities/todo.dart';
 import '../../domain/entities/todo_attachment.dart';
 import '../../domain/entities/todo_priority.dart';
@@ -74,6 +75,21 @@ class _TodoTileState extends State<TodoTile> {
     final Color accent = todo.accentColor == null
         ? colors.surfaceContainerLow
         : Color(todo.accentColor!);
+    // The card's text colour. `null` means the theme's own `onSurface`, which is
+    // the safe default: it is chosen against the surface the card falls back to,
+    // so a card with no custom colour is always readable.
+    final Color? custom = todo.textColor == null ? null : Color(todo.textColor!);
+    final Color titleColor = custom ??
+        (completed ? colors.onSurfaceVariant : colors.onSurface);
+    final Color bodyColor = custom ?? colors.onSurfaceVariant;
+    // What washes out the background image. With the theme's own text colour the
+    // theme surface is right; with a custom colour the scrim has to suit *that*
+    // colour instead — white text under a light scrim on a photo is exactly the
+    // unreadable combination the scrim exists to prevent.
+    final Color imageScrim = custom == null
+        ? colors.surface.withValues(alpha: 0.75)
+        : (isHardToRead(todo.textColor!, 0xFF000000) ? Colors.white : Colors.black)
+            .withValues(alpha: 0.6);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -106,9 +122,7 @@ class _TodoTileState extends State<TodoTile> {
                   // (`saveLayer`), once per tile, on every frame the list moves.
                   // Washing the image out with a flat fill is a single extra
                   // draw with no layer at all, and looks the same.
-                  ColoredBox(
-                    color: colors.surface.withValues(alpha: 0.75),
-                  ),
+                  ColoredBox(color: imageScrim),
                 ],
               ),
             ),
@@ -144,13 +158,11 @@ class _TodoTileState extends State<TodoTile> {
                             curve: AppMotion.effectsFast.curve,
                             style:
                                 (text.titleMedium ?? const TextStyle()).copyWith(
-                              color: completed
-                                  ? colors.onSurfaceVariant
-                                  : colors.onSurface,
+                              color: titleColor,
                               decoration: completed
                                   ? TextDecoration.lineThrough
                                   : TextDecoration.none,
-                              decorationColor: colors.onSurfaceVariant,
+                              decorationColor: bodyColor,
                             ),
                             child: Text(todo.title),
                           ),
@@ -161,7 +173,7 @@ class _TodoTileState extends State<TodoTile> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: text.bodyMedium?.copyWith(
-                                color: colors.onSurfaceVariant,
+                                color: bodyColor,
                               ),
                             ),
                           ],
@@ -170,6 +182,7 @@ class _TodoTileState extends State<TodoTile> {
                             _SubtaskHeader(
                               done: todo.subtaskProgress().$1,
                               total: todo.subtaskProgress().$2,
+                              textColor: custom,
                               expanded: _subtasksExpanded,
                               onToggleExpanded: () => setState(
                                 () => _subtasksExpanded = !_subtasksExpanded,
@@ -178,6 +191,7 @@ class _TodoTileState extends State<TodoTile> {
                             if (_subtasksExpanded)
                               _SubtaskChecklist(
                                 todo: todo,
+                                textColor: custom,
                                 onToggle: widget.onToggleSubtask,
                               ),
                           ],
@@ -227,12 +241,14 @@ class _SubtaskHeader extends StatelessWidget {
   const _SubtaskHeader({
     required this.done,
     required this.total,
+    this.textColor,
     required this.expanded,
     required this.onToggleExpanded,
   });
 
   final int done;
   final int total;
+  final Color? textColor;
   final bool expanded;
   final VoidCallback onToggleExpanded;
 
@@ -258,7 +274,7 @@ class _SubtaskHeader extends StatelessWidget {
             Text(
               '${AppStrings.subtasksLabel} ${AppStrings.subtaskProgress(done, total)}',
               style: text.labelMedium?.copyWith(
-                color: colors.onSurfaceVariant,
+                color: textColor ?? colors.onSurfaceVariant,
               ),
             ),
           ],
@@ -269,9 +285,14 @@ class _SubtaskHeader extends StatelessWidget {
 }
 
 class _SubtaskChecklist extends StatelessWidget {
-  const _SubtaskChecklist({required this.todo, required this.onToggle});
+  const _SubtaskChecklist({
+    required this.todo,
+    required this.onToggle,
+    this.textColor,
+  });
 
   final Todo todo;
+  final Color? textColor;
   final ValueChanged<String> onToggle;
 
   @override
@@ -300,8 +321,8 @@ class _SubtaskChecklist extends StatelessWidget {
                           : Icons.check_box_outline_blank,
                       size: 18,
                       color: subtask.isCompleted
-                          ? colors.primary
-                          : colors.onSurfaceVariant,
+                          ? (textColor ?? colors.primary)
+                          : (textColor ?? colors.onSurfaceVariant),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -309,8 +330,8 @@ class _SubtaskChecklist extends StatelessWidget {
                         subtask.title,
                         style: text.bodyMedium?.copyWith(
                           color: subtask.isCompleted
-                              ? colors.onSurfaceVariant
-                              : colors.onSurface,
+                              ? (textColor ?? colors.onSurfaceVariant)
+                              : (textColor ?? colors.onSurface),
                           decoration: subtask.isCompleted
                               ? TextDecoration.lineThrough
                               : TextDecoration.none,

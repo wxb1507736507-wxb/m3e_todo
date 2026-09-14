@@ -134,6 +134,49 @@ void main() {
     expect(find.byType(TodoEditorSheet), findsNothing);
   });
 
+  testWidgets('the editor stores the card and text colours it was given', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTodoRepository repository = FakeTodoRepository();
+
+    await tester.pumpWidget(buildTestApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '写周报');
+
+    await _chooseColor(tester, '靛蓝');
+    await _chooseColor(tester, '浅黄');
+
+    await tester.tap(find.text(AppStrings.create));
+    await tester.pumpAndSettle();
+
+    final Todo stored = (await repository.loadAll()).single;
+    expect(stored.accentColor, 0xFF3949AB);
+    expect(stored.textColor, 0xFFFFF9C4);
+  });
+
+  testWidgets('the editor warns about a text colour it cannot be read on', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    await tester.pumpWidget(buildTestApp(repository: FakeTodoRepository()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '写周报');
+
+    // Yellow text on a yellow card: legible to nobody, so the editor says so.
+    await _chooseColor(tester, '黄');
+    await _chooseColor(tester, '浅黄');
+    expect(find.text(AppStrings.colorContrastWarning), findsOneWidget);
+
+    // A colour that can be read takes the warning away again.
+    await _chooseColor(tester, '近黑');
+    expect(find.text(AppStrings.colorContrastWarning), findsNothing);
+  });
+
   testWidgets('deleting a todo removes it from the list and offers undo', (
     WidgetTester tester,
   ) async {
@@ -156,4 +199,34 @@ void main() {
 
     expect((await repository.loadAll()).single.id, 'a');
   });
+}
+
+/// Scrolls the editor down to the swatch named [label] and taps it.
+///
+/// The colour section sits well below the fold in the test window, so the
+/// swatches have to be brought into view before they can be tapped — a tap on an
+/// off-screen swatch silently hits nothing.
+Future<void> _chooseColor(WidgetTester tester, String label) async {
+  final Finder swatch = find.byTooltip(label);
+  await tester.dragUntilVisible(
+    swatch,
+    find.byType(SingleChildScrollView).first,
+    const Offset(0, -200),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(swatch);
+  await tester.pumpAndSettle();
+}
+
+/// Gives the editor a window tall enough for a swatch to be tapped once it has
+/// been scrolled to.
+///
+/// The default 800×600 test window is shorter than the sheet's own content, so
+/// the swatch a test has just scrolled to can still land half under the sheet's
+/// action bar — and a tap there hits the bar instead.
+void _useTallWindow(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1000, 2000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
 }

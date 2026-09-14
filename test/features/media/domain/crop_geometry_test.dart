@@ -146,4 +146,48 @@ void main() {
       expect(wide.sourceRect.size, const Size(4000, 2000));
     });
   });
+
+  group('viewport point to image pixel (colour extraction)', () {
+    test('is the inverse of the visible source rect', () {
+      final CropGeometry g = geometry().withOffset(geometry().centredOffset);
+      // The window's top-left must map to the source rect's top-left, and its
+      // bottom-right to the source rect's bottom-right.
+      final Offset topLeft = g.imagePointFor(Offset.zero);
+      expect(topLeft.dx, closeTo(g.sourceRect.left, 0.01));
+      expect(topLeft.dy, closeTo(g.sourceRect.top, 0.01));
+      final Offset bottomRight =
+          g.imagePointFor(Offset(g.windowSize.width, g.windowSize.height));
+      expect(bottomRight.dx, closeTo(g.sourceRect.right, 0.01));
+      expect(bottomRight.dy, closeTo(g.sourceRect.bottom, 0.01));
+    });
+
+    test('the centre of the window maps to the centre of the crop', () {
+      final CropGeometry g = geometry().withOffset(geometry().centredOffset);
+      final Offset centre = g.imagePointFor(
+        Offset(g.windowSize.width / 2, g.windowSize.height / 2),
+      );
+      expect(centre.dx, closeTo(g.sourceRect.center.dx, 0.01));
+      expect(centre.dy, closeTo(g.sourceRect.center.dy, 0.01));
+    });
+
+    test('zooming in makes the same tap select a nearer pixel', () {
+      final CropGeometry once = geometry().withOffset(const Offset(-150, 0));
+      final CropGeometry twice =
+          geometry(scale: 2).withOffset(const Offset(-300, 0));
+      final double atOnce = once.imagePointFor(const Offset(10, 0)).dx;
+      final double atTwice = twice.imagePointFor(const Offset(10, 0)).dx;
+      expect(atTwice, lessThan(atOnce));
+      // Halving the covered source distance per viewport pixel is the whole
+      // point of zooming for precision.
+      expect(atOnce - 1000, closeTo((atTwice - 1000) * 2, 0.01));
+    });
+
+    test('a tap outside the image is clamped, never negative', () {
+      final CropGeometry g = geometry().withOffset(Offset.zero);
+      expect(g.imagePointFor(const Offset(-500, -500)), Offset.zero);
+      final Offset far = g.imagePointFor(const Offset(99999, 99999));
+      expect(far.dx, 4000);
+      expect(far.dy, 2000);
+    });
+  });
 }

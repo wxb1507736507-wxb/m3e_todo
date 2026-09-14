@@ -12,10 +12,10 @@ abstract final class TodoModel {
   /// Bumped whenever the stored shape changes incompatibly.
   ///
   /// Version 2 adds `subtasks`, `attachments`, `accentColor` and
-  /// `backgroundImage`. All four are optional on read, so a version-1 file
-  /// loads unchanged and a version-2 file still opens in an older build — the
-  /// extra fields are simply ignored there.
-  static const int schemaVersion = 2;
+  /// `backgroundImage`; version 3 adds `textColor`. Every one of them is
+  /// optional on read, so an older file loads unchanged and a newer one still
+  /// opens in an older build — the fields it does not know are ignored.
+  static const int schemaVersion = 3;
 
   static Map<String, Object?> toJson(Todo todo) {
     return <String, Object?>{
@@ -39,6 +39,7 @@ abstract final class TodoModel {
             _attachmentJson(attachment),
         ],
       if (todo.accentColor != null) 'accentColor': todo.accentColor,
+      if (todo.textColor != null) 'textColor': todo.textColor,
       if (todo.backgroundImage != null) 'backgroundImage': todo.backgroundImage,
     };
   }
@@ -75,6 +76,7 @@ abstract final class TodoModel {
       subtasks: _readSubtasks(json),
       attachments: _readAttachments(json),
       accentColor: _readInt(json, 'accentColor'),
+      textColor: _readInt(json, 'textColor'),
       backgroundImage: _readString(json, 'backgroundImage'),
     );
   }

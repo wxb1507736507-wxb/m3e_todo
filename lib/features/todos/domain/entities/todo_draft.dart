@@ -16,6 +16,7 @@ class TodoDraft {
     this.subtasks = const <TodoSubtask>[],
     this.attachments = const <TodoAttachment>[],
     this.accentColor,
+    this.textColor,
     this.backgroundImage,
   });
 
@@ -34,6 +35,9 @@ class TodoDraft {
 
   /// ARGB32 tile colour, or `null` to follow the theme.
   final int? accentColor;
+
+  /// ARGB32 text colour, or `null` to follow the theme.
+  final int? textColor;
 
   /// Absolute path of the tile background image, or `null` for none.
   final String? backgroundImage;

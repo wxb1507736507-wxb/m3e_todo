@@ -83,7 +83,8 @@ void main() {
         dueDate: DateTime(2026, 4, 1, 23, 59),
         subtasks: const <TodoSubtask>[],
         attachments: const <TodoAttachment>[],
-        accentColor: null,
+        accentColor: 0xFF1E88E5,
+        textColor: 0xFFFFFFFF,
         backgroundImage: null,
       );
 
@@ -93,6 +94,38 @@ void main() {
       expect(edited.notes, '备注');
       expect(edited.priority, TodoPriority.high);
       expect(edited.dueDate, DateTime(2026, 4, 1));
+      // Both colours are part of the editable form state, not decoration.
+      expect(edited.accentColor, 0xFF1E88E5);
+      expect(edited.textColor, 0xFFFFFFFF);
+    });
+
+    test('clearing a colour is expressible, unlike with a nullable copyWith', () {
+      final Todo coloured = sampleTodo().edit(
+        title: '带颜色的',
+        notes: null,
+        priority: TodoPriority.normal,
+        dueDate: null,
+        subtasks: const <TodoSubtask>[],
+        attachments: const <TodoAttachment>[],
+        accentColor: 0xFF43A047,
+        textColor: 0xFFFDD835,
+        backgroundImage: null,
+      );
+      expect(coloured.accentColor, isNotNull);
+
+      final Todo cleared = coloured.edit(
+        title: coloured.title,
+        notes: null,
+        priority: TodoPriority.normal,
+        dueDate: null,
+        subtasks: const <TodoSubtask>[],
+        attachments: const <TodoAttachment>[],
+        accentColor: null,
+        textColor: null,
+        backgroundImage: null,
+      );
+      expect(cleared.accentColor, isNull);
+      expect(cleared.textColor, isNull);
     });
 
     test('keeps a completed todo completed', () {
@@ -105,6 +138,7 @@ void main() {
         subtasks: const <TodoSubtask>[],
         attachments: const <TodoAttachment>[],
         accentColor: null,
+        textColor: null,
         backgroundImage: null,
       );
       expect(edited.isCompleted, isTrue);
@@ -121,6 +155,7 @@ void main() {
           subtasks: const <TodoSubtask>[],
           attachments: const <TodoAttachment>[],
           accentColor: null,
+          textColor: null,
           backgroundImage: null,
         ),
         throwsA(isA<TodoValidationException>()),

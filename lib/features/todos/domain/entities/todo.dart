@@ -38,6 +38,7 @@ class Todo {
     this.subtasks = const <TodoSubtask>[],
     this.attachments = const <TodoAttachment>[],
     this.accentColor,
+    this.textColor,
     this.backgroundImage,
   });
 
@@ -57,6 +58,7 @@ class Todo {
     List<TodoSubtask> subtasks = const <TodoSubtask>[],
     List<TodoAttachment> attachments = const <TodoAttachment>[],
     int? accentColor,
+    int? textColor,
     String? backgroundImage,
   }) {
     final String normalizedTitle = title.trim();
@@ -73,6 +75,7 @@ class Todo {
       subtasks: normalizeSubtasks(subtasks),
       attachments: normalizeAttachments(attachments),
       accentColor: accentColor,
+      textColor: textColor,
       backgroundImage: backgroundImage,
     );
   }
@@ -107,6 +110,12 @@ class Todo {
   /// theme. Stored as an int rather than a `Color` so the domain stays free of
   /// Flutter imports.
   final int? accentColor;
+
+  /// User-chosen text colour as an ARGB32 integer, or `null` to follow the
+  /// theme's `onSurface` — which is what keeps text readable on any card, and
+  /// why "auto" exists at all: a photo or a strong colour can make one fixed
+  /// choice wrong.
+  final int? textColor;
 
   /// Absolute path of an optional background image for the tile.
   final String? backgroundImage;
@@ -203,6 +212,7 @@ class Todo {
     required List<TodoSubtask> subtasks,
     required List<TodoAttachment> attachments,
     required int? accentColor,
+    required int? textColor,
     required String? backgroundImage,
   }) {
     final String normalizedTitle = title.trim();
@@ -219,6 +229,7 @@ class Todo {
       subtasks: normalizeSubtasks(subtasks),
       attachments: normalizeAttachments(attachments),
       accentColor: accentColor,
+      textColor: textColor,
       backgroundImage: backgroundImage,
       completedAt: completedAt,
     );
@@ -243,6 +254,7 @@ class Todo {
       subtasks: subtasks,
       attachments: attachments,
       accentColor: accentColor,
+      textColor: textColor,
       backgroundImage: backgroundImage,
     );
   }
@@ -260,6 +272,7 @@ class Todo {
       subtasks: subtasks,
       attachments: attachments,
       accentColor: accentColor,
+      textColor: textColor,
       backgroundImage: backgroundImage,
     );
   }
@@ -280,6 +293,7 @@ class Todo {
         _listEquals(other.subtasks, subtasks) &&
         _listEquals(other.attachments, attachments) &&
         other.accentColor == accentColor &&
+        other.textColor == textColor &&
         other.backgroundImage == backgroundImage;
   }
 
@@ -295,6 +309,7 @@ class Todo {
         Object.hashAll(subtasks),
         Object.hashAll(attachments),
         accentColor,
+        textColor,
         backgroundImage,
       );
 

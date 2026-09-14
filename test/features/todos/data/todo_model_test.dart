@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/features/todos/data/models/todo_model.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
+import 'package:m3e_todo/features/todos/domain/entities/todo_attachment.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_priority.dart';
+import 'package:m3e_todo/features/todos/domain/entities/todo_subtask.dart';
 
 import '../../../support/sample_todo.dart';
 
@@ -37,6 +39,53 @@ void main() {
       expect(json.containsKey('notes'), isFalse);
       expect(json.containsKey('dueDate'), isFalse);
       expect(json.containsKey('completedAt'), isFalse);
+      expect(json.containsKey('textColor'), isFalse);
+    });
+
+    test('carries both colours through the file', () {
+      final Todo original = sampleTodo().edit(
+        title: '带颜色的待办',
+        notes: null,
+        priority: TodoPriority.normal,
+        dueDate: null,
+        subtasks: const <TodoSubtask>[],
+        attachments: const <TodoAttachment>[],
+        accentColor: 0xFF1E88E5,
+        textColor: 0xFFFDD835,
+        backgroundImage: null,
+      );
+
+      final Map<String, Object?> json = TodoModel.toJson(original);
+      expect(json['accentColor'], 0xFF1E88E5);
+      expect(json['textColor'], 0xFFFDD835);
+      expect(TodoModel.fromJson(json), original);
+    });
+
+    test('a file written before text colours existed still loads', () {
+      // Shape of a version-2 record: no `textColor` key at all.
+      final Map<String, Object?> version2 = <String, Object?>{
+        'id': 'old',
+        'title': '旧版本写的',
+        'createdAt': '2026-03-01T09:30:00.000',
+        'priority': 'normal',
+        'accentColor': 0xFF43A047,
+      };
+
+      final Todo restored = TodoModel.fromJson(version2)!;
+
+      expect(restored.accentColor, 0xFF43A047);
+      expect(restored.textColor, isNull);
+    });
+
+    test('a non-integer colour is ignored rather than crashing the record', () {
+      final Map<String, Object?> broken = <String, Object?>{
+        'id': 'a',
+        'title': '标题',
+        'createdAt': '2026-03-01T09:30:00.000',
+        'textColor': 'red',
+      };
+
+      expect(TodoModel.fromJson(broken)?.textColor, isNull);
     });
   });
 

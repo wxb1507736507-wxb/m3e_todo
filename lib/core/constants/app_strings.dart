@@ -134,10 +134,32 @@ abstract final class AppStrings {
 
   static const String accentColorLabel = '色块颜色';
   static const String accentColorNone = '跟随主题';
+  static const String textColorLabel = '字体颜色';
+  static const String textColorAuto = '自动';
+  static const String colorCustom = '自定义';
+  static const String colorPick = '取色';
+  static const String colorCommon = '常用颜色';
+  static const String colorSoft = '浅色';
+  static const String colorContrastWarning = '与色块颜色太接近，文字可能看不清';
   static const String backgroundImageLabel = '背景图片';
   static const String pickBackgroundImage = '选择图片';
   static const String clearBackgroundImage = '移除背景图';
   static const String cropBackgroundImage = '裁剪';
+
+  // --- Colour picker ---------------------------------------------------------------
+
+  static const String colorPickerTitle = '调色板';
+  static const String colorHue = '色相';
+  static const String colorSaturation = '饱和度';
+  static const String colorBrightness = '明度';
+  static const String colorHexLabel = '十六进制颜色值';
+  static const String colorHexInvalid = '不是有效的颜色值';
+
+  // --- Colour extraction --------------------------------------------------------------
+
+  static const String colorExtractTitle = '从图片取色';
+  static const String colorExtractHint = '点按图片取色；双指缩放可以更精确地对准';
+  static const String colorExtractFailed = '无法读取这张图片';
 
   // --- Cropper -------------------------------------------------------------------
 

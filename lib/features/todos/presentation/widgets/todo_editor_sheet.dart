@@ -6,8 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/platform/app_platform.dart';
+import '../../../../core/theme/app_palette.dart';
 import '../../../../core/theme/app_shapes.dart';
 import '../../../../core/utils/app_date_formatter.dart';
+import '../../../../core/utils/color_utils.dart';
+import '../../../media/presentation/color_extract_page.dart';
 import '../../../media/presentation/image_crop_page.dart';
 import '../../domain/entities/todo.dart';
 import '../../domain/entities/todo_attachment.dart';
@@ -17,6 +20,7 @@ import '../../domain/entities/todo_subtask.dart';
 import '../controllers/todo_list_controller.dart';
 import '../providers/todo_providers.dart';
 import 'attachment_actions.dart';
+import 'color_field.dart';
 
 /// Opens the create/edit sheet and completes when it closes.
 ///
@@ -32,19 +36,6 @@ Future<void> showTodoEditor(BuildContext context, {Todo? existing}) {
     builder: (BuildContext context) => TodoEditorSheet(existing: existing),
   );
 }
-
-/// Preset tile colours, as ARGB32 ints (the domain stores raw ints so it stays
-/// Flutter-free). The first entry is "follow the theme" and maps to `null`.
-const List<(int?, String)> kAccentChoices = <(int?, String)>[
-  (null, AppStrings.accentColorNone),
-  (0xFFEF5350, '红'),
-  (0xFFFF7043, '橙'),
-  (0xFFFFCA28, '黄'),
-  (0xFF66BB6A, '绿'),
-  (0xFF26C6DA, '青'),
-  (0xFF42A5F5, '蓝'),
-  (0xFFAB47BC, '紫'),
-];
 
 /// One editable subtask row inside the form.
 class _SubtaskRow {
@@ -83,6 +74,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
   List<_SubtaskRow> _subtaskRows = <_SubtaskRow>[];
   List<TodoAttachment> _attachments = <TodoAttachment>[];
   int? _accentColor;
+  int? _textColor;
   String? _backgroundImage;
   bool _saving = false;
 
@@ -126,6 +118,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
     ];
     _attachments = List<TodoAttachment>.of(existing?.attachments ?? const <TodoAttachment>[]);
     _accentColor = existing?.accentColor;
+    _textColor = existing?.textColor;
     _backgroundImage = existing?.backgroundImage;
   }
 
@@ -309,6 +302,42 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
 
   void _removeBackgroundImage() => _setBackgroundImage(null);
 
+  /// Samples a colour from a picture for either colour field.
+  ///
+  /// Prefers the todo's own background image — it is the picture the card will
+  /// actually show, so picking a colour out of it is the obvious move. With no
+  /// background image the user picks one just for sampling, and that copy is
+  /// deleted again afterwards: nothing references it, and leaving it behind is
+  /// exactly the leak the attachment flows had to be fixed for.
+  Future<int?> _sampleColor() async {
+    final String? background = _backgroundImage;
+    if (background != null) {
+      return extractColorFromImage(context, imagePath: background);
+    }
+    final PickedAttachment? picked = await AppPlatform.pickAttachment('image');
+    if (picked == null || !mounted) {
+      return null;
+    }
+    final int? sampled =
+        await extractColorFromImage(context, imagePath: picked.path);
+    unawaited(File(picked.path).delete().catchError((Object _) => File(picked.path)));
+    return sampled;
+  }
+
+  /// Warns when the chosen text colour cannot be read on the chosen card.
+  ///
+  /// Only for an explicit text colour on an explicit card colour: with either
+  /// side on "auto" the theme already guarantees contrast, and with a
+  /// background image the scrim does.
+  String? get _contrastWarning {
+    final int? text = _textColor;
+    final int? card = _accentColor;
+    if (text == null || card == null || _backgroundImage != null) {
+      return null;
+    }
+    return isHardToRead(text, card) ? AppStrings.colorContrastWarning : null;
+  }
+
   // --- Submit ----------------------------------------------------------------------
 
   Future<void> _submit() async {
@@ -338,6 +367,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
       ],
       attachments: _attachments,
       accentColor: _accentColor,
+      textColor: _textColor,
       backgroundImage: _backgroundImage,
     );
 
@@ -644,20 +674,23 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(AppStrings.accentColorLabel, style: text.labelLarge),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: <Widget>[
-            for (final (int? argb, String label) in kAccentChoices)
-              _AccentSwatch(
-                argb: argb,
-                label: label,
-                selected: _accentColor == argb,
-                onTap: () => setState(() => _accentColor = argb),
-              ),
-          ],
+        ColorField(
+          label: AppStrings.accentColorLabel,
+          value: _accentColor,
+          noneLabel: AppStrings.accentColorNone,
+          presets: kCommonColors,
+          onChanged: (int? value) => setState(() => _accentColor = value),
+          onSample: _sampleColor,
+        ),
+        const SizedBox(height: 20),
+        ColorField(
+          label: AppStrings.textColorLabel,
+          value: _textColor,
+          noneLabel: AppStrings.textColorAuto,
+          presets: kSoftColors,
+          onChanged: (int? value) => setState(() => _textColor = value),
+          onSample: _sampleColor,
+          warning: _contrastWarning,
         ),
         const SizedBox(height: 16),
         Row(
@@ -750,49 +783,3 @@ class _AttachmentChip extends StatelessWidget {
   }
 }
 
-class _AccentSwatch extends StatelessWidget {
-  const _AccentSwatch({
-    required this.argb,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final int? argb;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final Color fill = argb == null ? colors.surfaceContainerHighest : Color(argb!);
-
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      child: Tooltip(
-        message: label,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: fill,
-              shape: BoxShape.circle,
-              border: selected
-                  ? Border.all(color: colors.onSurface, width: 2.5)
-                  : Border.all(color: colors.outlineVariant),
-            ),
-            child: argb == null
-                ? Icon(Icons.auto_awesome, size: 18, color: colors.onSurfaceVariant)
-                : null,
-          ),
-        ),
-      ),
-    );
-  }
-}

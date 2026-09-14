@@ -11,6 +11,7 @@ Todo sampleTodo({
   DateTime? dueDate,
   DateTime? createdAt,
   DateTime? completedAt,
+  String? backgroundImage,
 }) {
   return Todo(
     id: id,
@@ -20,6 +21,7 @@ Todo sampleTodo({
     priority: priority,
     dueDate: dueDate,
     completedAt: completedAt,
+    backgroundImage: backgroundImage,
   );
 }
 

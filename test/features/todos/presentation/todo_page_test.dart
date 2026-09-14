@@ -177,6 +177,44 @@ void main() {
     expect(find.text(AppStrings.colorContrastWarning), findsNothing);
   });
 
+  testWidgets('the editor fits its background-image buttons on a phone', (
+    WidgetTester tester,
+  ) async {
+    // A phone window rather than the 800×600 the test binding defaults to: this
+    // row only runs out of room on a narrow screen, and running out of room
+    // paints Flutter's striped overflow banner over the last button instead of
+    // failing loudly — which is exactly what was reported from the device.
+    tester.view.physicalSize = const Size(720, 1400);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(<Todo>[
+          // A file that is not there: the layout is the same either way, and
+          // the preview falls back to its placeholder.
+          sampleTodo(id: 'a', backgroundImage: '/no/such/picture.png'),
+        ]),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('写周报'));
+    await tester.pumpAndSettle();
+
+    // A picture in the editor brings two more buttons with it, and three do not
+    // fit beside the label. Every one of them has to stay on screen.
+    for (final String label in <String>[
+      AppStrings.pickBackgroundImage,
+      AppStrings.cropBackgroundImage,
+      AppStrings.clearBackgroundImage,
+    ]) {
+      final Rect rect = tester.getRect(find.text(label));
+      expect(rect.left, greaterThanOrEqualTo(0), reason: label);
+      expect(rect.right, lessThanOrEqualTo(360), reason: label);
+    }
+  });
+
   testWidgets('deleting a todo removes it from the list and offers undo', (
     WidgetTester tester,
   ) async {

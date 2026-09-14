@@ -693,30 +693,33 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
           warning: _contrastWarning,
         ),
         const SizedBox(height: 16),
-        Row(
+        // The label gets its own line and the actions live in a `Wrap`: with a
+        // picture set there are three buttons here, and a phone is not wide
+        // enough for them beside the label — as a `Row` they overflowed, and
+        // Flutter painted its striped overflow banner over the last button.
+        Text(AppStrings.backgroundImageLabel, style: text.labelLarge),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: <Widget>[
-            Expanded(
-              child: Text(AppStrings.backgroundImageLabel, style: text.labelLarge),
+            OutlinedButton.icon(
+              onPressed: () => unawaited(_pickBackgroundImage()),
+              icon: const Icon(Icons.wallpaper_outlined),
+              label: const Text(AppStrings.pickBackgroundImage),
             ),
-            if (_backgroundImage != null)
-              TextButton.icon(
-                onPressed: _removeBackgroundImage,
-                icon: const Icon(Icons.delete_outline),
-                label: const Text(AppStrings.clearBackgroundImage),
-              ),
-            if (_backgroundImage != null) const SizedBox(width: 8),
             if (_backgroundImage != null)
               OutlinedButton.icon(
                 onPressed: () => unawaited(_cropCurrentBackground()),
                 icon: const Icon(Icons.crop),
                 label: const Text(AppStrings.cropBackgroundImage),
               ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: () => unawaited(_pickBackgroundImage()),
-              icon: const Icon(Icons.wallpaper_outlined),
-              label: const Text(AppStrings.pickBackgroundImage),
-            ),
+            if (_backgroundImage != null)
+              TextButton.icon(
+                onPressed: _removeBackgroundImage,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text(AppStrings.clearBackgroundImage),
+              ),
           ],
         ),
         if (_backgroundImage != null) ...<Widget>[

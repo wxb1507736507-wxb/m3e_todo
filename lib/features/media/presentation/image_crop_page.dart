@@ -572,42 +572,53 @@ class _ImageCropPageState extends State<ImageCropPage> {
     return Column(
       children: <Widget>[
         Expanded(
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints box) {
-              final CropView view = _viewFor(
-                Size(image.width.toDouble(), image.height.toDouble()),
-                Size(box.maxWidth, box.maxHeight),
-              );
-              // Built during layout, so the first frame of the picture already
-              // knows where it sits and how far it is zoomed.
-              final Rect frame = _frame ?? (Offset.zero & _imageSize);
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onScaleStart: _onScaleStart,
-                onScaleUpdate: _onScaleUpdate,
-                onScaleEnd: _onScaleEnd,
-                child: ClipRect(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: <Widget>[
-                      Positioned.fromRect(
-                        rect: view.displayRect,
-                        // `fill` on purpose: the box is already the exact size
-                        // the view asked for, so fitting must not scale again.
-                        child: RawImage(image: image, fit: BoxFit.fill),
-                      ),
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _CropOverlayPainter(
-                            frame: view.viewportRect(frame),
+          // Room at the sides for the fingers to land in. A gesture-navigation
+          // phone claims swipes that start in a strip along each screen edge —
+          // measured at about 28 logical pixels on the device this was written
+          // on — and sends them to "back" instead of to the app. With the
+          // picture flush against the edge, the side grips of a full-width frame
+          // sit inside that strip: reaching for one closes the cropper and
+          // throws away the work. 32 leaves the grips reachable, and costs the
+          // picture a tenth of its width.
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints box) {
+                final CropView view = _viewFor(
+                  Size(image.width.toDouble(), image.height.toDouble()),
+                  Size(box.maxWidth, box.maxHeight),
+                );
+                // Built during layout, so the first frame of the picture already
+                // knows where it sits and how far it is zoomed.
+                final Rect frame = _frame ?? (Offset.zero & _imageSize);
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onScaleStart: _onScaleStart,
+                  onScaleUpdate: _onScaleUpdate,
+                  onScaleEnd: _onScaleEnd,
+                  child: ClipRect(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: <Widget>[
+                        Positioned.fromRect(
+                          rect: view.displayRect,
+                          // `fill` on purpose: the box is already the exact size
+                          // the view asked for, so fitting must not scale again.
+                          child: RawImage(image: image, fit: BoxFit.fill),
+                        ),
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _CropOverlayPainter(
+                              frame: view.viewportRect(frame),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
         _buildSizeLine(text, colors),

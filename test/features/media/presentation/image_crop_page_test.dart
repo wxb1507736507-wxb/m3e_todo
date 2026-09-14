@@ -76,7 +76,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(_reportedSize(tester), afterResize);
+    // A pixel of slack: the frame is rounded outwards to whole source pixels on
+    // the way out, and moving it over fractional coordinates can tip that
+    // rounding either way without the frame itself changing size.
+    final Size moved = _reportedSize(tester);
+    expect(moved.width, closeTo(afterResize.width, 2));
+    expect(moved.height, closeTo(afterResize.height, 2));
   });
 
   testWidgets('dragging outside the frame draws a new one', (
@@ -104,7 +109,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(_reportedSize(tester), const Size(80, 40));
+    // A pixel of slack: the drag lands on fractions of a source pixel, and the
+    // kept area is rounded outwards to whole ones.
+    final Size drawn = _reportedSize(tester);
+    expect(drawn.width, closeTo(80, 2));
+    expect(drawn.height, closeTo(40, 2));
   });
 
   testWidgets('a drag that barely moved leaves the frame alone', (

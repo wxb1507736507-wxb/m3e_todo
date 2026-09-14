@@ -1,0 +1,21 @@
+feat: give every todo its own reminder, ringing or quiet, with its own ringtone
+
+The reminder was app-wide: one switch for "ring or just a message" and one
+ringtone, applied to every dated todo. Urgency is per task — the deadline that
+matters should ring and the shopping list should not — so both the mode and the
+sound now live on the todo. "Follow the app setting" is the third state and the
+default, so a todo that was never given a choice keeps tracking the default and
+older files load unchanged (todos.json v4).
+
+Android gives a notification channel its sound and forbids changing it
+afterwards, which is why the old scheme minted a versioned channel per ringtone
+change and deleted the previous one: six channels of debris on the test device,
+and the user's own per-channel settings thrown away each time. The native side
+now keeps one channel per distinct sound, created on demand, named after the
+ringtone so it is identifiable in Android's settings, and reused by every todo
+that picks it; the legacy channels are deleted on first launch. Reminders also
+no longer assume Android 8+ — before channels exist the sound goes on the
+notification itself.
+
+The settings sheet keeps the same two controls, now labelled as the default, and
+says so.

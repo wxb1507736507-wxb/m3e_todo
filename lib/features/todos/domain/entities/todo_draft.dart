@@ -1,5 +1,6 @@
 import 'todo_attachment.dart';
 import 'todo_priority.dart';
+import 'todo_reminder.dart';
 import 'todo_subtask.dart';
 
 /// Raw, not-yet-validated input coming from the editor form.
@@ -18,6 +19,8 @@ class TodoDraft {
     this.accentColor,
     this.textColor,
     this.backgroundImage,
+    this.reminder = TodoReminder.followApp,
+    this.ringtoneUri,
   });
 
   final String title;
@@ -41,6 +44,13 @@ class TodoDraft {
 
   /// Absolute path of the tile background image, or `null` for none.
   final String? backgroundImage;
+
+  /// Whether the reminder rings or stays quiet. Defaults to following the app's
+  /// reminder setting.
+  final TodoReminder reminder;
+
+  /// This todo's own ringtone URI, or `null` to use the app-wide one.
+  final String? ringtoneUri;
 
   @override
   String toString() => 'TodoDraft("$title", $priority, due: $dueDate, '

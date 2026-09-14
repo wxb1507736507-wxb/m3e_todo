@@ -41,8 +41,16 @@ class DueAlarmReceiver : BroadcastReceiver() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_BODY = "body"
         const val EXTRA_RING = "ring"
-        const val RING_CHANNEL_PREFIX = "due_ring_v"
+        const val EXTRA_RINGTONE = "ringtoneUri"
+
+        /** The quiet channel, shared by every todo that asks for "just a message". */
         const val SILENT_CHANNEL_ID = "due_silent"
+
+        /** Ringing with the system's own notification sound. */
+        const val DEFAULT_RING_CHANNEL_ID = "due_ring_default"
+
+        /** Prefix for the channel of one particular ringtone; see [PlatformHost]. */
+        const val RING_CHANNEL_PREFIX = "due_ring_"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -50,6 +58,7 @@ class DueAlarmReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra(EXTRA_TITLE) ?: return
         val body = intent.getStringExtra(EXTRA_BODY) ?: ""
         val ring = intent.getBooleanExtra(EXTRA_RING, false)
+        val ringtone = intent.getStringExtra(EXTRA_RINGTONE)
 
         // Android 13+ gates notifications behind a runtime permission; honour it
         // rather than crashing or posting a notification the user has banned.
@@ -60,7 +69,20 @@ class DueAlarmReceiver : BroadcastReceiver() {
         }
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val builder = Notification.Builder(context, channelIdFor(context, ring))
+        @Suppress("DEPRECATION")
+        val builder =
+            if (PlatformHost.channelsSupported()) {
+                Notification.Builder(context, PlatformHost.channelForReminder(context, ring, ringtone))
+            } else {
+                // Before Android 8 there are no channels: the sound belongs to
+                // the notification itself, so it is set here instead.
+                Notification.Builder(context)
+                    .setPriority(
+                        if (ring) Notification.PRIORITY_HIGH else Notification.PRIORITY_DEFAULT,
+                    )
+                    .setSound(if (ring) PlatformHost.soundUri(ringtone) else null)
+            }
+        builder
             // A monochrome glyph, not the launcher icon: the status bar masks a
             // small icon down to a single colour, so a colour bitmap would show
             // up as a featureless blob.
@@ -85,18 +107,6 @@ class DueAlarmReceiver : BroadcastReceiver() {
         // The alarm has fired; drop it from the persisted schedule so a reboot
         // does not resurrect it.
         AlarmStore.remove(context, id)
-    }
-
-    // The context is passed in rather than taken from the inherited
-    // [BroadcastReceiver.getContext] method: it is a plain Java method, so bare
-    // `context` does not resolve to a value inside this helper.
-    private fun channelIdFor(context: Context, ring: Boolean): String {
-        if (!ring) return SILENT_CHANNEL_ID
-        // The ring channel's id carries a version number because Android does
-        // not allow changing a channel's sound after creation; picking a new
-        // ringtone therefore mints a fresh channel (see PlatformHost).
-        val version = PlatformHost.prefs(context).getInt("ringChannelVersion", 1)
-        return "$RING_CHANNEL_PREFIX$version"
     }
 }
 
@@ -126,6 +136,7 @@ internal object AlarmStore {
         body: String,
         triggerAtMillis: Long,
         ring: Boolean,
+        ringtoneUri: String?,
     ) {
         val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, DueAlarmReceiver::class.java)
@@ -133,6 +144,7 @@ internal object AlarmStore {
             .putExtra(DueAlarmReceiver.EXTRA_TITLE, title)
             .putExtra(DueAlarmReceiver.EXTRA_BODY, body)
             .putExtra(DueAlarmReceiver.EXTRA_RING, ring)
+            .putExtra(DueAlarmReceiver.EXTRA_RINGTONE, ringtoneUri)
         val pending = PendingIntent.getBroadcast(
             context,
             id,
@@ -168,6 +180,7 @@ internal object AlarmStore {
                 .put("body", body)
                 .put("triggerAt", triggerAtMillis)
                 .put("ring", ring)
+                .put("ringtoneUri", ringtoneUri)
                 .toString(),
         ).apply()
     }
@@ -208,6 +221,7 @@ internal object AlarmStore {
                 stored.optString("body"),
                 triggerAt,
                 stored.optBoolean("ring", false),
+                if (stored.isNull("ringtoneUri")) null else stored.optString("ringtoneUri"),
             )
         }
         editor.apply()
@@ -219,82 +233,121 @@ internal object AlarmStore {
  * owns the notification channels.
  */
 internal object PlatformHost {
-    private const val PREFS = "platform_host"
-    private const val RING_CHANNEL_VERSION_KEY = "ringChannelVersion"
-    private const val RING_CHANNEL_SOUND_KEY = "ringChannelSound"
+    /** Notification channels arrived in Android 8; before that, none of this
+     *  exists and setting one up would be a crash on a supported device. */
+    fun channelsSupported(): Boolean = Build.VERSION.SDK_INT >= 26
 
-    fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    /** The sound an alarm should make: its own ringtone, or the system default. */
+    fun soundUri(ringtoneUri: String?): Uri =
+        if (ringtoneUri.isNullOrBlank()) {
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        } else {
+            Uri.parse(ringtoneUri)
+        }
 
     private fun manager(context: Context) =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+    private fun soundAttributes() = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build()
+
     /**
-     * Creates both channels from the *stored* ringtone.
+     * Creates the two channels every reminder starts from: the quiet one, and
+     * ringing with the system's own notification sound.
      *
-     * Reading the stored sound rather than taking one as an argument is what
-     * makes startup safe to repeat: called with a fresh default every launch, the
-     * ring channel's sound would look "changed" each time, and since Android
-     * forbids editing a channel's sound the only way to apply it is to delete the
-     * channel and mint a new one — which throws away the user's own per-channel
-     * settings (importance, vibration, lockscreen visibility). Called from
-     * [configureFlutterEngine], that would reset those preferences on every
-     * launch.
+     * Called on every launch, and safe to repeat because a channel that already
+     * exists is left alone — Android fixes a channel's sound at creation, and
+     * recreating one would throw away the user's own per-channel settings
+     * (importance, vibration, lockscreen visibility).
      */
     fun ensureChannels(context: Context) {
-        val prefs = prefs(context)
-
-        val silent = NotificationChannel(
+        if (!channelsSupported()) return
+        ensureChannel(
+            context,
             DueAlarmReceiver.SILENT_CHANNEL_ID,
             "待办提醒（仅消息）",
             NotificationManager.IMPORTANCE_DEFAULT,
-        ).apply {
-            setSound(null, null)
-            enableVibration(false)
-        }
-        manager(context).createNotificationChannel(silent)
-
-        val sound = prefs.getString(RING_CHANNEL_SOUND_KEY, null)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION).toString()
-        val ringChannel = NotificationChannel(
-            "${DueAlarmReceiver.RING_CHANNEL_PREFIX}${prefs.getInt(RING_CHANNEL_VERSION_KEY, 1)}",
+            sound = null,
+        )
+        ensureChannel(
+            context,
+            DueAlarmReceiver.DEFAULT_RING_CHANNEL_ID,
             "待办提醒（响铃）",
             NotificationManager.IMPORTANCE_HIGH,
-        ).apply {
-            setSound(
-                Uri.parse(sound),
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
-            )
-            enableVibration(true)
-        }
-        manager(context).createNotificationChannel(ringChannel)
+            sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+        )
+        // Channels from the version-numbered scheme this replaced: one was
+        // minted per ringtone change, so a long-lived install has collected the
+        // debris. Clear it out now that a channel is created once per sound.
+        val manager = manager(context)
+        manager.notificationChannels
+            .filter { it.id.startsWith("due_ring_v") }
+            .forEach { manager.deleteNotificationChannel(it.id) }
     }
 
     /**
-     * Points the ring channel at [uri], or back at the system default when it is
-     * null.
+     * The channel a reminder should be posted through, creating it if needed.
      *
-     * A channel's sound is immutable once created, so a *changed* sound is
-     * applied by bumping the version and letting [ensureChannels] create the new
-     * id. An unchanged sound is a no-op, which is what keeps a launch (where Dart
-     * restores the saved choice) from churning channels.
+     * One channel per *sound*, because that is the only lever Android offers:
+     * a channel owns its sound and forbids changing it afterwards, so a ringtone
+     * chosen for a single todo cannot be applied to a shared channel. Channels
+     * are therefore created on demand — one for the system default, one per
+     * distinct ringtone the user picks — and reused by every todo that chooses
+     * the same sound. The channel's name carries the ringtone's own title so the
+     * list in Android's settings stays readable, and so a user who wants to mute
+     * one particular tone can find it.
      */
-    fun setRingtone(context: Context, uri: Uri?) {
-        val sound = (uri ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-            .toString()
-        val prefs = prefs(context)
-        if (prefs.getString(RING_CHANNEL_SOUND_KEY, null) != sound) {
-            val oldVersion = prefs.getInt(RING_CHANNEL_VERSION_KEY, 1)
-            manager(context)
-                .deleteNotificationChannel("${DueAlarmReceiver.RING_CHANNEL_PREFIX}$oldVersion")
-            prefs.edit()
-                .putInt(RING_CHANNEL_VERSION_KEY, oldVersion + 1)
-                .putString(RING_CHANNEL_SOUND_KEY, sound)
-                .apply()
+    fun channelForReminder(context: Context, ring: Boolean, ringtoneUri: String?): String {
+        if (!ring || !channelsSupported()) return DueAlarmReceiver.SILENT_CHANNEL_ID
+        if (ringtoneUri.isNullOrBlank()) {
+            ensureChannel(
+                context,
+                DueAlarmReceiver.DEFAULT_RING_CHANNEL_ID,
+                "待办提醒（响铃）",
+                NotificationManager.IMPORTANCE_HIGH,
+                sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+            )
+            return DueAlarmReceiver.DEFAULT_RING_CHANNEL_ID
         }
-        ensureChannels(context)
+        val uri = Uri.parse(ringtoneUri)
+        val id = DueAlarmReceiver.RING_CHANNEL_PREFIX + ringtoneUri.hashCode().toUInt().toString(16)
+        ensureChannel(
+            context,
+            id,
+            "待办提醒（" + ringtoneTitle(context, uri) + "）",
+            NotificationManager.IMPORTANCE_HIGH,
+            sound = uri,
+        )
+        return id
+    }
+
+    /** The ringtone's own name, or a plain fallback when the system has none. */
+    private fun ringtoneTitle(context: Context, uri: Uri): String =
+        runCatching { RingtoneManager.getRingtone(context, uri)?.getTitle(context) }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: "自定义铃声"
+
+    private fun ensureChannel(
+        context: Context,
+        id: String,
+        name: String,
+        importance: Int,
+        sound: Uri?,
+    ) {
+        val manager = manager(context)
+        if (manager.getNotificationChannel(id) != null) return
+        val channel = NotificationChannel(id, name, importance)
+        if (sound == null) {
+            channel.setSound(null, null)
+            channel.enableVibration(false)
+        } else {
+            channel.setSound(sound, soundAttributes())
+            channel.enableVibration(true)
+        }
+        manager.createNotificationChannel(channel)
     }
 }
 
@@ -397,12 +450,6 @@ class MainActivity : FlutterActivity() {
                     requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO_PERMISSION)
                 }
             }
-            "setRingtone" -> {
-                // A null/blank argument restores the system default sound.
-                val uri = (arguments as? String)?.takeIf { it.isNotBlank() }
-                PlatformHost.setRingtone(this, uri?.let(Uri::parse))
-                result.success(null)
-            }
             "systemRingtoneUri" -> result.success(
                 RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION).toString(),
             )
@@ -415,6 +462,7 @@ class MainActivity : FlutterActivity() {
                     args["body"] as? String ?: "",
                     (args["triggerAtMillis"] as Number).toLong(),
                     args["ring"] as Boolean,
+                    args["ringtoneUri"] as? String,
                 )
                 result.success(null)
             }
@@ -436,6 +484,7 @@ class MainActivity : FlutterActivity() {
                         args["body"] as? String ?: "",
                         (args["triggerAtMillis"] as Number).toLong(),
                         args["ring"] as Boolean,
+                        args["ringtoneUri"] as? String,
                     )
                 }
                 result.success(null)

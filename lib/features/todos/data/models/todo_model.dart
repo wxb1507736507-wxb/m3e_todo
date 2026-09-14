@@ -1,6 +1,7 @@
 import '../../domain/entities/todo.dart';
 import '../../domain/entities/todo_attachment.dart';
 import '../../domain/entities/todo_priority.dart';
+import '../../domain/entities/todo_reminder.dart';
 import '../../domain/entities/todo_subtask.dart';
 
 /// Translates between [Todo] and the JSON shape written to disk.
@@ -12,10 +13,11 @@ abstract final class TodoModel {
   /// Bumped whenever the stored shape changes incompatibly.
   ///
   /// Version 2 adds `subtasks`, `attachments`, `accentColor` and
-  /// `backgroundImage`; version 3 adds `textColor`. Every one of them is
-  /// optional on read, so an older file loads unchanged and a newer one still
-  /// opens in an older build — the fields it does not know are ignored.
-  static const int schemaVersion = 3;
+  /// `backgroundImage`; version 3 adds `textColor`; version 4 adds the per-todo
+  /// `reminder` and `ringtoneUri`. Every one of them is optional on read, so an
+  /// older file loads unchanged and a newer one still opens in an older build —
+  /// the fields it does not know are ignored.
+  static const int schemaVersion = 4;
 
   static Map<String, Object?> toJson(Todo todo) {
     return <String, Object?>{
@@ -41,6 +43,11 @@ abstract final class TodoModel {
       if (todo.accentColor != null) 'accentColor': todo.accentColor,
       if (todo.textColor != null) 'textColor': todo.textColor,
       if (todo.backgroundImage != null) 'backgroundImage': todo.backgroundImage,
+      // "Follow the app setting" is the absence of a choice, so it is left out
+      // rather than written down.
+      if (todo.reminder != TodoReminder.followApp)
+        'reminder': todo.reminder.name,
+      if (todo.ringtoneUri != null) 'ringtoneUri': todo.ringtoneUri,
     };
   }
 
@@ -78,6 +85,8 @@ abstract final class TodoModel {
       accentColor: _readInt(json, 'accentColor'),
       textColor: _readInt(json, 'textColor'),
       backgroundImage: _readString(json, 'backgroundImage'),
+      reminder: _readReminder(json),
+      ringtoneUri: _readString(json, 'ringtoneUri'),
     );
   }
 
@@ -160,6 +169,19 @@ abstract final class TodoModel {
       }
     }
     return TodoAttachmentType.document;
+  }
+
+  /// Unknown or missing reminder names fall back to [TodoReminder.followApp]:
+  /// a value written by a newer version must not cost the user the record, and
+  /// "follow the app setting" is the harmless reading of one we cannot parse.
+  static TodoReminder _readReminder(Map<String, Object?> json) {
+    final String? raw = _readString(json, 'reminder');
+    for (final TodoReminder reminder in TodoReminder.values) {
+      if (reminder.name == raw) {
+        return reminder;
+      }
+    }
+    return TodoReminder.followApp;
   }
 
   static String? _readString(Map<String, Object?> json, String key) {

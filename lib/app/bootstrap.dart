@@ -1,10 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/diagnostics/frame_log.dart';
-import '../core/platform/app_platform.dart';
 import '../core/storage/document_store.dart';
 import '../core/storage/document_store_factory.dart';
 import '../core/storage/storage_providers.dart';
@@ -47,10 +44,6 @@ Future<void> bootstrap() async {
   final AppSettings settings = await SettingsRepository(
     storeFactory(settingsFileName),
   ).load();
-
-  // Restore the user's ringtone choice into the native notification channel
-  // before any reminder can fire. Android-only; a no-op everywhere else.
-  unawaited(AppPlatform.setRingtone(settings.ringtoneUri));
 
   runApp(
     ProviderScope(

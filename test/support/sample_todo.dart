@@ -1,5 +1,6 @@
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_priority.dart';
+import 'package:m3e_todo/features/todos/domain/entities/todo_reminder.dart';
 
 /// Builds a [Todo] with sensible defaults so a test only states the fields it
 /// actually cares about.
@@ -12,6 +13,8 @@ Todo sampleTodo({
   DateTime? createdAt,
   DateTime? completedAt,
   String? backgroundImage,
+  TodoReminder reminder = TodoReminder.followApp,
+  String? ringtoneUri,
 }) {
   return Todo(
     id: id,
@@ -22,6 +25,8 @@ Todo sampleTodo({
     dueDate: dueDate,
     completedAt: completedAt,
     backgroundImage: backgroundImage,
+    reminder: reminder,
+    ringtoneUri: ringtoneUri,
   );
 }
 

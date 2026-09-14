@@ -25,6 +25,8 @@ final class UpdateTodo extends TodoMutation {
               accentColor: draft.accentColor,
               textColor: draft.textColor,
               backgroundImage: draft.backgroundImage,
+              reminder: draft.reminder,
+              ringtoneUri: draft.ringtoneUri,
             )
           else
             todo,

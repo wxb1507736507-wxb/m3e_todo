@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/core/constants/app_strings.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
+import 'package:m3e_todo/features/todos/domain/entities/todo_reminder.dart';
 import 'package:m3e_todo/features/todos/presentation/widgets/todo_editor_sheet.dart';
 
 import '../../../support/fake_todo_repository.dart';
@@ -213,6 +214,37 @@ void main() {
       expect(rect.left, greaterThanOrEqualTo(0), reason: label);
       expect(rect.right, lessThanOrEqualTo(360), reason: label);
     }
+  });
+
+  testWidgets('the editor stores a reminder choice made for one todo', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTodoRepository repository = FakeTodoRepository(<Todo>[
+      // A due date is what brings the reminder controls into the editor.
+      sampleTodo(id: 'a', dueDate: DateTime(2026, 4, 1)),
+    ]);
+
+    await tester.pumpWidget(buildTestApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('写周报'));
+    await tester.pumpAndSettle();
+
+    // Quiet for this one, whatever the app-wide default happens to be.
+    final Finder quiet = find.text(AppStrings.reminderModeSilent);
+    await tester.dragUntilVisible(
+      quiet,
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(quiet);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(AppStrings.save));
+    await tester.pumpAndSettle();
+
+    expect((await repository.loadAll()).single.reminder, TodoReminder.silent);
   });
 
   testWidgets('deleting a todo removes it from the list and offers undo', (

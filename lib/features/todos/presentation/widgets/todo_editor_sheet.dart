@@ -12,10 +12,13 @@ import '../../../../core/utils/app_date_formatter.dart';
 import '../../../../core/utils/color_utils.dart';
 import '../../../media/presentation/color_extract_page.dart';
 import '../../../media/presentation/image_crop_page.dart';
+import '../../../settings/domain/app_settings.dart';
+import '../../../settings/presentation/settings_controller.dart';
 import '../../domain/entities/todo.dart';
 import '../../domain/entities/todo_attachment.dart';
 import '../../domain/entities/todo_draft.dart';
 import '../../domain/entities/todo_priority.dart';
+import '../../domain/entities/todo_reminder.dart';
 import '../../domain/entities/todo_subtask.dart';
 import '../controllers/todo_list_controller.dart';
 import '../providers/todo_providers.dart';
@@ -71,6 +74,8 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
   late final TextEditingController _notesController;
   late TodoPriority _priority;
   DateTime? _dueDate;
+  TodoReminder _reminder = TodoReminder.followApp;
+  String? _ringtoneUri;
   List<_SubtaskRow> _subtaskRows = <_SubtaskRow>[];
   List<TodoAttachment> _attachments = <TodoAttachment>[];
   int? _accentColor;
@@ -108,6 +113,8 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
     _notesController = TextEditingController(text: existing?.notes ?? '');
     _priority = existing?.priority ?? TodoPriority.normal;
     _dueDate = existing?.dueDate;
+    _reminder = existing?.reminder ?? TodoReminder.followApp;
+    _ringtoneUri = existing?.ringtoneUri;
     _subtaskRows = <_SubtaskRow>[
       for (final TodoSubtask subtask in existing?.subtasks ?? const <TodoSubtask>[])
         _SubtaskRow(
@@ -369,6 +376,8 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
       accentColor: _accentColor,
       textColor: _textColor,
       backgroundImage: _backgroundImage,
+      reminder: _reminder,
+      ringtoneUri: _ringtoneUri,
     );
 
     try {
@@ -513,6 +522,8 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
                         ],
                       ),
                       const SizedBox(height: 24),
+                      _buildReminderSection(text, colors),
+                      const SizedBox(height: 24),
                       _buildSubtasksSection(text, colors),
                       const SizedBox(height: 24),
                       _buildAttachmentsSection(text, colors),
@@ -553,6 +564,97 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
   }
 
   // --- Sections ----------------------------------------------------------------------
+
+  /// The per-todo reminder choice: whether this one rings, and with what sound.
+  ///
+  /// Shown only once a due date exists, since a reminder without a date has
+  /// nothing to remind about. The app-wide settings act as the default for any
+  /// todo left on 「跟随默认」, which is why the default's own value is spelled out
+  /// in the silent hint rather than hidden.
+  Widget _buildReminderSection(TextTheme text, ColorScheme colors) {
+    if (_dueDate == null) {
+      return const SizedBox.shrink();
+    }
+    final AppSettings settings = ref.watch(settingsProvider);
+    final bool rings = switch (_reminder) {
+      TodoReminder.followApp => settings.reminderMode == ReminderMode.ring,
+      TodoReminder.ring => true,
+      TodoReminder.silent => false,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(AppStrings.todoReminderLabel, style: text.labelLarge),
+        const SizedBox(height: 8),
+        // A Wrap, not a Row: three chips plus the label do not fit on a phone,
+        // and a rendered overflow paints stripes over the last one.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            for (final (TodoReminder value, String label)
+                in <(TodoReminder, String)>[
+              (TodoReminder.followApp, AppStrings.reminderFollowApp),
+              (TodoReminder.ring, AppStrings.reminderModeRing),
+              (TodoReminder.silent, AppStrings.reminderModeSilent),
+            ])
+              ChoiceChip(
+                label: Text(label),
+                selected: _reminder == value,
+                onSelected: (_) => setState(() => _reminder = value),
+              ),
+          ],
+        ),
+        if (!rings) ...<Widget>[
+          const SizedBox(height: 8),
+          Text(
+            AppStrings.todoReminderSilentHint,
+            style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ] else if (AppPlatform.isAndroid) ...<Widget>[
+          const SizedBox(height: 12),
+          Text(
+            '${AppStrings.ringtoneLabel}：'
+            '${_ringtoneUri == null ? AppStrings.ringtoneFollowApp : AppStrings.ringtoneCustom}',
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              OutlinedButton(
+                onPressed: () => unawaited(_pickRingtone()),
+                child: const Text(AppStrings.ringtonePick),
+              ),
+              TextButton(
+                onPressed: () => unawaited(
+                  // Previews what this todo will actually sound like: its own
+                  // ringtone, or the default it is following.
+                  AppPlatform.playRingtone(_ringtoneUri ?? settings.ringtoneUri),
+                ),
+                child: const Text(AppStrings.ringtonePreview),
+              ),
+              if (_ringtoneUri != null)
+                TextButton(
+                  onPressed: () => setState(() => _ringtoneUri = null),
+                  child: const Text(AppStrings.reminderFollowApp),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Picks a ringtone for this todo alone. Android-only, like the button that
+  /// calls it: other platforms return `null` and keep the default.
+  Future<void> _pickRingtone() async {
+    final String? uri = await AppPlatform.pickRingtone();
+    if (uri != null && mounted) {
+      setState(() => _ringtoneUri = uri);
+    }
+  }
 
   Widget _buildSubtasksSection(TextTheme text, ColorScheme colors) {
     return Column(

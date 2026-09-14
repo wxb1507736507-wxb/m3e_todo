@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_attachment.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_priority.dart';
+import 'package:m3e_todo/features/todos/domain/entities/todo_reminder.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_subtask.dart';
 
 import '../../../support/sample_todo.dart';
@@ -86,6 +87,8 @@ void main() {
         accentColor: 0xFF1E88E5,
         textColor: 0xFFFFFFFF,
         backgroundImage: null,
+        reminder: TodoReminder.followApp,
+        ringtoneUri: null,
       );
 
       expect(edited.id, 'keep-me');
@@ -110,6 +113,8 @@ void main() {
         accentColor: 0xFF43A047,
         textColor: 0xFFFDD835,
         backgroundImage: null,
+        reminder: TodoReminder.followApp,
+        ringtoneUri: null,
       );
       expect(coloured.accentColor, isNotNull);
 
@@ -123,6 +128,8 @@ void main() {
         accentColor: null,
         textColor: null,
         backgroundImage: null,
+        reminder: TodoReminder.followApp,
+        ringtoneUri: null,
       );
       expect(cleared.accentColor, isNull);
       expect(cleared.textColor, isNull);
@@ -140,6 +147,8 @@ void main() {
         accentColor: null,
         textColor: null,
         backgroundImage: null,
+        reminder: TodoReminder.followApp,
+        ringtoneUri: null,
       );
       expect(edited.isCompleted, isTrue);
       expect(edited.completedAt, testNow);
@@ -157,6 +166,8 @@ void main() {
           accentColor: null,
           textColor: null,
           backgroundImage: null,
+          reminder: TodoReminder.followApp,
+          ringtoneUri: null,
         ),
         throwsA(isA<TodoValidationException>()),
       );

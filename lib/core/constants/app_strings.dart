@@ -206,9 +206,18 @@ abstract final class AppStrings {
   static const String settingsTitle = '设置';
   static const String settingsSectionAppearance = '外观';
   static const String settingsSectionReminders = '到期提醒';
-  static const String reminderModeLabel = '提醒方式';
+  static const String reminderModeLabel = '默认提醒方式';
   static const String reminderModeRing = '响铃';
   static const String reminderModeSilent = '仅消息';
+  static const String reminderFollowApp = '跟随默认';
+  static const String reminderDefaultHint = '这里设置的是默认值，每个待办都可以在编辑页单独选择';
+
+  // --- Per-todo reminder (editor) ---------------------------------------------------
+
+  static const String todoReminderLabel = '提醒方式';
+  static const String todoReminderSilentHint = '仅消息：不响铃，只在通知栏提示';
+  static const String ringtoneFollowApp = '跟随默认铃声';
+  static const String ringtoneDefaultLabel = '默认铃声';
   static const String ringtoneLabel = '铃声';
   static const String ringtoneSystem = '跟随系统';
   static const String ringtoneCustom = '自定义铃声';
@@ -225,5 +234,6 @@ abstract final class AppStrings {
   static const String tipCalendar = '在「日历」页回顾历史待办，支持按日期跳转和搜索';
   static const String tipAttachment = '待办可以附加图片、视频、文档或语音备忘';
   static const String tipAppearance = '在编辑待办时可以自定义色块颜色与背景图片';
+  static const String tipReminder = '每个待办可以单独选择响铃还是仅消息，也能各自挑选铃声';
   static const String tipAppBackground = '设置 →「应用背景」可以给整个应用换背景图，图片可裁剪';
 }

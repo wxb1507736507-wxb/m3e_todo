@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/features/notifications/reminder_coordinator.dart';
 import 'package:m3e_todo/features/settings/domain/app_settings.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
+import 'package:m3e_todo/features/todos/domain/entities/todo_reminder.dart';
 
 import '../../support/sample_todo.dart';
 
@@ -117,5 +118,109 @@ void main() {
 
     expect(planned, hasLength(1));
     expect(planned['a']!.triggerAt, DateTime(2026, 3, 13, 9));
+  });
+
+  group('per-todo choices', () {
+    /// One dated todo asking for [reminder], judged against an app whose own
+    /// default is [defaultMode].
+    PendingReminder planned(
+      TodoReminder reminder, {
+      ReminderMode defaultMode = ReminderMode.silent,
+      String? todoRingtone,
+      String? defaultRingtone,
+    }) {
+      final Map<String, PendingReminder> result = desiredReminders(
+        todos: <Todo>[
+          sampleTodo(
+            id: 'a',
+            dueDate: DateTime(2026, 3, 12),
+            reminder: reminder,
+            ringtoneUri: todoRingtone,
+          ),
+        ],
+        reminderMode: defaultMode,
+        ringtoneUri: defaultRingtone,
+        now: now,
+      );
+      return result['a']!;
+    }
+
+    test('a todo can ring even when the app default is silent', () {
+      expect(planned(TodoReminder.ring).ring, isTrue);
+    });
+
+    test('a todo can stay quiet even when the app default rings', () {
+      expect(
+        planned(TodoReminder.silent, defaultMode: ReminderMode.ring).ring,
+        isFalse,
+      );
+    });
+
+    test('following the app default keeps following it', () {
+      expect(
+        planned(TodoReminder.followApp, defaultMode: ReminderMode.ring).ring,
+        isTrue,
+      );
+      expect(
+        planned(TodoReminder.followApp, defaultMode: ReminderMode.silent).ring,
+        isFalse,
+      );
+    });
+
+    test("a todo's own ringtone beats the app-wide one", () {
+      expect(
+        planned(
+          TodoReminder.ring,
+          defaultMode: ReminderMode.ring,
+          todoRingtone: 'content://todo',
+          defaultRingtone: 'content://app',
+        ).ringtoneUri,
+        'content://todo',
+      );
+    });
+
+    test('a todo with no ringtone of its own uses the app-wide one', () {
+      expect(
+        planned(
+          TodoReminder.ring,
+          defaultMode: ReminderMode.ring,
+          defaultRingtone: 'content://app',
+        ).ringtoneUri,
+        'content://app',
+      );
+    });
+
+    test('a quiet todo carries no sound, even one it picked earlier', () {
+      // Otherwise the native side would be handed a ringtone and a "silent"
+      // flag at once, and which one wins would depend on the platform.
+      final PendingReminder quiet = planned(
+        TodoReminder.silent,
+        todoRingtone: 'content://todo',
+      );
+      expect(quiet.ring, isFalse);
+      expect(quiet.ringtoneUri, isNull);
+    });
+
+    test('changing a todo from ringing to quiet is a different reminder', () {
+      // The coordinator schedules only what differs from the last plan, so a
+      // change the planner does not report would leave the device ringing after
+      // the user asked for silence.
+      final PendingReminder ringing = planned(
+        TodoReminder.ring,
+        defaultMode: ReminderMode.ring,
+      );
+      final PendingReminder quiet = planned(
+        TodoReminder.silent,
+        defaultMode: ReminderMode.ring,
+      );
+      expect(quiet, isNot(ringing));
+
+      final PendingReminder otherTone = planned(
+        TodoReminder.ring,
+        defaultMode: ReminderMode.ring,
+        todoRingtone: 'content://todo',
+      );
+      expect(otherTone, isNot(ringing));
+    });
   });
 }

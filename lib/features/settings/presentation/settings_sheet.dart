@@ -97,6 +97,7 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet>
       body: AppStrings.reminderTimeHint,
       triggerAt: DateTime.now().add(const Duration(seconds: 5)),
       ring: ref.read(settingsProvider).reminderMode == ReminderMode.ring,
+      ringtoneUri: ref.read(settingsProvider).ringtoneUri,
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -335,12 +336,17 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet>
               ),
               const SizedBox(height: 6),
               Text(
+                AppStrings.reminderDefaultHint,
+                style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 6),
+              Text(
                 AppStrings.reminderTimeHint,
                 style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
               ),
               if (settings.reminderMode == ReminderMode.ring && onAndroid) ...<Widget>[
                 const SizedBox(height: 14),
-                Text(AppStrings.ringtoneLabel, style: text.labelLarge),
+                Text(AppStrings.ringtoneDefaultLabel, style: text.labelLarge),
                 const SizedBox(height: 8),
                 Row(
                   children: <Widget>[
@@ -422,6 +428,7 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet>
                 AppStrings.tipSubtask,
                 AppStrings.tipCalendar,
                 AppStrings.tipAttachment,
+                AppStrings.tipReminder,
                 AppStrings.tipAppearance,
                 AppStrings.tipAppBackground,
               ])

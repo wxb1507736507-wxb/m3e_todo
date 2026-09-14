@@ -4,6 +4,7 @@ import '../../../core/platform/app_platform.dart';
 import '../settings/domain/app_settings.dart';
 import '../settings/presentation/settings_controller.dart';
 import '../todos/domain/entities/todo.dart';
+import '../todos/domain/entities/todo_reminder.dart';
 import '../todos/presentation/providers/todo_providers.dart';
 
 /// Local time of day at which a due-date reminder fires.
@@ -22,6 +23,7 @@ class PendingReminder {
     required this.title,
     required this.body,
     required this.ring,
+    this.ringtoneUri,
   });
 
   final DateTime triggerAt;
@@ -29,16 +31,24 @@ class PendingReminder {
   final String body;
   final bool ring;
 
+  /// The sound to play, or `null` for the system's own notification sound.
+  ///
+  /// Only ever set for a ringing reminder: a silent one has no sound to carry,
+  /// and keeping the field `null` there is what lets the diff below tell a
+  /// silent reminder apart from one that merely lost its ringtone.
+  final String? ringtoneUri;
+
   @override
   bool operator ==(Object other) =>
       other is PendingReminder &&
       other.triggerAt == triggerAt &&
       other.title == title &&
       other.body == body &&
-      other.ring == ring;
+      other.ring == ring &&
+      other.ringtoneUri == ringtoneUri;
 
   @override
-  int get hashCode => Object.hash(triggerAt, title, body, ring);
+  int get hashCode => Object.hash(triggerAt, title, body, ring, ringtoneUri);
 }
 
 /// Keeps the native alarm schedule in step with the todo collection.
@@ -62,8 +72,8 @@ class ReminderCoordinator {
 
   /// Applies the difference between [todos] and the last scheduled set.
   Future<void> sync(List<Todo> todos) async {
-    final Map<String, PendingReminder> desired =
-        _desiredReminders(todos, _ref.read(settingsProvider).reminderMode);
+    final AppSettings settings = _ref.read(settingsProvider);
+    final Map<String, PendingReminder> desired = _desiredReminders(todos, settings);
 
     // Anything removed or changed is cancelled first, then the new or changed
     // ones are scheduled. Ids are stable, so an edited todo replaces its own
@@ -92,6 +102,7 @@ class ReminderCoordinator {
           body: entry.value.body,
           triggerAt: entry.value.triggerAt,
           ring: entry.value.ring,
+          ringtoneUri: entry.value.ringtoneUri,
         ),
       );
     }
@@ -105,7 +116,12 @@ class ReminderCoordinator {
   }
 
   /// Recomputes the schedule from the current collection; used when only the
-  /// settings changed (ring vs silent), which does not touch the todo list.
+  /// defaults changed (ring vs silent, or the default ringtone), which does not
+  /// touch the todo list itself.
+  ///
+  /// Todos that carry their own choice are unaffected by construction: their
+  /// planned reminder is identical before and after, so the diff leaves them
+  /// alone.
   Future<void> resync() async {
     final List<Todo>? todos = _ref.read(todoListProvider).value;
     if (todos != null) {
@@ -115,11 +131,12 @@ class ReminderCoordinator {
 
   Map<String, PendingReminder> _desiredReminders(
     List<Todo> todos,
-    ReminderMode reminderMode,
+    AppSettings settings,
   ) {
     return desiredReminders(
       todos: todos,
-      reminderMode: reminderMode,
+      reminderMode: settings.reminderMode,
+      ringtoneUri: settings.ringtoneUri,
       now: _ref.read(clockProvider)(),
     );
   }
@@ -135,15 +152,19 @@ class ReminderCoordinator {
 ///
 /// Kept as a pure function, separate from [ReminderCoordinator]'s diffing, for
 /// one practical reason: this is where the scheduling rules live (what deserves
-/// a reminder, and when it fires), and a pure function can be tested without an
-/// Android device or a mocked method channel — which is exactly what the rest of
-/// the coordinator cannot be.
+/// a reminder, when it fires, and what it sounds like), and a pure function can
+/// be tested without an Android device or a mocked method channel — which is
+/// exactly what the rest of the coordinator cannot be.
+///
+/// [reminderMode] and [ringtoneUri] are the *app-wide defaults*: a todo that
+/// carries its own choice wins, and one that does not keeps following the
+/// defaults — including when they change later.
 Map<String, PendingReminder> desiredReminders({
   required List<Todo> todos,
   required ReminderMode reminderMode,
   required DateTime now,
+  String? ringtoneUri,
 }) {
-  final bool ring = reminderMode == ReminderMode.ring;
   final Map<String, PendingReminder> result = <String, PendingReminder>{};
 
   for (final Todo todo in todos) {
@@ -165,11 +186,19 @@ Map<String, PendingReminder> desiredReminders({
     if (!trigger.isAfter(now)) {
       continue;
     }
+    final bool ring = switch (todo.reminder) {
+      TodoReminder.followApp => reminderMode == ReminderMode.ring,
+      TodoReminder.ring => true,
+      TodoReminder.silent => false,
+    };
     result[todo.id] = PendingReminder(
       triggerAt: trigger,
       title: todo.title,
       body: todo.notes ?? '',
       ring: ring,
+      // Resolved here rather than natively: "follow the app setting" is a Dart
+      // concept, and the native side should only ever be handed a decision.
+      ringtoneUri: ring ? (todo.ringtoneUri ?? ringtoneUri) : null,
     );
   }
   return result;

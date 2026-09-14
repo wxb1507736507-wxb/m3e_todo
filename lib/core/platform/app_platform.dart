@@ -26,6 +26,7 @@ class PendingAlarm {
     required this.body,
     required this.triggerAt,
     required this.ring,
+    this.ringtoneUri,
   });
 
   final int notificationId;
@@ -34,12 +35,17 @@ class PendingAlarm {
   final DateTime triggerAt;
   final bool ring;
 
+  /// Sound for a ringing alarm, or `null` for the system's default notification
+  /// sound. Never set on a silent alarm.
+  final String? ringtoneUri;
+
   Map<String, Object?> toChannelArgs() => <String, Object?>{
         'notificationId': notificationId,
         'title': title,
         'body': body,
         'triggerAtMillis': triggerAt.millisecondsSinceEpoch,
         'ring': ring,
+        'ringtoneUri': ringtoneUri,
       };
 }
 
@@ -116,23 +122,24 @@ abstract final class AppPlatform {
     return await _invoke<bool>('requestExactAlarmPermission') ?? false;
   }
 
-  /// Points the "ring" notification channel at [uri] (a `content://` ringtone
-  /// URI from the system picker), or back at the system default when `null`.
-  static Future<void> setRingtone(String? uri) =>
-      _invoke<Object?>('setRingtone', uri);
-
   /// The system default notification sound, as a URI string.
   static Future<String?> systemRingtoneUri() =>
       _invoke<String>('systemRingtoneUri');
 
   /// Schedules a due-date notification. [notificationId] must be stable across
   /// reschedules so an existing alarm is replaced rather than duplicated.
+  ///
+  /// [ringtoneUri] is the sound this one reminder should make, or `null` for the
+  /// system default. It is per alarm because the choice is per todo: Android
+  /// gives the *channel* its sound and fixes it at creation, so the native side
+  /// keeps one channel per distinct ringtone.
   static Future<void> scheduleAlarm({
     required int notificationId,
     required String title,
     required String body,
     required DateTime triggerAt,
     required bool ring,
+    String? ringtoneUri,
   }) {
     return _invoke<Object?>(
       'scheduleAlarm',
@@ -142,6 +149,7 @@ abstract final class AppPlatform {
         body: body,
         triggerAt: triggerAt,
         ring: ring,
+        ringtoneUri: ringtoneUri,
       ).toChannelArgs(),
     );
   }

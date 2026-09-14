@@ -65,12 +65,15 @@ class SettingsController extends Notifier<AppSettings> {
     _apply(state.copyWith(reminderMode: mode));
   }
 
-  /// Sets the ring-channel sound to [uri], or back to the system default when
-  /// `null`. Applies natively straight away because the channel must exist with
-  /// the right sound *before* the next alarm fires.
+  /// Sets the ringtone reminders sound with by default, or back to the system
+  /// default when `null`.
+  ///
+  /// No native call: the sound travels with each alarm now, and the native side
+  /// keeps one notification channel per distinct ringtone — so changing this
+  /// only has to reach the scheduler, which [AppShell] re-runs when the settings
+  /// change. Todos that carry their own ringtone are unaffected.
   Future<void> setRingtone(String? uri) async {
     _apply(state.copyWith(ringtoneUri: uri, clearRingtone: uri == null));
-    await AppPlatform.setRingtone(uri);
   }
 
   /// Previews the given ringtone (or the system default) once.

@@ -1,6 +1,7 @@
 import '../../../../core/utils/calendar.dart';
 import 'todo_attachment.dart';
 import 'todo_priority.dart';
+import 'todo_reminder.dart';
 import 'todo_subtask.dart';
 
 /// Thrown when a todo would break the domain rule that a title is required.
@@ -40,6 +41,8 @@ class Todo {
     this.accentColor,
     this.textColor,
     this.backgroundImage,
+    this.reminder = TodoReminder.followApp,
+    this.ringtoneUri,
   });
 
   /// Creates a todo from raw user input, applying the domain's normalisation
@@ -60,6 +63,8 @@ class Todo {
     int? accentColor,
     int? textColor,
     String? backgroundImage,
+    TodoReminder reminder = TodoReminder.followApp,
+    String? ringtoneUri,
   }) {
     final String normalizedTitle = title.trim();
     if (normalizedTitle.isEmpty) {
@@ -77,6 +82,8 @@ class Todo {
       accentColor: accentColor,
       textColor: textColor,
       backgroundImage: backgroundImage,
+      reminder: reminder,
+      ringtoneUri: ringtoneUri,
     );
   }
 
@@ -119,6 +126,17 @@ class Todo {
 
   /// Absolute path of an optional background image for the tile.
   final String? backgroundImage;
+
+  /// Whether this todo's reminder rings or stays quiet, or follows the app-wide
+  /// default. Per todo because urgency is per task.
+  final TodoReminder reminder;
+
+  /// This todo's own ringtone as a system `content://` URI, or `null` to sound
+  /// whatever the app-wide reminder setting uses.
+  ///
+  /// Only meaningful while [reminder] resolves to ringing; kept when it does not
+  /// so switching a todo to "just a message" and back does not lose the choice.
+  final String? ringtoneUri;
 
   bool get isCompleted => completedAt != null;
 
@@ -214,6 +232,8 @@ class Todo {
     required int? accentColor,
     required int? textColor,
     required String? backgroundImage,
+    required TodoReminder reminder,
+    required String? ringtoneUri,
   }) {
     final String normalizedTitle = title.trim();
     if (normalizedTitle.isEmpty) {
@@ -231,6 +251,8 @@ class Todo {
       accentColor: accentColor,
       textColor: textColor,
       backgroundImage: backgroundImage,
+      reminder: reminder,
+      ringtoneUri: ringtoneUri,
       completedAt: completedAt,
     );
   }
@@ -256,6 +278,8 @@ class Todo {
       accentColor: accentColor,
       textColor: textColor,
       backgroundImage: backgroundImage,
+      reminder: reminder,
+      ringtoneUri: ringtoneUri,
     );
   }
 
@@ -274,6 +298,8 @@ class Todo {
       accentColor: accentColor,
       textColor: textColor,
       backgroundImage: backgroundImage,
+      reminder: reminder,
+      ringtoneUri: ringtoneUri,
     );
   }
 
@@ -294,7 +320,9 @@ class Todo {
         _listEquals(other.attachments, attachments) &&
         other.accentColor == accentColor &&
         other.textColor == textColor &&
-        other.backgroundImage == backgroundImage;
+        other.backgroundImage == backgroundImage &&
+        other.reminder == reminder &&
+        other.ringtoneUri == ringtoneUri;
   }
 
   @override
@@ -311,6 +339,8 @@ class Todo {
         accentColor,
         textColor,
         backgroundImage,
+        reminder,
+        ringtoneUri,
       );
 
   @override

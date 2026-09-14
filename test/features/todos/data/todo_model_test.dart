@@ -3,6 +3,7 @@ import 'package:m3e_todo/features/todos/data/models/todo_model.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_attachment.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_priority.dart';
+import 'package:m3e_todo/features/todos/domain/entities/todo_reminder.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_subtask.dart';
 
 import '../../../support/sample_todo.dart';
@@ -53,6 +54,8 @@ void main() {
         accentColor: 0xFF1E88E5,
         textColor: 0xFFFDD835,
         backgroundImage: null,
+        reminder: TodoReminder.followApp,
+        ringtoneUri: null,
       );
 
       final Map<String, Object?> json = TodoModel.toJson(original);
@@ -86,6 +89,63 @@ void main() {
       };
 
       expect(TodoModel.fromJson(broken)?.textColor, isNull);
+    });
+
+    test('carries a per-todo reminder and ringtone through the file', () {
+      final Todo original = sampleTodo().edit(
+        title: '要响的',
+        notes: null,
+        priority: TodoPriority.high,
+        dueDate: DateTime(2026, 4, 1),
+        subtasks: const <TodoSubtask>[],
+        attachments: const <TodoAttachment>[],
+        accentColor: null,
+        textColor: null,
+        backgroundImage: null,
+        reminder: TodoReminder.ring,
+        ringtoneUri: 'content://media/internal/audio/media/42',
+      );
+
+      final Map<String, Object?> json = TodoModel.toJson(original);
+      expect(json['reminder'], 'ring');
+      expect(json['ringtoneUri'], 'content://media/internal/audio/media/42');
+      expect(TodoModel.fromJson(json), original);
+    });
+
+    test('following the app setting is written by leaving the key out', () {
+      final Map<String, Object?> json = TodoModel.toJson(sampleTodo());
+      expect(json.containsKey('reminder'), isFalse);
+      expect(json.containsKey('ringtoneUri'), isFalse);
+      expect(TodoModel.fromJson(json)?.reminder, TodoReminder.followApp);
+    });
+
+    test('a file written before reminders existed still loads', () {
+      // Shape of a version-3 record: no reminder keys at all.
+      final Map<String, Object?> version3 = <String, Object?>{
+        'id': 'old',
+        'title': '旧版本写的',
+        'createdAt': '2026-03-01T09:30:00.000',
+        'priority': 'normal',
+        'dueDate': '2026-04-01T00:00:00.000',
+      };
+
+      final Todo restored = TodoModel.fromJson(version3)!;
+
+      expect(restored.reminder, TodoReminder.followApp);
+      expect(restored.ringtoneUri, isNull);
+    });
+
+    test('an unknown reminder name is read as following the app setting', () {
+      // A name from a future version must not cost the user the record, and
+      // following the default is the harmless reading of one we cannot parse.
+      final Map<String, Object?> json = <String, Object?>{
+        'id': 'a',
+        'title': '标题',
+        'createdAt': '2026-03-01T09:30:00.000',
+        'reminder': 'vibrate-twice',
+      };
+
+      expect(TodoModel.fromJson(json)?.reminder, TodoReminder.followApp);
     });
   });
 

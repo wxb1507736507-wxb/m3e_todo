@@ -5,11 +5,13 @@ import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_shapes.dart';
 import '../../domain/entities/todo_stats.dart';
 
-/// Progress summary above the list.
+/// One-line progress summary above the list.
 ///
-/// Stateless by design: it renders whatever [stats] it is handed, so the page
-/// stays in charge of loading and error states and this widget never has to
-/// guess what to show.
+/// This used to be a card carrying a headline count, a full-width progress bar
+/// and two chips — roughly a sixth of a phone screen, saying the same numbers
+/// the navigation bar was already showing as badges. What is left is the part
+/// that is not said twice: how much is still open, how far along the whole list
+/// is, and whether anything has slipped past its date.
 class TodoSummaryHeader extends StatelessWidget {
   const TodoSummaryHeader({required this.stats, super.key});
 
@@ -20,119 +22,97 @@ class TodoSummaryHeader extends StatelessWidget {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    AppStrings.activeCount(stats.active),
-                    style: text.headlineSmall,
-                  ),
-                ),
-                Text(
-                  AppStrings.progressValue(stats.completed, stats.total),
-                  style: text.titleMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
+    return Padding(
+      // Small: this is a caption for the list, not a panel above it.
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+      child: Row(
+        children: <Widget>[
+          // Flexible, not fixed: at a large accessibility text scale the count
+          // is what gives way, rather than the row overflowing off the edge.
+          Flexible(
+            child: Text(
+              AppStrings.activeCount(stats.active),
+              overflow: TextOverflow.ellipsis,
+              style: text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 16),
-            // The bar animates on the effects spring: a progress fill is an
-            // in-place property change, so it should settle without overshoot
-            // rather than bouncing past 100%.
-            TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0, end: stats.progress),
-              duration: AppMotion.effectsSlow.duration,
-              curve: AppMotion.effectsSlow.curve,
-              builder: (BuildContext context, double value, Widget? child) {
-                return ClipRRect(
-                  borderRadius: AppShapes.radius(AppShapes.full),
-                  child: LinearProgressIndicator(
-                    value: value,
-                    minHeight: 8,
-                    backgroundColor: colors.surfaceContainerHighest,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                _StatChip(
-                  icon: Icons.task_alt,
-                  label: AppStrings.navCompleted,
-                  value: stats.completed,
-                  background: colors.secondaryContainer,
-                  foreground: colors.onSecondaryContainer,
-                ),
-                if (stats.overdue > 0)
-                  _StatChip(
-                    icon: Icons.schedule,
-                    label: AppStrings.dueOverdue,
-                    value: stats.overdue,
-                    background: colors.errorContainer,
-                    foreground: colors.onErrorContainer,
-                  ),
-              ],
-            ),
+          ),
+          if (stats.overdue > 0) ...<Widget>[
+            const SizedBox(width: 10),
+            _OverduePill(count: stats.overdue),
           ],
-        ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: _ProgressBar(value: stats.progress, color: colors.primary),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            AppStrings.progressValue(stats.completed, stats.total),
+            style: text.labelMedium?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// A compact `icon label value` pill.
-class _StatChip extends StatelessWidget {
-  const _StatChip({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.background,
-    required this.foreground,
-  });
+/// Slim progress bar.
+///
+/// Animates on the effects spring: a progress fill is an in-place property
+/// change, so it should settle without overshoot rather than bouncing past 100%.
+class _ProgressBar extends StatelessWidget {
+  const _ProgressBar({required this.value, required this.color});
 
-  final IconData icon;
-  final String label;
-  final int value;
-  final Color background;
-  final Color foreground;
+  final double value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final TextTheme text = Theme.of(context).textTheme;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: value),
+      duration: AppMotion.effectsSlow.duration,
+      curve: AppMotion.effectsSlow.curve,
+      builder: (BuildContext context, double animated, Widget? child) {
+        return ClipRRect(
+          borderRadius: AppShapes.radius(AppShapes.full),
+          child: LinearProgressIndicator(
+            value: animated,
+            minHeight: 6,
+            color: color,
+            backgroundColor:
+                Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
+        );
+      },
+    );
+  }
+}
 
+/// The "something is late" marker, shown only when there is something late.
+class _OverduePill extends StatelessWidget {
+  const _OverduePill({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: background,
-        borderRadius: AppShapes.radius(AppShapes.small),
+        color: colors.errorContainer,
+        borderRadius: AppShapes.radius(AppShapes.full),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(icon, size: 18, color: foreground),
-          const SizedBox(width: 8),
+          Icon(Icons.schedule, size: 14, color: colors.onErrorContainer),
+          const SizedBox(width: 4),
           Text(
-            label,
-            style: text.labelLarge?.copyWith(color: foreground),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '$value',
-            style: text.labelLarge?.copyWith(
-              color: foreground,
-              fontWeight: FontWeight.w700,
-            ),
+            '${AppStrings.dueOverdue} $count',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.onErrorContainer,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
         ],
       ),

@@ -16,6 +16,7 @@ abstract final class AppStrings {
 
   static const String searchHint = '搜索待办';
   static const String clearSearch = '清除搜索';
+  static const String sortTooltip = '排序方式';
   static const String sortManual = '手动排序';
   static const String sortCreatedNewest = '最近创建';
   static const String sortDueSoonest = '最快到期';

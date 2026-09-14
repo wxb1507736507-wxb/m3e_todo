@@ -10,13 +10,13 @@ import '../providers/todo_providers.dart';
 import '../widgets/todo_empty_state.dart';
 import '../widgets/todo_list_view.dart';
 import '../widgets/todo_summary_header.dart';
-import '../widgets/todo_toolbar.dart';
 
-/// The todo screen: summary, filters and the list itself.
+/// The todo screen: the summary line and the list itself.
 ///
 /// The page owns the loading and error states so no child widget has to guard
 /// against them, and it is the only place that decides which empty-state copy
-/// applies.
+/// applies. Search and sort live in the app bar (see [AppShell]) because they
+/// act on the list rather than being part of it.
 class TodoPage extends ConsumerWidget {
   const TodoPage({super.key});
 
@@ -28,18 +28,16 @@ class TodoPage extends ConsumerWidget {
     final DateTime now = ref.watch(clockProvider)();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           // Held back until there is data: rendering zeroed counts first would
-          // make the numbers visibly jump on every launch.
-          if (stats != null) ...<Widget>[
+          // make the numbers visibly jump on every launch. An empty list shows
+          // no summary at all — the empty state below already explains itself,
+          // and "0 项进行中" above it would be noise.
+          if (stats != null && stats.total > 0)
             TodoSummaryHeader(stats: stats),
-            const SizedBox(height: 16),
-          ],
-          const TodoToolbar(),
-          const SizedBox(height: 16),
           Expanded(
             child: visible.when(
               loading: () => const Center(child: CircularProgressIndicator()),

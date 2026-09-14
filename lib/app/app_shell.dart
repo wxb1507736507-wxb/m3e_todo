@@ -17,6 +17,7 @@ import '../features/todos/domain/entities/todo_stats.dart';
 import '../features/todos/presentation/pages/todo_page.dart';
 import '../features/todos/presentation/providers/todo_providers.dart';
 import '../features/todos/presentation/widgets/todo_editor_sheet.dart';
+import '../features/todos/presentation/widgets/todo_toolbar.dart';
 import 'app_background.dart';
 
 /// Width at or above which the navigation rail replaces the bottom bar.
@@ -181,14 +182,19 @@ class _AppShellState extends ConsumerState<AppShell> {
               dim: settings.backgroundDim,
               child: Scaffold(
                 appBar: AppBar(
+                  titleSpacing: 16,
                   // The title follows the destination, so the calendar says so
-                  // instead of leaving the user to infer it from the grid.
-                  title: Text(
-                    _selectedIndex == _calendarIndex
-                        ? AppStrings.calendarTitle
-                        : AppStrings.appTitle,
-                  ),
+                  // instead of leaving the user to infer it from the grid. On
+                  // the list, the title *is* the search field: searching and
+                  // sorting are what the user does to the list, so they sit on
+                  // the top line with the settings button rather than costing a
+                  // row of their own above the first todo.
+                  title: _selectedIndex == _calendarIndex
+                      ? const Text(AppStrings.calendarTitle)
+                      : const TodoSearchField(),
                   actions: <Widget>[
+                    if (_selectedIndex != _calendarIndex)
+                      const TodoSortButton(),
                     if ((stats?.completed ?? 0) > 0)
                       IconButton(
                         icon: const Icon(Icons.cleaning_services_outlined),

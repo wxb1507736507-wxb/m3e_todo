@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_strings.dart';
 import '../core/platform/app_platform.dart';
+import '../features/calendar/domain/entities/special_day.dart';
 import '../features/calendar/presentation/calendar_page.dart';
+import '../features/calendar/presentation/providers/special_day_providers.dart';
 import '../features/notifications/reminder_coordinator.dart';
 import '../features/settings/domain/app_settings.dart';
 import '../features/settings/presentation/settings_controller.dart';
@@ -60,10 +62,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       if (!mounted) {
         return;
       }
-      final List<Todo>? todos = ref.read(todoListProvider).value;
-      if (todos != null) {
-        unawaited(ref.read(reminderCoordinatorProvider).sync(todos));
-      }
+      unawaited(ref.read(reminderCoordinatorProvider).sync());
       // Ask for the notification permission up front on Android 13+: a
       // reminder that cannot show itself is worse than one more dialog at
       // first launch.
@@ -129,9 +128,18 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.listen<AsyncValue<List<Todo>>>(
       todoListProvider,
       (AsyncValue<List<Todo>>? previous, AsyncValue<List<Todo>> next) {
-        final List<Todo>? todos = next.value;
-        if (todos != null) {
-          unawaited(ref.read(reminderCoordinatorProvider).sync(todos));
+        if (next.hasValue) {
+          unawaited(ref.read(reminderCoordinatorProvider).sync());
+        }
+      },
+    );
+    // The personal dates are reminders too: a birthday entered once has to
+    // announce itself every year without being maintained.
+    ref.listen<AsyncValue<List<SpecialDay>>>(
+      specialDaysProvider,
+      (AsyncValue<List<SpecialDay>>? previous, AsyncValue<List<SpecialDay>> next) {
+        if (next.hasValue) {
+          unawaited(ref.read(reminderCoordinatorProvider).sync());
         }
       },
     );

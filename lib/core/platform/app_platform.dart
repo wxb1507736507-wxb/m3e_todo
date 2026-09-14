@@ -159,6 +159,19 @@ abstract final class AppPlatform {
         'notificationId': notificationId,
       });
 
+  /// Replaces the whole native schedule with [alarms].
+  ///
+  /// The one operation a diff cannot express: alarms left over from a previous
+  /// run belong to todos that no longer exist, so there is no id here to cancel
+  /// them by. Used for the first sync of a process (and therefore after a
+  /// reboot), where "these are all of them" is the truth.
+  static Future<void> syncAlarms(List<PendingAlarm> alarms) {
+    return _invoke<Object?>(
+      'syncAlarms',
+      <Object?>[for (final PendingAlarm alarm in alarms) alarm.toChannelArgs()],
+    );
+  }
+
   /// Schedules several alarms in one call.
   ///
   /// The single-alarm form costs a channel round trip each, and keeping the

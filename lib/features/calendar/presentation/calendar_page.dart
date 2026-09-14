@@ -3,14 +3,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/constants/app_strings.dart';
-import '../../../../core/theme/app_shapes.dart';
-import '../../../../core/utils/app_date_formatter.dart';
-import '../../../../core/utils/calendar.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../core/theme/app_shapes.dart';
+import '../../../core/utils/app_date_formatter.dart';
+import '../../../core/utils/calendar.dart';
 import '../../todos/domain/entities/todo.dart';
 import '../../todos/presentation/providers/todo_providers.dart';
+import '../domain/entities/special_day.dart';
+import 'providers/special_day_providers.dart';
+import 'widgets/special_day_sheet.dart';
 
-/// Calendar review: every todo, past and present, laid over a month grid.
+/// Which collection the pane under the grid is showing.
+enum _Pane { todos, specialDays }
+
+/// Calendar review: every todo, past and present, laid over a month grid, with
+/// the user's birthdays, anniversaries and countdowns alongside them.
 ///
 /// The grid is built as fixed rows of seven cells (not a [GridView]) because 42
 /// lightweight cells are cheaper to build and lay out than a scrolling viewport
@@ -31,6 +38,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+
+  /// Which pane is showing. A calendar app's month grid is shared between
+  /// "what is due" and "what is coming round", so the switch sits under it
+  /// rather than becoming a fifth destination in the navigation bar.
+  _Pane _pane = _Pane.todos;
 
   @override
   void initState() {
@@ -91,6 +103,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   Widget build(BuildContext context) {
     final AsyncValue<List<Todo>> asyncTodos = ref.watch(todoListProvider);
     final List<Todo> todos = asyncTodos.value ?? const <Todo>[];
+    final List<SpecialDay> specialDays =
+        ref.watch(specialDaysProvider).value ?? const <SpecialDay>[];
+    // Already ordered soonest-first, and already holding the passed ones back.
+    final List<SpecialDay> upcoming =
+        ref.watch(upcomingSpecialDaysProvider).value ?? const <SpecialDay>[];
     // One clock read per build, so the grid's "today" highlight, the row labels
     // and the day details cannot disagree about what today is.
     final DateTime now = ref.read(clockProvider)();
@@ -106,25 +123,94 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             month: _month,
             now: now,
             counts: _DayCounts.from(todos),
+            specialDayKeys: <int>{
+              for (final SpecialDay day in specialDays)
+                if (day.repeatsYearly)
+                  // A yearly date marks its month and day in *every* month view,
+                  // which is the point of entering it once.
+                  day.monthDayKey
+                else
+                  dayKey(day.date),
+            },
+            yearlySpecialDayKeys: <int>{
+              for (final SpecialDay day in specialDays)
+                if (day.repeatsYearly) day.monthDayKey,
+            },
             selectedDay: _selectedDay,
             onDaySelected: (DateTime day) =>
                 setState(() => _selectedDay = day),
           ),
-          const SizedBox(height: 12),
-          _buildSearchField(context),
+          const SizedBox(height: 10),
+          _buildPaneSwitch(context),
           const SizedBox(height: 8),
+          if (_pane == _Pane.todos) _buildSearchField(context),
           Expanded(
-            child: _query.isEmpty
-                ? _DayDetails(day: _selectedDay, todos: todos)
-                : _SearchResults(
-                    todos: todos,
-                    query: _query,
-                    today: now,
-                    onJumpToDate: _jumpTo,
-                  ),
+            child: switch (_pane) {
+              _Pane.todos => _query.isEmpty
+                  ? _DayDetails(
+                      day: _selectedDay,
+                      todos: todos,
+                      specialDays: _specialDaysOn(_selectedDay, specialDays),
+                      now: now,
+                    )
+                  : _SearchResults(
+                      todos: todos,
+                      query: _query,
+                      today: now,
+                      onJumpToDate: _jumpTo,
+                    ),
+              _Pane.specialDays => _SpecialDayList(
+                  days: upcoming,
+                  now: now,
+                  selectedDay: _selectedDay,
+                  onAdd: () => unawaited(showSpecialDaySheet(context)),
+                  onEdit: (SpecialDay day) =>
+                      unawaited(showSpecialDaySheet(context, existing: day)),
+                ),
+            },
           ),
         ],
       ),
+    );
+  }
+
+  /// The personal dates that fall on [day].
+  ///
+  /// A yearly date matches on month and day whatever the year; a countdown only
+  /// on its exact date.
+  static List<SpecialDay> _specialDaysOn(
+    DateTime day,
+    List<SpecialDay> days,
+  ) {
+    final int key = dayKey(day);
+    final int monthDay = day.month * 100 + day.day;
+    return <SpecialDay>[
+      for (final SpecialDay entry in days)
+        if (entry.repeatsYearly
+            ? entry.monthDayKey == monthDay
+            : dayKey(entry.date) == key)
+          entry,
+    ];
+  }
+
+  Widget _buildPaneSwitch(BuildContext context) {
+    return SegmentedButton<_Pane>(
+      showSelectedIcon: false,
+      segments: const <ButtonSegment<_Pane>>[
+        ButtonSegment<_Pane>(
+          value: _Pane.todos,
+          label: Text(AppStrings.calendarPaneTodos),
+          icon: Icon(Icons.checklist),
+        ),
+        ButtonSegment<_Pane>(
+          value: _Pane.specialDays,
+          label: Text(AppStrings.specialDaySection),
+          icon: Icon(Icons.cake_outlined),
+        ),
+      ],
+      selected: <_Pane>{_pane},
+      onSelectionChanged: (Set<_Pane> selection) =>
+          setState(() => _pane = selection.first),
     );
   }
 
@@ -248,6 +334,7 @@ class _Cell {
     required this.isToday,
     required this.dueCount,
     required this.doneCount,
+    required this.hasSpecialDay,
   });
 
   final DateTime day;
@@ -256,6 +343,10 @@ class _Cell {
   final bool isToday;
   final int dueCount;
   final int doneCount;
+
+  /// Whether a birthday, anniversary or countdown lands on this day — in this
+  /// year's view *or*, for a recurring date, in any year's.
+  final bool hasSpecialDay;
 }
 
 class _MonthGrid extends StatelessWidget {
@@ -263,6 +354,8 @@ class _MonthGrid extends StatelessWidget {
     required this.month,
     required this.now,
     required this.counts,
+    required this.specialDayKeys,
+    required this.yearlySpecialDayKeys,
     required this.selectedDay,
     required this.onDaySelected,
   });
@@ -278,6 +371,13 @@ class _MonthGrid extends StatelessWidget {
   final DateTime month;
   final DateTime now;
   final _DayCounts counts;
+
+  /// Day keys (`year*10000+month*100+day`) carrying a personal date.
+  final Set<int> specialDayKeys;
+
+  /// `month*100+day` keys of the recurring personal dates, matched in any year.
+  final Set<int> yearlySpecialDayKeys;
+
   final DateTime selectedDay;
   final ValueChanged<DateTime> onDaySelected;
 
@@ -340,6 +440,9 @@ class _MonthGrid extends StatelessWidget {
         isToday: key == todayKey,
         dueCount: counts.dueOn(key),
         doneCount: counts.completedOn(key),
+        hasSpecialDay:
+            specialDayKeys.contains(key) ||
+            yearlySpecialDayKeys.contains(day.month * 100 + day.day),
       );
     });
   }
@@ -389,6 +492,13 @@ class _MonthGrid extends StatelessWidget {
                       const SizedBox(width: 3),
                       _dot(colors.onSurfaceVariant, selected),
                     ],
+                    // A birthday or anniversary gets its own mark, in the colour
+                    // nothing else on the grid uses: it is not a task, and it
+                    // should not read as one.
+                    if (cell.hasSpecialDay) ...<Widget>[
+                      const SizedBox(width: 3),
+                      _dot(colors.tertiary, selected),
+                    ],
                   ],
                 ),
               ),
@@ -416,10 +526,21 @@ class _MonthGrid extends StatelessWidget {
 /// day, which the grid above already highlights; repeating it 20 times would be
 /// noise.
 class _DayDetails extends StatelessWidget {
-  const _DayDetails({required this.day, required this.todos});
+  const _DayDetails({
+    required this.day,
+    required this.todos,
+    required this.specialDays,
+    required this.now,
+  });
 
   final DateTime day;
   final List<Todo> todos;
+
+  /// Birthdays and the like falling on this day, so tapping the 3rd of October
+  /// shows the birthday as well as the tasks.
+  final List<SpecialDay> specialDays;
+
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
@@ -443,7 +564,7 @@ class _DayDetails extends StatelessWidget {
       }
     }
 
-    if (due.isEmpty && completed.isEmpty) {
+    if (due.isEmpty && completed.isEmpty && specialDays.isEmpty) {
       return Center(
         child: Text(
           AppStrings.calendarNoTodos,
@@ -454,6 +575,11 @@ class _DayDetails extends StatelessWidget {
 
     return ListView(
       children: <Widget>[
+        if (specialDays.isNotEmpty) ...<Widget>[
+          _legend(context, Icons.cake_outlined, AppStrings.specialDaySection),
+          for (final SpecialDay special in specialDays)
+            _SpecialDayRow(day: special, now: now, onTap: null),
+        ],
         if (due.isNotEmpty) ...<Widget>[
           _legend(context, Icons.event_outlined, AppStrings.calendarDueLegend),
           for (final Todo todo in due) _TodoRow(todo: todo),
@@ -482,6 +608,193 @@ class _DayDetails extends StatelessWidget {
           const SizedBox(width: 6),
           Text(label, style: text.labelLarge),
         ],
+      ),
+    );
+  }
+}
+
+/// The birthdays, anniversaries and countdowns, soonest first.
+class _SpecialDayList extends StatelessWidget {
+  const _SpecialDayList({
+    required this.days,
+    required this.now,
+    required this.selectedDay,
+    required this.onAdd,
+    required this.onEdit,
+  });
+
+  final List<SpecialDay> days;
+  final DateTime now;
+  final DateTime selectedDay;
+  final VoidCallback onAdd;
+  final ValueChanged<SpecialDay> onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    if (days.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                AppStrings.specialDayEmpty,
+                textAlign: TextAlign.center,
+                style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.tonalIcon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add),
+                label: const Text(AppStrings.specialDayAdd),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                AppStrings.specialDaySection,
+                style: text.titleSmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text(AppStrings.specialDayAdd),
+            ),
+          ],
+        ),
+        Expanded(
+          child: ListView(
+            children: <Widget>[
+              for (final SpecialDay day in days)
+                _SpecialDayRow(
+                  day: day,
+                  now: now,
+                  onTap: () => onEdit(day),
+                  highlight: day.repeatsYearly
+                      ? day.monthDayKey == selectedDay.month * 100 + selectedDay.day
+                      : isSameDay(day.date, selectedDay),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One personal date: what it is, when it next comes round, and how far off.
+class _SpecialDayRow extends StatelessWidget {
+  const _SpecialDayRow({
+    required this.day,
+    required this.now,
+    required this.onTap,
+    this.highlight = false,
+  });
+
+  final SpecialDay day;
+  final DateTime now;
+  final VoidCallback? onTap;
+
+  /// Whether this row is on the day currently selected in the grid.
+  final bool highlight;
+
+  static IconData _iconFor(SpecialDayKind kind) => switch (kind) {
+        SpecialDayKind.birthday => Icons.cake_outlined,
+        SpecialDayKind.anniversary => Icons.favorite_border,
+        SpecialDayKind.countdown => Icons.hourglass_bottom,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final int days = day.daysUntil(now);
+    final int? ordinal = day.ordinal(now);
+
+    final String countdown = switch (days) {
+      0 => AppStrings.specialDayToday,
+      > 0 => AppStrings.specialDayInDays(days),
+      // Only a one-off countdown can be behind: a yearly date always rolls
+      // forward to its next occurrence.
+      _ => AppStrings.specialDayPassedDays(-days),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppShapes.radius(AppShapes.small),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: highlight ? colors.tertiaryContainer : null,
+            borderRadius: AppShapes.radius(AppShapes.small),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(
+                _iconFor(day.kind),
+                size: 18,
+                color: highlight ? colors.onTertiaryContainer : colors.tertiary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      day.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodyLarge?.copyWith(
+                        color: highlight ? colors.onTertiaryContainer : null,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      <String>[
+                        AppDateFormatter.calendarDate(
+                          day.repeatsYearly ? day.nextOccurrence(now) : day.date,
+                          now,
+                        ),
+                        if (ordinal != null)
+                          day.kind == SpecialDayKind.birthday
+                              ? AppStrings.specialDayAge(ordinal)
+                              : AppStrings.specialDayYears(ordinal),
+                      ].join(' · '),
+                      style: text.bodySmall?.copyWith(
+                        color: highlight
+                            ? colors.onTertiaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                countdown,
+                style: text.labelLarge?.copyWith(
+                  color: highlight ? colors.onTertiaryContainer : colors.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

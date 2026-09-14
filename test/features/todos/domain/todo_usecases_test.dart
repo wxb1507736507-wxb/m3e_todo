@@ -193,36 +193,52 @@ void main() {
           sampleTodo(id: 'c'),
         ];
 
-    test('moves an item down using the list\'s already-adjusted index', () async {
-      // `onReorderItem` reports newIndex after the dragged item has been lifted
-      // out, so dragging a below b arrives here as (0, 1).
+    test('puts the moved todo in front of the one it was dropped on', () async {
       final List<Todo> result =
-          await ReorderTodos(FakeTodoRepository(three()))(0, 1);
-      expect(result.map((Todo t) => t.id), <String>['b', 'a', 'c']);
+          await ReorderTodos(FakeTodoRepository(three()))('a', 'b');
+      expect(result.map((Todo t) => t.id), <String>['a', 'b', 'c']);
+
+      final List<Todo> moved =
+          await ReorderTodos(FakeTodoRepository(three()))('a', 'c');
+      expect(moved.map((Todo t) => t.id), <String>['b', 'a', 'c']);
     });
 
-    test('moves an item to the end of the list', () async {
+    test('a null reference means the end of the collection', () async {
       final List<Todo> result =
-          await ReorderTodos(FakeTodoRepository(three()))(0, 2);
+          await ReorderTodos(FakeTodoRepository(three()))('a', null);
       expect(result.map((Todo t) => t.id), <String>['b', 'c', 'a']);
     });
 
     test('moves an item up', () async {
       final List<Todo> result =
-          await ReorderTodos(FakeTodoRepository(three()))(2, 0);
+          await ReorderTodos(FakeTodoRepository(three()))('c', 'a');
       expect(result.map((Todo t) => t.id), <String>['c', 'a', 'b']);
     });
 
-    test('clamps a target index past the end instead of throwing', () async {
+    test('an unknown reference appends instead of throwing', () async {
       final List<Todo> result =
-          await ReorderTodos(FakeTodoRepository(three()))(1, 99);
-      expect(result.map((Todo t) => t.id), <String>['a', 'c', 'b']);
+          await ReorderTodos(FakeTodoRepository(three()))('a', 'gone');
+      expect(result.map((Todo t) => t.id), <String>['b', 'c', 'a']);
     });
 
-    test('ignores an out-of-range source index', () async {
+    test('ignores a todo that is not in the collection', () async {
       final List<Todo> result =
-          await ReorderTodos(FakeTodoRepository(three()))(9, 0);
+          await ReorderTodos(FakeTodoRepository(three()))('nope', 'a');
       expect(result.map((Todo t) => t.id), <String>['a', 'b', 'c']);
+    });
+
+    test('a filtered list reorders against what it can see', () async {
+      // The rows on screen are a subset: 'b' is hidden by the filter. Dragging
+      // 'c' to the top must place it in front of 'a' and leave the hidden row
+      // where it was — this is the case that used to move the wrong todo.
+      final List<Todo> stored = three();
+      final List<Todo> visible = <Todo>[stored[0], stored[2]];
+
+      final String beforeId = visible.first.id;
+      final List<Todo> result =
+          await ReorderTodos(FakeTodoRepository(stored))('c', beforeId);
+
+      expect(result.map((Todo t) => t.id), <String>['c', 'a', 'b']);
     });
   });
 

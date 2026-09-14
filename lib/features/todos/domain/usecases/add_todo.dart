@@ -38,6 +38,7 @@ final class AddTodo extends TodoMutation {
         backgroundImage: draft.backgroundImage,
         reminder: draft.reminder,
         ringtoneUri: draft.ringtoneUri,
+        reminderLead: draft.reminderLead,
       );
       return <Todo>[todo, ...current];
     });

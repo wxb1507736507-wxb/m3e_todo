@@ -37,14 +37,25 @@ class TodoListView extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 96),
       buildDefaultDragHandles: false,
       itemCount: todos.length,
-      onReorderItem: (int oldIndex, int newIndex) => unawaited(
-        _guard(
-          ScaffoldMessenger.of(context),
-          () => ref
-              .read(todoListProvider.notifier)
-              .reorder(oldIndex, newIndex),
-        ),
-      ),
+      // The drop is described by *which todo* it landed in front of, not by two
+      // indices: with the list filtered (a status tab, a search) the visible
+      // rows are a subset of the stored ones, so an index means something
+      // different in each — which is how a drag used to move the wrong row.
+      onReorderItem: (int oldIndex, int newIndex) {
+        final List<Todo> withoutMoved = List<Todo>.of(todos)
+          ..removeAt(oldIndex);
+        final String? beforeId = newIndex < withoutMoved.length
+            ? withoutMoved[newIndex].id
+            : null;
+        unawaited(
+          _guard(
+            ScaffoldMessenger.of(context),
+            () => ref
+                .read(todoListProvider.notifier)
+                .reorder(todos[oldIndex].id, beforeId),
+          ),
+        );
+      },
       proxyDecorator: (Widget child, int index, Animation<double> animation) {
         return AnimatedBuilder(
           animation: animation,

@@ -1,3 +1,4 @@
+import '../../../notifications/domain/reminder.dart';
 import '../../domain/entities/todo.dart';
 import '../../domain/entities/todo_attachment.dart';
 import '../../domain/entities/todo_priority.dart';
@@ -14,10 +15,10 @@ abstract final class TodoModel {
   ///
   /// Version 2 adds `subtasks`, `attachments`, `accentColor` and
   /// `backgroundImage`; version 3 adds `textColor`; version 4 adds the per-todo
-  /// `reminder` and `ringtoneUri`. Every one of them is optional on read, so an
+  /// `reminder` and `ringtoneUri`; version 5 adds `reminderLead`. Every one of them is optional on read, so an
   /// older file loads unchanged and a newer one still opens in an older build —
   /// the fields it does not know are ignored.
-  static const int schemaVersion = 4;
+  static const int schemaVersion = 5;
 
   static Map<String, Object?> toJson(Todo todo) {
     return <String, Object?>{
@@ -48,6 +49,7 @@ abstract final class TodoModel {
       if (todo.reminder != TodoReminder.followApp)
         'reminder': todo.reminder.name,
       if (todo.ringtoneUri != null) 'ringtoneUri': todo.ringtoneUri,
+      if (todo.reminderLead != null) 'reminderLead': todo.reminderLead!.name,
     };
   }
 
@@ -87,6 +89,7 @@ abstract final class TodoModel {
       backgroundImage: _readString(json, 'backgroundImage'),
       reminder: _readReminder(json),
       ringtoneUri: _readString(json, 'ringtoneUri'),
+      reminderLead: _readReminderLead(json),
     );
   }
 
@@ -182,6 +185,19 @@ abstract final class TodoModel {
       }
     }
     return TodoReminder.followApp;
+  }
+
+  /// How early this todo wants its reminder, or `null` to follow the app
+  /// default. An unknown name is read as following the default rather than
+  /// costing the record.
+  static ReminderLead? _readReminderLead(Map<String, Object?> json) {
+    final String? raw = _readString(json, 'reminderLead');
+    for (final ReminderLead lead in ReminderLead.values) {
+      if (lead.name == raw) {
+        return lead;
+      }
+    }
+    return null;
   }
 
   static String? _readString(Map<String, Object?> json, String key) {

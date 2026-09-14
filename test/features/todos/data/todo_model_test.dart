@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:m3e_todo/features/notifications/domain/reminder.dart';
 import 'package:m3e_todo/features/todos/data/models/todo_model.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_attachment.dart';
@@ -56,6 +57,7 @@ void main() {
         backgroundImage: null,
         reminder: TodoReminder.followApp,
         ringtoneUri: null,
+        reminderLead: null,
       );
 
       final Map<String, Object?> json = TodoModel.toJson(original);
@@ -91,7 +93,7 @@ void main() {
       expect(TodoModel.fromJson(broken)?.textColor, isNull);
     });
 
-    test('carries a per-todo reminder and ringtone through the file', () {
+    test('carries a per-todo reminder, ringtone and lead through the file', () {
       final Todo original = sampleTodo().edit(
         title: '要响的',
         notes: null,
@@ -104,11 +106,13 @@ void main() {
         backgroundImage: null,
         reminder: TodoReminder.ring,
         ringtoneUri: 'content://media/internal/audio/media/42',
+        reminderLead: ReminderLead.threeDays,
       );
 
       final Map<String, Object?> json = TodoModel.toJson(original);
       expect(json['reminder'], 'ring');
       expect(json['ringtoneUri'], 'content://media/internal/audio/media/42');
+      expect(json['reminderLead'], 'threeDays');
       expect(TodoModel.fromJson(json), original);
     });
 

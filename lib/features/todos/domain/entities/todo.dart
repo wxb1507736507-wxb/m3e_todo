@@ -1,4 +1,5 @@
 import '../../../../core/utils/calendar.dart';
+import '../../../notifications/domain/reminder.dart';
 import 'todo_attachment.dart';
 import 'todo_priority.dart';
 import 'todo_reminder.dart';
@@ -43,6 +44,7 @@ class Todo {
     this.backgroundImage,
     this.reminder = TodoReminder.followApp,
     this.ringtoneUri,
+    this.reminderLead,
   });
 
   /// Creates a todo from raw user input, applying the domain's normalisation
@@ -65,6 +67,7 @@ class Todo {
     String? backgroundImage,
     TodoReminder reminder = TodoReminder.followApp,
     String? ringtoneUri,
+    ReminderLead? reminderLead,
   }) {
     final String normalizedTitle = title.trim();
     if (normalizedTitle.isEmpty) {
@@ -84,6 +87,7 @@ class Todo {
       backgroundImage: backgroundImage,
       reminder: reminder,
       ringtoneUri: ringtoneUri,
+      reminderLead: reminderLead,
     );
   }
 
@@ -137,6 +141,10 @@ class Todo {
   /// Only meaningful while [reminder] resolves to ringing; kept when it does not
   /// so switching a todo to "just a message" and back does not lose the choice.
   final String? ringtoneUri;
+
+  /// How early this todo's reminder arrives, or `null` to follow the app-wide
+  /// default — the same "follow unless I say otherwise" rule as [reminder].
+  final ReminderLead? reminderLead;
 
   bool get isCompleted => completedAt != null;
 
@@ -234,6 +242,7 @@ class Todo {
     required String? backgroundImage,
     required TodoReminder reminder,
     required String? ringtoneUri,
+    required ReminderLead? reminderLead,
   }) {
     final String normalizedTitle = title.trim();
     if (normalizedTitle.isEmpty) {
@@ -253,6 +262,7 @@ class Todo {
       backgroundImage: backgroundImage,
       reminder: reminder,
       ringtoneUri: ringtoneUri,
+      reminderLead: reminderLead,
       completedAt: completedAt,
     );
   }
@@ -280,6 +290,7 @@ class Todo {
       backgroundImage: backgroundImage,
       reminder: reminder,
       ringtoneUri: ringtoneUri,
+      reminderLead: reminderLead,
     );
   }
 
@@ -300,6 +311,7 @@ class Todo {
       backgroundImage: backgroundImage,
       reminder: reminder,
       ringtoneUri: ringtoneUri,
+      reminderLead: reminderLead,
     );
   }
 
@@ -322,7 +334,8 @@ class Todo {
         other.textColor == textColor &&
         other.backgroundImage == backgroundImage &&
         other.reminder == reminder &&
-        other.ringtoneUri == ringtoneUri;
+        other.ringtoneUri == ringtoneUri &&
+        other.reminderLead == reminderLead;
   }
 
   @override
@@ -341,6 +354,7 @@ class Todo {
         backgroundImage,
         reminder,
         ringtoneUri,
+        reminderLead,
       );
 
   @override

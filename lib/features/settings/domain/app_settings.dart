@@ -1,3 +1,5 @@
+import '../../notifications/domain/reminder.dart';
+
 /// Which colour scheme the app should follow.
 ///
 /// Deliberately a plain enum rather than Flutter's [ThemeMode] so the settings
@@ -10,15 +12,6 @@ enum AppThemeMode { system, light, dark }
 /// single seed, so these six values are the only colours that need maintaining.
 enum AppColorSeed { violet, ocean, teal, forest, amber, rose }
 
-/// How a due-date reminder makes itself noticed.
-enum ReminderMode {
-  /// Full sound + vibration through the "ring" notification channel.
-  ring,
-
-  /// A quiet notification through the "silent" channel.
-  silent,
-}
-
 /// User-controlled application preferences.
 ///
 /// Immutable: every change produces a new instance, which is what lets the
@@ -29,6 +22,7 @@ class AppSettings {
     this.themeMode = AppThemeMode.system,
     this.colorSeed = AppColorSeed.violet,
     this.reminderMode = ReminderMode.ring,
+    this.reminderLead = ReminderLead.onDue,
     this.ringtoneUri,
     this.backgroundImage,
     this.backgroundDim = defaultBackgroundDim,
@@ -43,8 +37,12 @@ class AppSettings {
   final AppThemeMode themeMode;
   final AppColorSeed colorSeed;
 
-  /// Whether due reminders ring or arrive silently.
+  /// Whether due reminders ring or arrive silently, for todos that have not
+  /// chosen for themselves.
   final ReminderMode reminderMode;
+
+  /// How early due reminders arrive, for todos that have not chosen.
+  final ReminderLead reminderLead;
 
   /// Chosen ringtone as a system `content://` URI, or `null` to follow the
   /// system default notification sound.
@@ -63,6 +61,7 @@ class AppSettings {
     AppThemeMode? themeMode,
     AppColorSeed? colorSeed,
     ReminderMode? reminderMode,
+    ReminderLead? reminderLead,
     String? ringtoneUri,
     bool clearRingtone = false,
     String? backgroundImage,
@@ -73,6 +72,7 @@ class AppSettings {
       themeMode: themeMode ?? this.themeMode,
       colorSeed: colorSeed ?? this.colorSeed,
       reminderMode: reminderMode ?? this.reminderMode,
+      reminderLead: reminderLead ?? this.reminderLead,
       // The sentinel flag separates "clear" from "leave it alone", which a
       // plain nullable parameter cannot express.
       ringtoneUri: clearRingtone ? null : (ringtoneUri ?? this.ringtoneUri),
@@ -92,6 +92,7 @@ class AppSettings {
         other.themeMode == themeMode &&
         other.colorSeed == colorSeed &&
         other.reminderMode == reminderMode &&
+        other.reminderLead == reminderLead &&
         other.ringtoneUri == ringtoneUri &&
         other.backgroundImage == backgroundImage &&
         other.backgroundDim == backgroundDim;
@@ -102,6 +103,7 @@ class AppSettings {
         themeMode,
         colorSeed,
         reminderMode,
+        reminderLead,
         ringtoneUri,
         backgroundImage,
         backgroundDim,
@@ -110,6 +112,7 @@ class AppSettings {
   @override
   String toString() =>
       'AppSettings(themeMode: $themeMode, colorSeed: $colorSeed, '
-      'reminderMode: $reminderMode, ringtone: $ringtoneUri, '
+      'reminderMode: $reminderMode, reminderLead: $reminderLead, '
+      'ringtone: $ringtoneUri, '
       'background: $backgroundImage @$backgroundDim)';
 }

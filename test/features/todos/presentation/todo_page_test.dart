@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/core/constants/app_strings.dart';
@@ -247,6 +248,89 @@ void main() {
     expect((await repository.loadAll()).single.reminder, TodoReminder.silent);
   });
 
+  testWidgets('dragging a row reorders what is stored, filtered or not', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    // The middle todo is completed, so the "进行中" tab hides it: the visible
+    // rows are then a *subset* of the stored ones, which is the case that used
+    // to move the wrong row or appear to do nothing.
+    final FakeTodoRepository repository = FakeTodoRepository(<Todo>[
+      sampleTodo(id: 'a', title: '第一件'),
+      sampleTodo(id: 'b', title: '已完成的事').completeAt(testNow),
+      sampleTodo(id: 'c', title: '第三件'),
+    ]);
+
+    await tester.pumpWidget(buildTestApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text(AppStrings.navActive),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('已完成的事'), findsNothing);
+
+    // Long-press the last row and drag it above the first.
+    final Offset from = tester.getCenter(find.text('第三件'));
+    final TestGesture drag = await tester.startGesture(from);
+    await tester.pump(kLongPressTimeout + kPressTimeout);
+    await drag.moveBy(const Offset(0, -200));
+    await tester.pump();
+    await drag.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      (await repository.loadAll()).map((Todo todo) => todo.id),
+      <String>['c', 'a', 'b'],
+      reason: 'the hidden completed row must keep its place',
+    );
+    // And the list on screen follows: '第三件' is above '第一件' now.
+    expect(
+      tester.getCenter(find.text('第三件')).dy,
+      lessThan(tester.getCenter(find.text('第一件')).dy),
+    );
+  });
+
+  testWidgets('a drop shows its new order before the write finishes', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    final FakeTodoRepository repository = FakeTodoRepository(<Todo>[
+      sampleTodo(id: 'a', title: '第一件'),
+      sampleTodo(id: 'b', title: '第二件'),
+    ]);
+
+    await tester.pumpWidget(buildTestApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    // Hold the write open: with the order shown only after it lands, the row
+    // would animate back to where it started and then jump — the flicker.
+    repository.holdWrites();
+    final TestGesture drag =
+        await tester.startGesture(tester.getCenter(find.text('第二件')));
+    await tester.pump(kLongPressTimeout + kPressTimeout);
+    await drag.moveBy(const Offset(0, -200));
+    await tester.pump();
+    await drag.up();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      tester.getCenter(find.text('第二件')).dy,
+      lessThan(tester.getCenter(find.text('第一件')).dy),
+      reason: 'the drop must land immediately, not after the disk',
+    );
+
+    repository.releaseWrite();
+    await tester.pumpAndSettle();
+    expect(
+      (await repository.loadAll()).map((Todo todo) => todo.id),
+      <String>['b', 'a'],
+    );
+  });
+
   testWidgets('deleting a todo removes it from the list and offers undo', (
     WidgetTester tester,
   ) async {
@@ -286,6 +370,15 @@ Future<void> _chooseColor(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
   await tester.tap(swatch);
   await tester.pumpAndSettle();
+}
+
+/// A phone-sized window: narrow enough for the bottom navigation bar and for the
+/// row heights a thumb actually drags.
+void _usePhoneWindow(WidgetTester tester) {
+  tester.view.physicalSize = const Size(720, 1400);
+  tester.view.devicePixelRatio = 2;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
 }
 
 /// Gives the editor a window tall enough for a swatch to be tapped once it has

@@ -8,6 +8,8 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/platform/app_platform.dart';
 import '../../media/presentation/image_crop_page.dart';
 import '../domain/app_settings.dart';
+import '../../notifications/domain/reminder.dart';
+import '../../notifications/presentation/reminder_lead_picker.dart';
 import 'appearance_sheet.dart';
 import 'settings_controller.dart';
 
@@ -333,6 +335,19 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet>
                 selected: <ReminderMode>{settings.reminderMode},
                 onSelectionChanged: (Set<ReminderMode> selection) =>
                     unawaited(controller.setReminderMode(selection.first)),
+              ),
+              const SizedBox(height: 14),
+              Text(AppStrings.reminderLeadLabel, style: text.labelLarge),
+              const SizedBox(height: 8),
+              ReminderLeadPicker(
+                value: settings.reminderLead,
+                // No "follow the default" here: this *is* the default, so the
+                // picker only ever hands back a concrete lead.
+                onChanged: (ReminderLead? lead) {
+                  if (lead != null) {
+                    controller.setReminderLead(lead);
+                  }
+                },
               ),
               const SizedBox(height: 6),
               Text(

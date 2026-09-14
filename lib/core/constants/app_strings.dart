@@ -198,6 +198,41 @@ abstract final class AppStrings {
   static const String calendarJumpToDate = '跳转到指定日期';
   static const String calendarNoTodos = '这一天没有待办记录';
   static String calendarMonthLabel(int year, int month) => '$year年$month月';
+  // --- Birthdays, anniversaries and countdowns ---------------------------------------
+
+  static const String specialDaySection = '纪念日';
+  static const String calendarPaneTodos = '当天待办';
+  static const String specialDayNew = '新增纪念日';
+  static const String specialDayEdit = '编辑纪念日';
+  static const String specialDayTitleHint = '例如：妈妈生日、结婚纪念日';
+  static const String specialDayKindLabel = '类型';
+  static const String specialDayBirthday = '生日';
+  static const String specialDayAnniversary = '纪念日';
+  static const String specialDayCountdown = '倒数日';
+  static const String specialDayDateLabel = '日期';
+  static const String specialDayTargetLabel = '目标日期';
+  static const String specialDayDateHelp = '选择日期';
+  static const String specialDayYearlyHint = '每年都会出现在日历上';
+  static const String specialDayCountdownHint = '只统计这一次，倒数到目标日期为止';
+  static const String specialDayAdd = '添加纪念日';
+  static const String specialDayEmpty = '还没有纪念日，点击右下角添加生日、纪念日或倒数日';
+  static const String specialDayToday = '就是今天';
+  static const String specialDayOverdueMark = '已过';
+
+  /// Days until a recurring date comes round again.
+  static String specialDayInDays(int days) => '还有 $days 天';
+
+  /// Days since a one-off countdown's target went by.
+  static String specialDayPassedDays(int days) => '已过 $days 天';
+
+  /// "30 岁", for a birthday.
+  static String specialDayAge(int years) => '$years 岁';
+
+  /// "第 5 年", for an anniversary.
+  static String specialDayYears(int years) => '第 $years 年';
+
+  static String specialDayDeleted(String title) => '已删除「$title」';
+
   static const String calendarDueLegend = '到期';
   static const String calendarCompletedLegend = '完成';
 
@@ -211,6 +246,15 @@ abstract final class AppStrings {
   static const String reminderModeRing = '响铃';
   static const String reminderModeSilent = '仅消息';
   static const String reminderFollowApp = '跟随默认';
+  static const String reminderLeadLabel = '提醒时间';
+  static const String reminderLeadOnDue = '当天';
+  static const String reminderLeadOneDay = '提前 1 天';
+  static const String reminderLeadThreeDays = '提前 3 天';
+  static const String reminderLeadOneWeek = '提前 1 周';
+  static const String reminderLeadHint = '提醒时间以到期日为准，提前量按整天计算';
+
+  /// The deadline, shown on a reminder that arrives before it.
+  static String reminderDueOn(String date) => '到期日：$date';
   static const String reminderDefaultHint = '这里设置的是默认值，每个待办都可以在编辑页单独选择';
 
   // --- Per-todo reminder (editor) ---------------------------------------------------

@@ -9,6 +9,7 @@ import '../../../core/storage/document_store.dart';
 import '../../../core/storage/storage_providers.dart';
 import '../data/settings_repository.dart';
 import '../domain/app_settings.dart';
+import '../../notifications/domain/reminder.dart';
 
 /// File name of the settings document inside the app data directory.
 const String settingsFileName = 'settings.json';
@@ -63,6 +64,14 @@ class SettingsController extends Notifier<AppSettings> {
       return;
     }
     _apply(state.copyWith(reminderMode: mode));
+  }
+
+  /// Sets how early reminders arrive by default.
+  void setReminderLead(ReminderLead lead) {
+    if (state.reminderLead == lead) {
+      return;
+    }
+    _apply(state.copyWith(reminderLead: lead));
   }
 
   /// Sets the ringtone reminders sound with by default, or back to the system

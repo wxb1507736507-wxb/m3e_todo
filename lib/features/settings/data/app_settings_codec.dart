@@ -1,3 +1,4 @@
+import '../../notifications/domain/reminder.dart';
 import '../domain/app_settings.dart';
 
 /// Translates [AppSettings] to and from the JSON shape written to disk.
@@ -11,7 +12,7 @@ abstract final class AppSettingsCodec {
   /// Both are optional on read, so a version-2 file loads unchanged and a
   /// version-3 file still opens in an older build, where the extra fields are
   /// simply ignored.
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
 
   static Map<String, Object?> toJson(AppSettings settings) {
     return <String, Object?>{
@@ -19,6 +20,7 @@ abstract final class AppSettingsCodec {
       'themeMode': settings.themeMode.name,
       'colorSeed': settings.colorSeed.name,
       'reminderMode': settings.reminderMode.name,
+      'reminderLead': settings.reminderLead.name,
       // Absent rather than null on disk: absent means "follow the system".
       if (settings.ringtoneUri != null) 'ringtoneUri': settings.ringtoneUri,
       // Same rule: absent means "no background, use the theme surface".
@@ -52,6 +54,11 @@ abstract final class AppSettingsCodec {
         ReminderMode.values,
         json['reminderMode'],
         ReminderMode.ring,
+      ),
+      reminderLead: _enumByName(
+        ReminderLead.values,
+        json['reminderLead'],
+        ReminderLead.onDue,
       ),
       ringtoneUri: json['ringtoneUri'] is String ? json['ringtoneUri'] as String : null,
       backgroundImage:

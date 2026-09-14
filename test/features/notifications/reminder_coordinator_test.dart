@@ -1,6 +1,7 @@
+import 'package:m3e_todo/features/calendar/domain/entities/special_day.dart';
+import 'package:m3e_todo/features/notifications/domain/reminder.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/features/notifications/reminder_coordinator.dart';
-import 'package:m3e_todo/features/settings/domain/app_settings.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_reminder.dart';
 
@@ -221,6 +222,181 @@ void main() {
         todoRingtone: 'content://todo',
       );
       expect(otherTone, isNot(ringing));
+    });
+  });
+
+  group('advance notice', () {
+    /// One todo due on the 20th, judged from the 10th.
+    PendingReminder planned(ReminderLead lead, {ReminderLead? todoLead}) {
+      final Map<String, PendingReminder> result = desiredReminders(
+        todos: <Todo>[
+          sampleTodo(
+            id: 'a',
+            dueDate: DateTime(2026, 3, 20),
+            reminderLead: todoLead,
+          ),
+        ],
+        reminderMode: ReminderMode.ring,
+        lead: lead,
+        now: now,
+      );
+      return result['a']!;
+    }
+
+    test('a week of notice fires at 09:00 seven days before the deadline', () {
+      expect(planned(ReminderLead.oneWeek).triggerAt, DateTime(2026, 3, 13, 9));
+    });
+
+    test('three days, one day and same-day land on the right mornings', () {
+      expect(planned(ReminderLead.threeDays).triggerAt, DateTime(2026, 3, 17, 9));
+      expect(planned(ReminderLead.oneDay).triggerAt, DateTime(2026, 3, 19, 9));
+      expect(planned(ReminderLead.onDue).triggerAt, DateTime(2026, 3, 20, 9));
+    });
+
+    test("a todo's own lead beats the app-wide one", () {
+      expect(
+        planned(ReminderLead.onDue, todoLead: ReminderLead.oneWeek).triggerAt,
+        DateTime(2026, 3, 13, 9),
+      );
+      expect(
+        planned(ReminderLead.oneWeek, todoLead: ReminderLead.onDue).triggerAt,
+        DateTime(2026, 3, 20, 9),
+      );
+    });
+
+    test('a lead that no longer fits falls back to the deadline morning', () {
+      // Due in two days, asked for a week's notice: the requested moment is
+      // already gone. Being reminded late beats not being reminded at all.
+      final Map<String, PendingReminder> result = desiredReminders(
+        todos: <Todo>[sampleTodo(id: 'a', dueDate: DateTime(2026, 3, 12))],
+        reminderMode: ReminderMode.ring,
+        lead: ReminderLead.oneWeek,
+        now: now,
+      );
+
+      expect(result['a']!.triggerAt, DateTime(2026, 3, 12, 9));
+    });
+
+    test('a deadline that has also passed is dropped', () {
+      final Map<String, PendingReminder> result = desiredReminders(
+        todos: <Todo>[sampleTodo(id: 'a', dueDate: DateTime(2026, 3, 10))],
+        reminderMode: ReminderMode.ring,
+        lead: ReminderLead.oneWeek,
+        now: now,
+      );
+
+      expect(result, isEmpty);
+    });
+
+    test('an early reminder says when the deadline is', () {
+      // A week's warning without the date is a puzzle: the title alone says
+      // nothing about when.
+      expect(planned(ReminderLead.oneWeek).body, contains('3月20日'));
+      expect(planned(ReminderLead.onDue).body, '');
+    });
+
+    test('the notes survive alongside the deadline', () {
+      final Map<String, PendingReminder> result = desiredReminders(
+        todos: <Todo>[
+          sampleTodo(id: 'a', dueDate: DateTime(2026, 3, 20), notes: '带上合同'),
+        ],
+        reminderMode: ReminderMode.ring,
+        lead: ReminderLead.threeDays,
+        now: now,
+      );
+
+      expect(result['a']!.body, startsWith('带上合同'));
+      expect(result['a']!.body, contains('3月20日'));
+    });
+
+    test('a changed lead time is a different reminder', () {
+      // The coordinator only schedules what differs from the last plan.
+      expect(planned(ReminderLead.oneWeek), isNot(planned(ReminderLead.onDue)));
+    });
+  });
+
+  group('personal dates', () {
+    /// A birthday on 3 October, judged from 10 March.
+    SpecialDay birthday({SpecialDayKind kind = SpecialDayKind.birthday}) {
+      return SpecialDay.create(
+        id: 'd1',
+        title: '妈妈生日',
+        kind: kind,
+        date: DateTime(1996, 10, 3),
+      );
+    }
+
+    Map<String, PendingReminder> planned({
+      List<SpecialDay>? days,
+      ReminderLead lead = ReminderLead.onDue,
+    }) {
+      return desiredSpecialDayReminders(
+        days: days ?? <SpecialDay>[birthday()],
+        reminderMode: ReminderMode.ring,
+        lead: lead,
+        now: now,
+      );
+    }
+
+    test('a birthday reminds on the day itself, every year', () {
+      final PendingReminder reminder = planned()['d1']!;
+      // Mid-March, so this year's 3 October is still ahead.
+      expect(reminder.triggerAt, DateTime(2026, 10, 3, 9));
+      expect(reminder.ring, isTrue);
+    });
+
+    test('the lead time applies to a birthday too', () {
+      // A week's notice is exactly what a birthday wants: time to buy something.
+      expect(
+        planned(lead: ReminderLead.oneWeek)['d1']!.triggerAt,
+        DateTime(2026, 9, 26, 9),
+      );
+    });
+
+    test('a birthday already past this year waits for the next one', () {
+      final SpecialDay passed = SpecialDay.create(
+        id: 'd2',
+        title: '爸爸生日',
+        kind: SpecialDayKind.birthday,
+        date: DateTime(1970, 2, 1),
+      );
+      expect(planned(days: <SpecialDay>[passed])['d2']!.triggerAt,
+          DateTime(2027, 2, 1, 9));
+    });
+
+    test('a countdown reminds on its target, and stops once it is past', () {
+      final SpecialDay upcoming = SpecialDay.create(
+        id: 'd3',
+        title: '考试',
+        kind: SpecialDayKind.countdown,
+        date: DateTime(2026, 3, 20),
+      );
+      expect(planned(days: <SpecialDay>[upcoming])['d3']!.triggerAt,
+          DateTime(2026, 3, 20, 9));
+
+      final SpecialDay gone = SpecialDay.create(
+        id: 'd4',
+        title: '交房租',
+        kind: SpecialDayKind.countdown,
+        date: DateTime(2026, 3, 7),
+      );
+      expect(planned(days: <SpecialDay>[gone]), isEmpty);
+    });
+
+    test('silent mode keeps birthdays quiet too', () {
+      final Map<String, PendingReminder> quiet = desiredSpecialDayReminders(
+        days: <SpecialDay>[birthday()],
+        reminderMode: ReminderMode.silent,
+        now: now,
+      );
+      expect(quiet['d1']!.ring, isFalse);
+      expect(quiet['d1']!.ringtoneUri, isNull);
+    });
+
+    test('the notification says which birthday it is', () {
+      // "妈妈生日" alone leaves the user to work out which one.
+      expect(planned()['d1']!.body, contains('生日'));
+      expect(planned()['d1']!.body, contains('30 岁'));
     });
   });
 }

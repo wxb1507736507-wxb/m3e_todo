@@ -1,3 +1,4 @@
+import '../../../notifications/domain/reminder.dart';
 import 'todo_attachment.dart';
 import 'todo_priority.dart';
 import 'todo_reminder.dart';
@@ -21,6 +22,7 @@ class TodoDraft {
     this.backgroundImage,
     this.reminder = TodoReminder.followApp,
     this.ringtoneUri,
+    this.reminderLead,
   });
 
   final String title;
@@ -51,6 +53,9 @@ class TodoDraft {
 
   /// This todo's own ringtone URI, or `null` to use the app-wide one.
   final String? ringtoneUri;
+
+  /// How early the reminder arrives, or `null` to follow the app default.
+  final ReminderLead? reminderLead;
 
   @override
   String toString() => 'TodoDraft("$title", $priority, due: $dueDate, '

@@ -197,6 +197,38 @@ internal object AlarmStore {
         prefs(context).edit().remove(id.toString()).apply()
     }
 
+    /**
+     * Makes the stored schedule exactly [alarms].
+     *
+     * Everything stored but not in the list is cancelled first: those alarms
+     * belong to todos that no longer exist, so the Dart side cannot name them to
+     * cancel them one by one — and a reminder for a deleted todo firing days
+     * later is exactly the kind of ghost this method exists to prevent.
+     */
+    fun replaceAll(
+        context: Context,
+        alarms: List<Map<*, *>>,
+    ) {
+        val wanted = alarms.mapNotNull { (it["notificationId"] as? Number)?.toInt() }.toSet()
+        for (key in prefs(context).all.keys) {
+            val id = key.toIntOrNull() ?: continue
+            if (id !in wanted) {
+                cancel(context, id)
+            }
+        }
+        for (args in alarms) {
+            schedule(
+                context,
+                (args["notificationId"] as Number).toInt(),
+                args["title"] as? String ?: "",
+                args["body"] as? String ?: "",
+                (args["triggerAtMillis"] as Number).toLong(),
+                args["ring"] as? Boolean ?: false,
+                args["ringtoneUri"] as? String,
+            )
+        }
+    }
+
     fun remove(context: Context, id: Int) {
         prefs(context).edit().remove(id.toString()).apply()
     }
@@ -468,6 +500,12 @@ class MainActivity : FlutterActivity() {
             }
             "cancelAlarm" -> {
                 AlarmStore.cancel(this, (arguments as Map<*, *>)["notificationId"] as Int)
+                result.success(null)
+            }
+            // Replaces the whole schedule. Sent once per app run, so the device
+            // never keeps counting down to a todo that has since been deleted.
+            "syncAlarms" -> {
+                AlarmStore.replaceAll(this, arguments as List<Map<*, *>>)
                 result.success(null)
             }
             // Batched forms of the two above. Scheduling used to cost one channel

@@ -4,6 +4,7 @@ import '../../domain/entities/todo.dart';
 import '../../domain/entities/todo_draft.dart';
 import '../../domain/usecases/clear_completed_todos.dart';
 import '../../domain/usecases/delete_todo.dart';
+import '../../domain/usecases/reorder_todos.dart';
 import '../providers/todo_providers.dart';
 
 /// Owns the todo collection and exposes one method per user intention.
@@ -47,8 +48,49 @@ class TodoListController extends AsyncNotifier<List<Todo>> {
     );
   }
 
-  Future<void> reorder(int oldIndex, int newIndex) {
-    return _publish(() => ref.read(reorderTodosProvider)(oldIndex, newIndex));
+  /// Moves a todo to sit in front of [beforeId], or last when it is `null`.
+  ///
+  /// The one *optimistic* write in this controller, and deliberately so: the
+  /// drag animation has already shown the user where the row landed, so waiting
+  /// for the disk before the list agrees is exactly the flicker this method
+  /// exists to remove — the dropped row animates back to its old slot and then
+  /// jumps to the new one. The order in memory is updated at once, the write
+  /// happens behind it, and a failed write puts the old order back.
+  Future<void> reorder(String movedId, String? beforeId) async {
+    final List<Todo>? current = state.value;
+    if (current == null) {
+      return;
+    }
+    final List<Todo> optimistic = reorderTodos(current, movedId, beforeId);
+    if (_sameOrder(optimistic, current)) {
+      return;
+    }
+
+    state = AsyncData<List<Todo>>(optimistic);
+    try {
+      final List<Todo> stored =
+          await ref.read(reorderTodosProvider)(movedId, beforeId);
+      if (ref.mounted) {
+        state = AsyncData<List<Todo>>(stored);
+      }
+    } on Object {
+      if (ref.mounted) {
+        state = AsyncData<List<Todo>>(current);
+      }
+      rethrow;
+    }
+  }
+
+  static bool _sameOrder(List<Todo> a, List<Todo> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Deletes a todo and reports what was removed, so the caller can offer undo.

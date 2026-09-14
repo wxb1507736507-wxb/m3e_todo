@@ -1,3 +1,4 @@
+import 'package:m3e_todo/features/notifications/domain/reminder.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_priority.dart';
 import 'package:m3e_todo/features/todos/domain/entities/todo_reminder.dart';
@@ -15,6 +16,7 @@ Todo sampleTodo({
   String? backgroundImage,
   TodoReminder reminder = TodoReminder.followApp,
   String? ringtoneUri,
+  ReminderLead? reminderLead,
 }) {
   return Todo(
     id: id,
@@ -27,6 +29,7 @@ Todo sampleTodo({
     backgroundImage: backgroundImage,
     reminder: reminder,
     ringtoneUri: ringtoneUri,
+    reminderLead: reminderLead,
   );
 }
 

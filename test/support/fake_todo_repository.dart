@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:m3e_todo/features/todos/domain/entities/todo.dart';
 import 'package:m3e_todo/features/todos/domain/repositories/todo_repository.dart';
 
@@ -13,12 +15,29 @@ class FakeTodoRepository implements TodoRepository {
   List<Todo> _todos;
   int saveCount = 0;
 
+  /// Held open to keep a write *pending* while a test inspects what the UI shows
+  /// in the meantime — the difference between "optimistic" and "after the disk".
+  Completer<void>? _pending;
+
+  /// Makes the next [saveAll] wait until [releaseWrite] is called.
+  void holdWrites() => _pending = Completer<void>();
+
+  void releaseWrite() {
+    final Completer<void>? pending = _pending;
+    _pending = null;
+    pending?.complete();
+  }
+
   @override
   Future<List<Todo>> loadAll() async => List<Todo>.unmodifiable(_todos);
 
   @override
   Future<void> saveAll(List<Todo> todos) async {
     saveCount++;
+    final Completer<void>? pending = _pending;
+    if (pending != null) {
+      await pending.future;
+    }
     _todos = List<Todo>.of(todos);
   }
 }

@@ -12,6 +12,8 @@ import '../../../../core/utils/app_date_formatter.dart';
 import '../../../../core/utils/color_utils.dart';
 import '../../../media/presentation/color_extract_page.dart';
 import '../../../media/presentation/image_crop_page.dart';
+import '../../../notifications/domain/reminder.dart';
+import '../../../notifications/presentation/reminder_lead_picker.dart';
 import '../../../settings/domain/app_settings.dart';
 import '../../../settings/presentation/settings_controller.dart';
 import '../../domain/entities/todo.dart';
@@ -76,6 +78,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
   DateTime? _dueDate;
   TodoReminder _reminder = TodoReminder.followApp;
   String? _ringtoneUri;
+  ReminderLead? _reminderLead;
   List<_SubtaskRow> _subtaskRows = <_SubtaskRow>[];
   List<TodoAttachment> _attachments = <TodoAttachment>[];
   int? _accentColor;
@@ -115,6 +118,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
     _dueDate = existing?.dueDate;
     _reminder = existing?.reminder ?? TodoReminder.followApp;
     _ringtoneUri = existing?.ringtoneUri;
+    _reminderLead = existing?.reminderLead;
     _subtaskRows = <_SubtaskRow>[
       for (final TodoSubtask subtask in existing?.subtasks ?? const <TodoSubtask>[])
         _SubtaskRow(
@@ -378,6 +382,7 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
       backgroundImage: _backgroundImage,
       reminder: _reminder,
       ringtoneUri: _ringtoneUri,
+      reminderLead: _reminderLead,
     );
 
     try {
@@ -643,6 +648,20 @@ class _TodoEditorSheetState extends ConsumerState<TodoEditorSheet> {
             ],
           ),
         ],
+        const SizedBox(height: 14),
+        Text(AppStrings.reminderLeadLabel, style: text.labelLarge),
+        const SizedBox(height: 8),
+        ReminderLeadPicker(
+          value: _reminderLead,
+          allowFollowDefault: true,
+          onChanged: (ReminderLead? lead) =>
+              setState(() => _reminderLead = lead),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          AppStrings.reminderLeadHint,
+          style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+        ),
       ],
     );
   }

@@ -835,36 +835,41 @@ void main() {
 
     await tester.tap(find.byTooltip(AppStrings.timetableNextWeek));
     await tester.pump();
-    // Mid-flight: the outgoing week and the incoming one are both laid out, which
+    // Mid-flight: the week leaving and the week arriving are both laid out, which
     // is what "sliding" means — a week that simply replaced the other would show
     // one grid here.
     await tester.pump(const Duration(milliseconds: 60));
     final Finder clocks = find.text('08:00');
     expect(clocks, findsNWidgets(2));
 
-    // And they are *not* on top of each other: one is still where it was, the
-    // other is on its way in from the side. Two weeks drawn in the same place at
-    // once is the 重影 this transition exists to avoid, and it is a difference no
-    // amount of "both grids are present" would catch.
-    final List<Offset> positions = <Offset>[
-      tester.getTopLeft(clocks.at(0)),
-      tester.getTopLeft(clocks.at(1)),
-    ];
+    // And the two are moving *together*, one page's width apart: the one leaving
+    // has gone left of where it was, the one arriving is still right of where it
+    // will end up, and they are nowhere near each other. Two weeks in the same
+    // place — or one sliding *over* the other — is the 虚影 this transition
+    // exists to avoid, and it is a difference that "both grids are present" would
+    // never catch.
+    final Offset leaving = tester.getTopLeft(clocks.at(0));
+    final Offset arriving = tester.getTopLeft(clocks.at(1));
     expect(
-      positions.where((Offset o) => (o.dx - settled.dx).abs() < 1),
-      hasLength(1),
-      reason: 'the week being covered stays put',
+      leaving.dx,
+      lessThan(settled.dx - 20),
+      reason: 'the week being left slides out',
     );
     expect(
-      positions.where((Offset o) => o.dx - settled.dx > 20),
-      hasLength(1),
-      reason: 'the arriving week is still off to the side',
+      arriving.dx,
+      greaterThan(settled.dx + 20),
+      reason: 'the week arriving is still on its way in',
+    );
+    expect(
+      arriving.dx - leaving.dx,
+      greaterThan(200),
+      reason: 'and the two pages are apart, not stacked',
     );
 
     await tester.pumpAndSettle();
     expect(find.text('08:00'), findsOneWidget);
     expect(find.textContaining(AppStrings.timetableWeek(2)), findsOneWidget);
-    // Covered and gone: nothing is drawn twice once the slide is over.
+    // The leaving week is gone once it is off-screen: nothing is drawn twice.
     expect(tester.getTopLeft(find.text('08:00')), settled);
   });
 

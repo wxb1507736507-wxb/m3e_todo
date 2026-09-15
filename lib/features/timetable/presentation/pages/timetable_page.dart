@@ -757,16 +757,17 @@ class _AddHereButton extends StatelessWidget {
   }
 }
 
-/// One week's grid arriving over the last one.
+/// The whole week sliding out while the next one slides in.
 ///
-/// A cover transition rather than a cross-fade, and the difference is what the
-/// user sees: two grids fading through each other put two weeks' text in the
-/// same place at half opacity, which reads as a printing error. Here the old
-/// week stays exactly where it was and the new one slides across it, so at every
-/// instant each piece of text is in one place at full strength.
+/// Two earlier attempts, and what was wrong with each is the design: fading the
+/// pair needed an offscreen layer per frame and dropped frames; sliding only the
+/// *arriving* week over a stationary one left the two legible on top of each
+/// other — 虚影, a ghost of the week underneath, which is what a half-covered page
+/// looks like.
 ///
-/// The old week is dropped the moment it is fully covered, so the doubled paint
-/// only lasts as long as the movement does.
+/// So both move, a screen apart and never overlapping: one week leaves the way a
+/// page does, the other follows it in. What the user sees is a single surface
+/// being pushed sideways, which is what "整体滑动" means.
 class _WeekSlide extends StatefulWidget {
   const _WeekSlide({
     required this.week,
@@ -820,21 +821,30 @@ class _WeekSlideState extends State<_WeekSlide>
     curve: Curves.easeOutCubic,
   );
 
-  /// The week being covered, kept only for as long as the slide lasts.
+  /// The week being left behind, kept only for as long as the slide lasts.
   int? _under;
 
-  Animation<Offset>? _position;
+  /// Where the arriving week starts, and where the leaving one ends: a whole
+  /// screen apart, and they travel together.
+  Animation<Offset>? _arrival;
+  Animation<Offset>? _departure;
   double? _positionFrom;
 
-  Animation<Offset> _arrivalFrom(double from) {
-    if (_position == null || _positionFrom != from) {
-      _positionFrom = from;
-      _position = Tween<Offset>(
-        begin: Offset(from, 0),
-        end: Offset.zero,
-      ).animate(_curve);
+  void _positionsFor(double from) {
+    if (_positionFrom == from && _arrival != null) {
+      return;
     }
-    return _position!;
+    _positionFrom = from;
+    _arrival = Tween<Offset>(
+      begin: Offset(from, 0),
+      end: Offset.zero,
+    ).animate(_curve);
+    // The mirror of it, so the two move as one surface: what the arriving week
+    // travels, the leaving week travels the other way, and they never overlap.
+    _departure = Tween<Offset>(
+      begin: Offset.zero,
+      end: Offset(-from, 0),
+    ).animate(_curve);
   }
 
   @override
@@ -857,27 +867,34 @@ class _WeekSlideState extends State<_WeekSlide>
   @override
   Widget build(BuildContext context) {
     final int? under = _under;
+    _positionsFor(widget.slideFrom);
 
-    return Stack(
-      fit: StackFit.expand,
-      children: <Widget>[
-        // Always the first slot, whether or not it has anything in it: the two
-        // slots keep their places in the tree so that neither week is ever
-        // rebuilt because it moved.
-        IgnorePointer(
-          child: under == null
-              ? const SizedBox.shrink()
-              : RepaintBoundary(child: widget.builder(under)),
-        ),
-        // Clipped, because a page sliding in from the side is off-screen at the
-        // start and must not paint over the header above it.
-        ClipRect(
-          child: SlideTransition(
-            position: _arrivalFrom(widget.slideFrom),
+    // Clipped, because a page on its way in or out is off-screen at the start and
+    // must not paint over the header above it, or past the edge of the grid.
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          // Always the first slot, whether or not it has anything in it: the two
+          // slots keep their places in the tree so that neither week is ever
+          // rebuilt because it moved.
+          //
+          // The leaving week is untouchable: it is on its way out, and a tap
+          // aimed at what has arrived must not land on what is leaving.
+          IgnorePointer(
+            child: under == null
+                ? const SizedBox.shrink()
+                : SlideTransition(
+                    position: _departure!,
+                    child: RepaintBoundary(child: widget.builder(under)),
+                  ),
+          ),
+          SlideTransition(
+            position: _arrival!,
             child: RepaintBoundary(child: widget.builder(widget.week)),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

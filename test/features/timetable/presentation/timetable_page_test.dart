@@ -831,6 +831,7 @@ void main() {
 
     // Settled: one grid.
     expect(find.text('08:00'), findsOneWidget);
+    final Offset settled = tester.getTopLeft(find.text('08:00'));
 
     await tester.tap(find.byTooltip(AppStrings.timetableNextWeek));
     await tester.pump();
@@ -838,11 +839,33 @@ void main() {
     // is what "sliding" means — a week that simply replaced the other would show
     // one grid here.
     await tester.pump(const Duration(milliseconds: 60));
-    expect(find.text('08:00'), findsNWidgets(2));
+    final Finder clocks = find.text('08:00');
+    expect(clocks, findsNWidgets(2));
+
+    // And they are *not* on top of each other: one is still where it was, the
+    // other is on its way in from the side. Two weeks drawn in the same place at
+    // once is the 重影 this transition exists to avoid, and it is a difference no
+    // amount of "both grids are present" would catch.
+    final List<Offset> positions = <Offset>[
+      tester.getTopLeft(clocks.at(0)),
+      tester.getTopLeft(clocks.at(1)),
+    ];
+    expect(
+      positions.where((Offset o) => (o.dx - settled.dx).abs() < 1),
+      hasLength(1),
+      reason: 'the week being covered stays put',
+    );
+    expect(
+      positions.where((Offset o) => o.dx - settled.dx > 20),
+      hasLength(1),
+      reason: 'the arriving week is still off to the side',
+    );
 
     await tester.pumpAndSettle();
     expect(find.text('08:00'), findsOneWidget);
     expect(find.textContaining(AppStrings.timetableWeek(2)), findsOneWidget);
+    // Covered and gone: nothing is drawn twice once the slide is over.
+    expect(tester.getTopLeft(find.text('08:00')), settled);
   });
 
   testWidgets('a course is renamed and then deleted from its own editor', (

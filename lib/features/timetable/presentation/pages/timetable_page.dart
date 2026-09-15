@@ -291,87 +291,94 @@ class _BodyState extends ConsumerState<_Body> {
               // appeared is expected to disappear.
               behavior: HitTestBehavior.deferToChild,
               onTap: _disarm,
-              // The week slides in from the side it came from, briefly. Two grids
-              // exist for those 180ms — the whole cost of the effect — and the two
-              // things that keep that cost down are here rather than in the
-              // heights: no fade, because fading a full-screen grid needs an
-              // offscreen layer *per frame* and the slide already reads as motion;
-              // and a repaint boundary, so the moving week is drawn once and then
-              // moved as a layer instead of being repainted at every step.
+              // The new week slides in over the old one, and the old one waits
+              // underneath until it is covered.
               //
-              // Measured on the device with the frame logger: with the fade, the
-              // switch ran at a p50 of 12ms and a p99 of 23ms — over the 16.7ms
-              // a frame has, so it dropped frames; without it the same gesture
-              // sits under the budget.
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 160),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeIn,
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: Offset(0.18 * _slideFrom, 0),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey<int>(week),
-                  child: RepaintBoundary(
-                    child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 96),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  _PeriodColumn(periods: term.periods),
-                  // Two columns or seven, from the term's own answer: a timetable
-                  // with no Saturday classes is not improved by two empty ones.
-                  for (final int weekday in term.shownWeekdays)
-                    Expanded(
-                      child: _DayColumn(
-                        term: term,
-                        week: week,
-                        weekday: weekday,
-                        meetings: timetable.meetingsOnDay(week, weekday),
-                        otherWeeks: term.showOtherWeeks
-                            ? timetable.meetingsOnDayInOtherWeeks(week, weekday)
-                            : const <CourseMeeting>[],
-                        isToday: _isToday(term, week, weekday, now),
-                        armedPeriod: _armedWeekday == weekday ? _armedPeriod : null,
-                        onCellTap: (int period) => _arm(weekday, period),
-                        onAddHere: (int period) {
-                          _disarm();
-                          unawaited(
-                            showCourseEditorSheet(
-                              context,
-                              weekday: weekday,
-                              period: period,
-                            ),
-                          );
-                        },
-                        onCourseTap: (Course course) {
-                          _disarm();
-                          unawaited(
-                            showCourseDetailSheet(
-                              context,
-                              course: course,
-                              term: term,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              ),
-                  ),
+              // Three attempts, and the reason each was dropped is the whole
+              // design: fading both grids needed an offscreen layer per frame
+              // (p99 23ms, over the 16.7ms a frame has); sliding both, with the
+              // outgoing one still painted at full opacity, left the two weeks
+              // legible on top of each other — 重影, which is worse than a slow
+              // frame; and this covers, so at every instant the screen shows one
+              // week's text in one place, moving.
+              child: _WeekSlide(
+                week: week,
+                slideFrom: _slideFrom,
+                builder: (int shown) => _grid(
+                  context,
+                  term: term,
+                  timetable: timetable,
+                  now: now,
+                  week: shown,
                 ),
               ),
             ),
           ),
         ),
-        ),
       ],
+    );
+  }
+
+  /// One week of the grid.
+  ///
+  /// A function of the week rather than a widget built once, because the slide
+  /// needs two of them at a time and the two have to keep their places in the
+  /// tree: a grid that is *moved* from one slot to another loses its element —
+  /// and its scroll position, and everything under it — and is rebuilt from
+  /// scratch, which is exactly the cost that made the first frame of a switch
+  /// the slowest one.
+  Widget _grid(
+    BuildContext context, {
+    required Term term,
+    required Timetable timetable,
+    required DateTime now,
+    required int week,
+  }) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 96),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _PeriodColumn(periods: term.periods),
+          // Two columns or seven, from the term's own answer: a timetable
+          // with no Saturday classes is not improved by two empty ones.
+          for (final int weekday in term.shownWeekdays)
+            Expanded(
+              child: _DayColumn(
+                term: term,
+                week: week,
+                weekday: weekday,
+                meetings: timetable.meetingsOnDay(week, weekday),
+                otherWeeks: term.showOtherWeeks
+                    ? timetable.meetingsOnDayInOtherWeeks(week, weekday)
+                    : const <CourseMeeting>[],
+                isToday: _isToday(term, week, weekday, now),
+                armedPeriod: _armedWeekday == weekday ? _armedPeriod : null,
+                onCellTap: (int period) => _arm(weekday, period),
+                onAddHere: (int period) {
+                  _disarm();
+                  unawaited(
+                    showCourseEditorSheet(
+                      context,
+                      weekday: weekday,
+                      period: period,
+                    ),
+                  );
+                },
+                onCourseTap: (Course course) {
+                  _disarm();
+                  unawaited(
+                    showCourseDetailSheet(
+                      context,
+                      course: course,
+                      term: term,
+                    ),
+                  );
+                },
+                      ),
+                    ),
+                ],
+              ),
     );
   }
 
@@ -431,13 +438,24 @@ class _WeekHeader extends StatelessWidget {
           ),
           // The week is the one control a timetable is used through, so it is a
           // button as well as a label: tapping it goes back to this week.
-          TextButton(
-            onPressed: week == currentWeek ? null : onThisWeek,
-            child: Text(
-              week == currentWeek
-                  ? AppStrings.timetableWeek(week)
-                  : '${AppStrings.timetableWeek(week)} · ${AppStrings.timetableThisWeek}',
-              style: text.labelLarge,
+          //
+          // One line, always: the label grows a "回到本周" once the week being
+          // shown is not this one, and on a narrow phone that wrapped — which
+          // moved the whole grid down sixteen pixels the moment the week changed,
+          // on top of the slide. A header that changes height is a header that
+          // makes a smooth transition look broken.
+          Flexible(
+            child: TextButton(
+              onPressed: week == currentWeek ? null : onThisWeek,
+              child: Text(
+                week == currentWeek
+                    ? AppStrings.timetableWeek(week)
+                    : '${AppStrings.timetableWeek(week)} · ${AppStrings.timetableThisWeek}',
+                style: text.labelLarge,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
           IconButton(
@@ -735,6 +753,131 @@ class _AddHereButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// One week's grid arriving over the last one.
+///
+/// A cover transition rather than a cross-fade, and the difference is what the
+/// user sees: two grids fading through each other put two weeks' text in the
+/// same place at half opacity, which reads as a printing error. Here the old
+/// week stays exactly where it was and the new one slides across it, so at every
+/// instant each piece of text is in one place at full strength.
+///
+/// The old week is dropped the moment it is fully covered, so the doubled paint
+/// only lasts as long as the movement does.
+class _WeekSlide extends StatefulWidget {
+  const _WeekSlide({
+    required this.week,
+    required this.slideFrom,
+    required this.builder,
+  });
+
+  /// Which week is arriving; a change is what starts the slide.
+  final int week;
+
+  /// `1` when the week moved forwards, `-1` when it moved back, which is the
+  /// side the new grid comes in from.
+  final double slideFrom;
+
+  /// Draws one week of the grid, by week number.
+  ///
+  /// A builder rather than a widget, so that *both* weeks — the one arriving and
+  /// the one being covered — are built in their own slots of the same stack, in
+  /// the same order, every time. Handing over a widget instance instead means
+  /// moving it from one slot to another, which throws its element away: the whole
+  /// grid is then rebuilt from scratch on the first frame of every switch, which
+  /// is precisely the frame that was slowest.
+  final Widget Function(int week) builder;
+
+  @override
+  State<_WeekSlide> createState() => _WeekSlideState();
+}
+
+class _WeekSlideState extends State<_WeekSlide>
+    with SingleTickerProviderStateMixin {
+  static const Duration _duration = Duration(milliseconds: 200);
+
+  /// Starts *finished*: the first frame is a week in its place, not a week
+  /// parked off the side waiting for an animation that only a change starts.
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: _duration,
+    value: 1,
+  )..addStatusListener((AnimationStatus status) {
+      // Covered: nothing left to hold on to.
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _under = null);
+      }
+    });
+
+  /// Built once rather than per frame: a `CurvedAnimation` made inside `build`
+  /// attaches a listener to the controller every time, and this one is built
+  /// sixty times over the course of a slide.
+  late final CurvedAnimation _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  /// The week being covered, kept only for as long as the slide lasts.
+  int? _under;
+
+  Animation<Offset>? _position;
+  double? _positionFrom;
+
+  Animation<Offset> _arrivalFrom(double from) {
+    if (_position == null || _positionFrom != from) {
+      _positionFrom = from;
+      _position = Tween<Offset>(
+        begin: Offset(from, 0),
+        end: Offset.zero,
+      ).animate(_curve);
+    }
+    return _position!;
+  }
+
+  @override
+  void didUpdateWidget(_WeekSlide oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.week == widget.week) {
+      return;
+    }
+    _under = oldWidget.week;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _curve.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final int? under = _under;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        // Always the first slot, whether or not it has anything in it: the two
+        // slots keep their places in the tree so that neither week is ever
+        // rebuilt because it moved.
+        IgnorePointer(
+          child: under == null
+              ? const SizedBox.shrink()
+              : RepaintBoundary(child: widget.builder(under)),
+        ),
+        // Clipped, because a page sliding in from the side is off-screen at the
+        // start and must not paint over the header above it.
+        ClipRect(
+          child: SlideTransition(
+            position: _arrivalFrom(widget.slideFrom),
+            child: RepaintBoundary(child: widget.builder(widget.week)),
+          ),
+        ),
+      ],
     );
   }
 }

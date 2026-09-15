@@ -1,21 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The course widget: today's classes, in the same shape as the habit tile.
+  The course widget: one day's classes, in the same shape as the habit tile.
 
   One course per row — when it starts, what it is, where it is — because that is
   the question a timetable answers at a glance: what have I got next, and where
   do I have to be. Nothing here can be *changed*, so nothing here is a button:
   tapping a row opens the timetable, which is where a course is edited.
 
-  Four rows are laid out and the unused ones are hidden: a `RemoteViews` cannot
-  build a variable-length list without a collection service.
--->
-<!--
-  The card is a `FrameLayout` rather than the column itself because the tile has
-  three layers: the rounded surface, the user's picture over it, and a scrim of
-  the surface colour over that — under the rows, which draw last. The picture is
-  clipped to the card's own outline, so a chosen photo has the same corners the
-  tile always had.
+  The arrows step a DAY, and they are answered by the tile itself: the whole
+  window of days it might show arrives with the payload, so looking at tomorrow
+  costs one preference and one repaint rather than opening the app. The rows live
+  inside a ViewFlipper with two pages so that the step *slides* — a home screen
+  has no gesture to give a widget, and a change with no movement is hard to
+  follow.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/course_widget_root"
@@ -49,8 +46,6 @@
         android:paddingTop="6dp"
         android:paddingBottom="6dp">
 
-        <!-- Which week is on show, and how to step it. The arrows are answered by
-             the widget itself, so looking at next week does not open the app. -->
         <LinearLayout
             android:id="@+id/course_widget_header"
             style="@style/CourseWidgetHeader">
@@ -58,93 +53,183 @@
             <ImageView
                 android:id="@+id/course_widget_prev"
                 style="@style/CourseWidgetArrow"
-                android:contentDescription="@string/course_widget_prev_week"
+                android:contentDescription="@string/course_widget_prev_day"
                 android:src="@drawable/widget_arrow_left" />
 
             <TextView
-                android:id="@+id/course_widget_week"
+                android:id="@+id/course_widget_day"
                 style="@style/CourseWidgetWeek" />
 
             <ImageView
                 android:id="@+id/course_widget_next"
                 style="@style/CourseWidgetArrow"
-                android:contentDescription="@string/course_widget_next_week"
+                android:contentDescription="@string/course_widget_next_day"
                 android:src="@drawable/widget_arrow_right" />
         </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/course_item_0"
-        style="@style/CourseWidgetRow">
+        <ViewFlipper
+            android:id="@+id/course_widget_flipper"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:animateFirstView="false"
+            android:inAnimation="@anim/widget_day_in"
+            android:outAnimation="@anim/widget_day_out">
 
-        <TextView
-            android:id="@+id/course_item_0_time"
-            style="@style/CourseWidgetTime" />
+            <!-- Page 0. Two of them, because a ViewFlipper animates between
+                 pages: the day being left is one and the day arriving is the
+                 other, which is what makes the switch a slide rather than a
+                 swap. Only one is ever on screen. -->
+            <LinearLayout
+                android:id="@+id/course_page_0"
+                style="@style/CourseWidgetPage">
 
-        <TextView
-            android:id="@+id/course_item_0_name"
-            style="@style/CourseWidgetName" />
+                <LinearLayout
+                    android:id="@+id/course_page0_item_0"
+                    style="@style/CourseWidgetRow">
 
-        <TextView
-            android:id="@+id/course_item_0_room"
-            style="@style/CourseWidgetRoom" />
-    </LinearLayout>
+                    <TextView
+                        android:id="@+id/course_page0_item_0_time"
+                        style="@style/CourseWidgetTime" />
 
-    <LinearLayout
-        android:id="@+id/course_item_1"
-        style="@style/CourseWidgetRow">
+                    <TextView
+                        android:id="@+id/course_page0_item_0_name"
+                        style="@style/CourseWidgetName" />
 
-        <TextView
-            android:id="@+id/course_item_1_time"
-            style="@style/CourseWidgetTime" />
+                    <TextView
+                        android:id="@+id/course_page0_item_0_room"
+                        style="@style/CourseWidgetRoom" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/course_page0_item_1"
+                    style="@style/CourseWidgetRow">
 
-        <TextView
-            android:id="@+id/course_item_1_name"
-            style="@style/CourseWidgetName" />
+                    <TextView
+                        android:id="@+id/course_page0_item_1_time"
+                        style="@style/CourseWidgetTime" />
 
-        <TextView
-            android:id="@+id/course_item_1_room"
-            style="@style/CourseWidgetRoom" />
-    </LinearLayout>
+                    <TextView
+                        android:id="@+id/course_page0_item_1_name"
+                        style="@style/CourseWidgetName" />
 
-    <LinearLayout
-        android:id="@+id/course_item_2"
-        style="@style/CourseWidgetRow">
+                    <TextView
+                        android:id="@+id/course_page0_item_1_room"
+                        style="@style/CourseWidgetRoom" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/course_page0_item_2"
+                    style="@style/CourseWidgetRow">
 
-        <TextView
-            android:id="@+id/course_item_2_time"
-            style="@style/CourseWidgetTime" />
+                    <TextView
+                        android:id="@+id/course_page0_item_2_time"
+                        style="@style/CourseWidgetTime" />
 
-        <TextView
-            android:id="@+id/course_item_2_name"
-            style="@style/CourseWidgetName" />
+                    <TextView
+                        android:id="@+id/course_page0_item_2_name"
+                        style="@style/CourseWidgetName" />
 
-        <TextView
-            android:id="@+id/course_item_2_room"
-            style="@style/CourseWidgetRoom" />
-    </LinearLayout>
+                    <TextView
+                        android:id="@+id/course_page0_item_2_room"
+                        style="@style/CourseWidgetRoom" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/course_page0_item_3"
+                    style="@style/CourseWidgetRow">
 
-    <LinearLayout
-        android:id="@+id/course_item_3"
-        style="@style/CourseWidgetRow">
+                    <TextView
+                        android:id="@+id/course_page0_item_3_time"
+                        style="@style/CourseWidgetTime" />
 
-        <TextView
-            android:id="@+id/course_item_3_time"
-            style="@style/CourseWidgetTime" />
+                    <TextView
+                        android:id="@+id/course_page0_item_3_name"
+                        style="@style/CourseWidgetName" />
 
-        <TextView
-            android:id="@+id/course_item_3_name"
-            style="@style/CourseWidgetName" />
+                    <TextView
+                        android:id="@+id/course_page0_item_3_room"
+                        style="@style/CourseWidgetRoom" />
+                </LinearLayout>
+                <TextView
+                    android:id="@+id/course_page_0_message"
+                    style="@style/CourseWidgetMessage"
+                    android:visibility="gone" />
+            </LinearLayout>
+            <!-- Page 1. Two of them, because a ViewFlipper animates between
+                 pages: the day being left is one and the day arriving is the
+                 other, which is what makes the switch a slide rather than a
+                 swap. Only one is ever on screen. -->
+            <LinearLayout
+                android:id="@+id/course_page_1"
+                style="@style/CourseWidgetPage">
 
-        <TextView
-            android:id="@+id/course_item_3_room"
-            style="@style/CourseWidgetRoom" />
-    </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/course_page1_item_0"
+                    style="@style/CourseWidgetRow">
 
-    <!-- Stands in for the list when there is nothing to draw: no classes today,
-         a day outside the term, or an app that has never synced. -->
-    <TextView
-        android:id="@+id/course_widget_message"
-        style="@style/CourseWidgetMessage"
-        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/course_page1_item_0_time"
+                        style="@style/CourseWidgetTime" />
+
+                    <TextView
+                        android:id="@+id/course_page1_item_0_name"
+                        style="@style/CourseWidgetName" />
+
+                    <TextView
+                        android:id="@+id/course_page1_item_0_room"
+                        style="@style/CourseWidgetRoom" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/course_page1_item_1"
+                    style="@style/CourseWidgetRow">
+
+                    <TextView
+                        android:id="@+id/course_page1_item_1_time"
+                        style="@style/CourseWidgetTime" />
+
+                    <TextView
+                        android:id="@+id/course_page1_item_1_name"
+                        style="@style/CourseWidgetName" />
+
+                    <TextView
+                        android:id="@+id/course_page1_item_1_room"
+                        style="@style/CourseWidgetRoom" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/course_page1_item_2"
+                    style="@style/CourseWidgetRow">
+
+                    <TextView
+                        android:id="@+id/course_page1_item_2_time"
+                        style="@style/CourseWidgetTime" />
+
+                    <TextView
+                        android:id="@+id/course_page1_item_2_name"
+                        style="@style/CourseWidgetName" />
+
+                    <TextView
+                        android:id="@+id/course_page1_item_2_room"
+                        style="@style/CourseWidgetRoom" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/course_page1_item_3"
+                    style="@style/CourseWidgetRow">
+
+                    <TextView
+                        android:id="@+id/course_page1_item_3_time"
+                        style="@style/CourseWidgetTime" />
+
+                    <TextView
+                        android:id="@+id/course_page1_item_3_name"
+                        style="@style/CourseWidgetName" />
+
+                    <TextView
+                        android:id="@+id/course_page1_item_3_room"
+                        style="@style/CourseWidgetRoom" />
+                </LinearLayout>
+                <TextView
+                    android:id="@+id/course_page_1_message"
+                    style="@style/CourseWidgetMessage"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </ViewFlipper>
     </LinearLayout>
 </FrameLayout>

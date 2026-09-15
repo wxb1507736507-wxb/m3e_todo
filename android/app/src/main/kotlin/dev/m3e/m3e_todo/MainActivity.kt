@@ -2308,8 +2308,17 @@ internal object CourseWidgetStore {
     private const val KEY_OPEN = "openTimetable"
     private const val KEY_WEEK_OFFSET = "weekOffset"
 
-    /** How far from the clock's week a tile may be stepped, in weeks. */
-    private const val MAX_WEEK_OFFSET = 40
+    /// How far from today the tile may be stepped, in days. The window the app
+    /// sends is a week back and four weeks forward, so these are the outer
+    /// bounds of a window that is always inside it.
+    private const val MAX_DAY_OFFSET = 40
+
+    private const val KEY_DAY_OFFSET = "dayOffset"
+
+    /// Which of the flipper's two pages is on screen, and which day is being
+    /// left behind by the step that is about to be drawn.
+    private const val KEY_PAGE = "page"
+    private const val KEY_FLIP_FROM = "flipFrom"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -2324,26 +2333,59 @@ internal object CourseWidgetStore {
     }
 
     /**
-     * How many weeks the tile has been stepped from the current one.
+     * How many days the tile has been stepped from today.
      *
-     * An offset rather than a week number, so that a tile left on "next week"
-     * still means next week when the term moves on — and so that a fresh payload
-     * does not have to be re-read to know which week is meant.
+     * An offset rather than a date, so a tile left on "tomorrow" still means the
+     * day after whenever it is looked at — and so the tile needs no clock of its
+     * own to know which day it is showing.
      */
-    fun weekOffset(context: Context): Int =
-        prefs(context).getInt(KEY_WEEK_OFFSET, 0).coerceIn(-MAX_WEEK_OFFSET, MAX_WEEK_OFFSET)
+    fun dayOffset(context: Context): Int =
+        prefs(context).getInt(KEY_DAY_OFFSET, 0).coerceIn(-MAX_DAY_OFFSET, MAX_DAY_OFFSET)
 
-    /** Steps the tile's week, clamped so a tile cannot walk off the term. */
-    fun stepWeek(context: Context, delta: Int) {
-        val total = snapshot(context)?.optJSONArray("weeks")?.length() ?: 0
-        val current = snapshot(context)?.optInt("currentWeek", 0) ?: 0
-        val next = weekOffset(context) + delta
-        val clamped = if (total > 0 && current > 0) {
-            next.coerceIn(1 - current, total - current)
-        } else {
-            next.coerceIn(-MAX_WEEK_OFFSET, MAX_WEEK_OFFSET)
+    /** The day the tile is showing, as an index into the payload's window. */
+    fun dayIndex(context: Context): Int {
+        val snapshot = snapshot(context) ?: return -1
+        val days = snapshot.optJSONArray("days") ?: return -1
+        if (days.length() == 0) {
+            return -1
         }
-        prefs(context).edit().putInt(KEY_WEEK_OFFSET, clamped).apply()
+        val today = snapshot.optInt("todayIndex", 0)
+        return (today + dayOffset(context)).coerceIn(0, days.length() - 1)
+    }
+
+    /**
+     * Steps the tile's day, clamped to the window the app sent.
+     *
+     * Also remembers which way it went, and which of the flipper's two pages was
+     * on screen, so the next draw can put the day being left on one page and the
+     * day arriving on the other: that is what makes the change a slide.
+     */
+    fun stepDay(context: Context, delta: Int) {
+        val before = dayIndex(context)
+        val next = (dayOffset(context) + delta).coerceIn(-MAX_DAY_OFFSET, MAX_DAY_OFFSET)
+        prefs(context).edit()
+            .putInt(KEY_DAY_OFFSET, next)
+            .putInt(KEY_FLIP_FROM, before)
+            .putInt(KEY_PAGE, if (page(context) == 0) 1 else 0)
+            .apply()
+    }
+
+    /** Which of the flipper's two pages is on screen. */
+    fun page(context: Context): Int = prefs(context).getInt(KEY_PAGE, 0)
+
+    /**
+     * The day being left behind, when the last thing that happened was a step.
+     *
+     * Read once and forgotten: a redraw that is not a step — the app publishing,
+     * the launcher asking again — must not replay an animation, and must not
+     * leave the flipper showing a page that no longer matches its content.
+     */
+    fun takeFlipFrom(context: Context): Int {
+        val from = prefs(context).getInt(KEY_FLIP_FROM, -1)
+        if (from >= 0) {
+            prefs(context).edit().remove(KEY_FLIP_FROM).apply()
+        }
+        return from
     }
 
     /** Remembers that tapping the tile should land on the timetable when it opens. */
@@ -2375,23 +2417,23 @@ class CourseWidgetProvider : AppWidgetProvider() {
         private const val MAX_ROWS = 4
 
         private const val REQUEST_OPEN_TABLE = 5300
-        private const val REQUEST_WEEK_BACK = 5301
-        private const val REQUEST_WEEK_ON = 5302
+        private const val REQUEST_DAY_BACK = 5301
+        private const val REQUEST_DAY_ON = 5302
 
-        /** The tile stepping its own week, which the app is not needed for. */
-        const val ACTION_WEEK_PREV = "dev.m3e.m3e_todo.widget.WEEK_PREV"
-        const val ACTION_WEEK_NEXT = "dev.m3e.m3e_todo.widget.WEEK_NEXT"
+        /** The tile stepping its own day, which the app is not needed for. */
+        const val ACTION_DAY_PREV = "dev.m3e.m3e_todo.widget.DAY_PREV"
+        const val ACTION_DAY_NEXT = "dev.m3e.m3e_todo.widget.DAY_NEXT"
 
         /**
-         * Steps the week every course tile is showing.
+         * Steps the day every course tile is showing.
          *
          * Answered here rather than by opening the app: a home screen that has to
-         * launch an activity to show next week's Tuesday is a home screen that
-         * cannot be glanced at. The tile carries the whole term's rows for its
-         * weekday, so the answer is one preference and one repaint.
+         * launch an activity to show tomorrow's classes is a home screen that
+         * cannot be glanced at. The tile carries the days around today, so the
+         * answer is one preference and one repaint.
          */
-        private fun stepWeek(context: Context, delta: Int) {
-            CourseWidgetStore.stepWeek(context, delta)
+        private fun stepDay(context: Context, delta: Int) {
+            CourseWidgetStore.stepDay(context, delta)
             refresh(context)
         }
 
@@ -2434,28 +2476,20 @@ class CourseWidgetProvider : AppWidgetProvider() {
             // change here, and the timetable is what a row is *about*.
             val open = openTimetable(context)
             views.setOnClickPendingIntent(R.id.course_widget_root, open)
-            // The two exceptions are the arrows, which are about *which* week the
+            // The two exceptions are the arrows, which are about *which day* the
             // tile is showing and are answered without leaving the home screen.
-            views.setOnClickPendingIntent(R.id.course_widget_prev, weekIntent(context, ACTION_WEEK_PREV, REQUEST_WEEK_BACK))
-            views.setOnClickPendingIntent(R.id.course_widget_next, weekIntent(context, ACTION_WEEK_NEXT, REQUEST_WEEK_ON))
+            views.setOnClickPendingIntent(
+                R.id.course_widget_prev,
+                dayIntent(context, ACTION_DAY_PREV, REQUEST_DAY_BACK),
+            )
+            views.setOnClickPendingIntent(
+                R.id.course_widget_next,
+                dayIntent(context, ACTION_DAY_NEXT, REQUEST_DAY_ON),
+            )
 
-            val weeks = snapshot?.optJSONArray("weeks") ?: JSONArray()
-            val currentWeek = snapshot?.optInt("currentWeek", 0) ?: 0
-            val weekdayName = snapshot?.optString("weekdayName").orEmpty()
-
-            // Which week this tile is showing: the one the clock is in, moved by
-            // however many times the arrows have been tapped. An offset rather
-            // than a week number, so that a tile the user left on "next week"
-            // follows along when the term moves on.
-            val shownWeek = if (currentWeek <= 0 || weeks.length() == 0) {
-                0
-            } else {
-                (currentWeek + CourseWidgetStore.weekOffset(context))
-                    .coerceIn(1, weeks.length())
-            }
-            val offset = CourseWidgetStore.weekOffset(context)
-            val week = if (shownWeek <= 0) null else weeks.optJSONObject(shownWeek - 1)
-            val rows = week?.optJSONArray("rows") ?: JSONArray()
+            val days = snapshot?.optJSONArray("days") ?: JSONArray()
+            val index = CourseWidgetStore.dayIndex(context)
+            val day = if (index < 0) null else days.optJSONObject(index)
 
             // A payload is a picture of one day. When that day is no longer today
             // the rows are yesterday's classes — a different weekday entirely —
@@ -2463,56 +2497,113 @@ class CourseWidgetProvider : AppWidgetProvider() {
             val stale = snapshot != null &&
                 snapshot.optInt("dayKey", 0).let { it != 0 && it != todayKey() }
 
-            // The header always says which week is on show, even when the tile has
+            // The header always says which day is on show, even when the tile has
             // nothing to list for it.
             val header = when {
                 snapshot == null -> ""
                 stale -> snapshot.optString("staleText")
-                shownWeek <= 0 -> weekdayName
-                offset == 0 -> context.getString(R.string.course_widget_this_week) +
-                    " · " + weekdayName + " " + week?.optString("date").orEmpty()
-                else ->
-                    "${shownWeek}周 · " + weekdayName + " " + week?.optString("date").orEmpty()
+                day == null -> ""
+                else -> dayHeader(day)
             }
-            views.setTextViewText(R.id.course_widget_week, header)
+            views.setTextViewText(R.id.course_widget_day, header)
 
-            if (snapshot == null || stale || rows.length() == 0) {
-                val message = when {
-                    snapshot == null -> context.getString(R.string.course_widget_no_data)
-                    stale -> snapshot.optString("staleText")
-                    offset == 0 -> snapshot.optString("emptyText")
-                    else -> context.getString(R.string.course_widget_no_class)
-                }
-                views.setViewVisibility(R.id.course_widget_message, android.view.View.VISIBLE)
-                views.setTextViewText(R.id.course_widget_message, message)
-                for (index in 0 until MAX_ROWS) {
-                    views.setViewVisibility(rowId(index), android.view.View.GONE)
-                }
-                return views
+            // The flipper has two pages, and the day being left behind goes on
+            // the one that is about to slide away. That is the whole mechanism:
+            // a change with movement is followed; a change with none looks like
+            // nothing happened.
+            val page = CourseWidgetStore.page(context)
+            val other = if (page == 0) 1 else 0
+            val flipFrom = CourseWidgetStore.takeFlipFrom(context)
+            fillPage(
+                context,
+                views,
+                page = other,
+                day = if (flipFrom >= 0 && flipFrom != index) {
+                    days.optJSONObject(flipFrom)
+                } else {
+                    day
+                },
+                open = open,
+                snapshot = snapshot,
+                stale = stale,
+            )
+            fillPage(
+                context,
+                views,
+                page = page,
+                day = day,
+                open = open,
+                snapshot = snapshot,
+                stale = stale,
+            )
+            views.setDisplayedChild(R.id.course_widget_flipper, page)
+            return views
+        }
+
+        /** `明天 · 周三 9/16`, or `今天 · 周二 9/15`. */
+        private fun dayHeader(day: JSONObject): String {
+            val weekday = day.optString("weekdayName")
+            val date = day.optString("date")
+            val relative = day.optString("relative")
+            return if (relative.isEmpty()) "$weekday $date" else "$relative · $weekday $date"
+        }
+
+        /**
+         * Fills one of the flipper's two pages with a day.
+         *
+         * A page is either its rows or the one line that stands in for them, and
+         * both are set on every draw: a page that kept the rows it had from two
+         * days ago would slide in showing the wrong classes.
+         */
+        private fun fillPage(
+            context: Context,
+            views: RemoteViews,
+            page: Int,
+            day: JSONObject?,
+            open: PendingIntent,
+            snapshot: JSONObject?,
+            stale: Boolean,
+        ) {
+            val rows = day?.optJSONArray("rows") ?: JSONArray()
+            val messageId = messageId(page)
+            views.setViewVisibility(
+                messageId,
+                if (rows.length() == 0) android.view.View.VISIBLE else android.view.View.GONE,
+            )
+            if (rows.length() == 0) {
+                views.setTextViewText(
+                    messageId,
+                    when {
+                        snapshot == null -> context.getString(R.string.course_widget_no_data)
+                        stale -> snapshot.optString("staleText")
+                        day == null -> context.getString(R.string.course_widget_no_data)
+                        day.optInt("inTerm", 1) == 0 ->
+                            context.getString(R.string.course_widget_outside_term)
+                        else -> context.getString(R.string.course_widget_no_class)
+                    },
+                )
             }
 
-            views.setViewVisibility(R.id.course_widget_message, android.view.View.GONE)
             val shown = minOf(rows.length(), MAX_ROWS)
             for (index in 0 until MAX_ROWS) {
                 val row = if (index < shown) rows.optJSONObject(index) else null
                 if (row == null) {
-                    views.setViewVisibility(rowId(index), android.view.View.GONE)
+                    views.setViewVisibility(rowId(page, index), android.view.View.GONE)
                     continue
                 }
-                views.setViewVisibility(rowId(index), android.view.View.VISIBLE)
-                views.setTextViewText(timeId(index), row.optString("time"))
-                views.setTextViewText(nameId(index), row.optString("name"))
+                views.setViewVisibility(rowId(page, index), android.view.View.VISIBLE)
+                views.setTextViewText(timeId(page, index), row.optString("time"))
+                views.setTextViewText(nameId(page, index), row.optString("name"))
                 val room = if (row.isNull("room")) "" else row.optString("room")
-                views.setTextViewText(roomId(index), room)
+                views.setTextViewText(roomId(page, index), room)
                 views.setViewVisibility(
-                    roomId(index),
+                    roomId(page, index),
                     if (room.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE,
                 )
                 // One intent for every row: whichever course the user aimed at,
                 // what they want is the timetable.
-                views.setOnClickPendingIntent(rowId(index), open)
+                views.setOnClickPendingIntent(rowId(page, index), open)
             }
-            return views
         }
 
         /** A tap anywhere on the tile opens the timetable itself. */
@@ -2529,13 +2620,13 @@ class CourseWidgetProvider : AppWidgetProvider() {
         }
 
         /**
-         * One of the tile's two week arrows.
+         * One of the tile's two day arrows.
          *
          * An explicit broadcast back to this provider, which is what keeps the
          * tap on the home screen: the tile repaints itself from what it already
          * holds, and no activity starts.
          */
-        private fun weekIntent(context: Context, action: String, request: Int): PendingIntent {
+        private fun dayIntent(context: Context, action: String, request: Int): PendingIntent {
             val intent = Intent(context, CourseWidgetProvider::class.java).setAction(action)
             return PendingIntent.getBroadcast(
                 context,
@@ -2545,32 +2636,81 @@ class CourseWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        private fun rowId(index: Int) = when (index) {
-            0 -> R.id.course_item_0
-            1 -> R.id.course_item_1
-            2 -> R.id.course_item_2
-            else -> R.id.course_item_3
+        /**
+         * The ids of one page's four rows.
+         *
+         * Two pages exist because a `ViewFlipper` animates *between* children, so
+         * the day being left and the day arriving have to be different views —
+         * which means every id in the layout appears twice.
+         */
+        private fun rowId(page: Int, index: Int) = if (page == 0) {
+            when (index) {
+                0 -> R.id.course_page0_item_0
+                1 -> R.id.course_page0_item_1
+                2 -> R.id.course_page0_item_2
+                else -> R.id.course_page0_item_3
+            }
+        } else {
+            when (index) {
+                0 -> R.id.course_page1_item_0
+                1 -> R.id.course_page1_item_1
+                2 -> R.id.course_page1_item_2
+                else -> R.id.course_page1_item_3
+            }
         }
 
-        private fun timeId(index: Int) = when (index) {
-            0 -> R.id.course_item_0_time
-            1 -> R.id.course_item_1_time
-            2 -> R.id.course_item_2_time
-            else -> R.id.course_item_3_time
+        private fun timeId(page: Int, index: Int) = if (page == 0) {
+            when (index) {
+                0 -> R.id.course_page0_item_0_time
+                1 -> R.id.course_page0_item_1_time
+                2 -> R.id.course_page0_item_2_time
+                else -> R.id.course_page0_item_3_time
+            }
+        } else {
+            when (index) {
+                0 -> R.id.course_page1_item_0_time
+                1 -> R.id.course_page1_item_1_time
+                2 -> R.id.course_page1_item_2_time
+                else -> R.id.course_page1_item_3_time
+            }
         }
 
-        private fun nameId(index: Int) = when (index) {
-            0 -> R.id.course_item_0_name
-            1 -> R.id.course_item_1_name
-            2 -> R.id.course_item_2_name
-            else -> R.id.course_item_3_name
+        private fun nameId(page: Int, index: Int) = if (page == 0) {
+            when (index) {
+                0 -> R.id.course_page0_item_0_name
+                1 -> R.id.course_page0_item_1_name
+                2 -> R.id.course_page0_item_2_name
+                else -> R.id.course_page0_item_3_name
+            }
+        } else {
+            when (index) {
+                0 -> R.id.course_page1_item_0_name
+                1 -> R.id.course_page1_item_1_name
+                2 -> R.id.course_page1_item_2_name
+                else -> R.id.course_page1_item_3_name
+            }
         }
 
-        private fun roomId(index: Int) = when (index) {
-            0 -> R.id.course_item_0_room
-            1 -> R.id.course_item_1_room
-            2 -> R.id.course_item_2_room
-            else -> R.id.course_item_3_room
+        private fun roomId(page: Int, index: Int) = if (page == 0) {
+            when (index) {
+                0 -> R.id.course_page0_item_0_room
+                1 -> R.id.course_page0_item_1_room
+                2 -> R.id.course_page0_item_2_room
+                else -> R.id.course_page0_item_3_room
+            }
+        } else {
+            when (index) {
+                0 -> R.id.course_page1_item_0_room
+                1 -> R.id.course_page1_item_1_room
+                2 -> R.id.course_page1_item_2_room
+                else -> R.id.course_page1_item_3_room
+            }
+        }
+
+        private fun messageId(page: Int) = if (page == 0) {
+            R.id.course_page_0_message
+        } else {
+            R.id.course_page_1_message
         }
 
         /** Today as `20260915`, the packing the app uses for a day. */
@@ -2590,7 +2730,7 @@ class CourseWidgetProvider : AppWidgetProvider() {
     }
 
     /**
-     * The tile's own week arrows, answered without the app.
+     * The tile's own day arrows, answered without the app.
      *
      * An explicit broadcast back to this provider, which is what keeps the tap on
      * the home screen: the tile repaints itself from what it already holds, and
@@ -2598,12 +2738,12 @@ class CourseWidgetProvider : AppWidgetProvider() {
      */
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            ACTION_WEEK_PREV -> {
-                stepWeek(context, -1)
+            ACTION_DAY_PREV -> {
+                stepDay(context, -1)
                 return
             }
-            ACTION_WEEK_NEXT -> {
-                stepWeek(context, 1)
+            ACTION_DAY_NEXT -> {
+                stepDay(context, 1)
                 return
             }
         }

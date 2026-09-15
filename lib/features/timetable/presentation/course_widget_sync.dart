@@ -88,11 +88,14 @@ class CourseWidgetSync {
 
 /// The payload the course tile draws.
 ///
-/// Every week of the term, for the weekday today falls on: enough for the tile
-/// to step through the whole term by itself, which it must be able to do without
-/// the app running. The rows arrive with their clock times already written out —
-/// a widget has no periods to look them up in — and only the four a tile can
-/// hold.
+/// A window of *days*, not of weeks: the tile steps one day at a time, so
+/// "what have I got tomorrow" is answered on the home screen without opening
+/// anything. Every day in the window arrives with its rows already written out —
+/// a widget has no periods to look them up in, and no term to know which week a
+/// date falls in — so stepping is a matter of picking an index.
+///
+/// The window is lopsided on purpose: a week back to catch up on what was
+/// missed, four weeks forward, which is as far as anyone plans a timetable.
 Map<String, Object?> courseWidgetPayload({
   required List<Course> courses,
   required Term term,
@@ -100,43 +103,54 @@ Map<String, Object?> courseWidgetPayload({
   required String emptyText,
   required String staleText,
   int maxRows = 4,
+  int daysBack = 7,
+  int daysForward = 28,
 }) {
-  final int weekday = now.weekday;
+  final DateTime today = startOfDay(now);
+  final List<Map<String, Object?>> days = <Map<String, Object?>>[
+    for (int offset = -daysBack; offset <= daysForward; offset++)
+      _dayPayload(
+        courses: courses,
+        term: term,
+        day: today.add(Duration(days: offset)),
+        offset: offset,
+        today: today,
+        maxRows: maxRows,
+      ),
+  ];
+
   return <String, Object?>{
     'dayKey': now.year * 10000 + now.month * 100 + now.day,
     'emptyText': emptyText,
     'staleText': staleText,
-    // Which week the clock is in, so the tile can say 本周 — and 0 when today is
-    // outside the term, in which case no week is "this week".
-    'currentWeek': term.weekOf(now) ?? 0,
-    'weekday': weekday,
-    'weekdayName': '周${kCourseWeekdayNames[weekday - 1]}',
-    'weeks': <Object?>[
-      for (int week = 1; week <= term.totalWeeks; week++)
-        _weekPayload(
-          courses: courses,
-          term: term,
-          weekday: weekday,
-          week: week,
-          maxRows: maxRows,
-        ),
-    ],
+    // Where "today" sits in the window, so the tile's offset from it is a plain
+    // index sum — and so the tile can say 今天/明天 without a clock of its own.
+    'todayIndex': daysBack,
+    'days': days,
   };
 }
 
-Map<String, Object?> _weekPayload({
+Map<String, Object?> _dayPayload({
   required List<Course> courses,
   required Term term,
-  required int weekday,
-  required int week,
+  required DateTime day,
+  required int offset,
+  required DateTime today,
   required int maxRows,
 }) {
-  final DateTime monday = term.mondayOfWeek(week);
-  final DateTime day = monday.add(Duration(days: weekday - 1));
-  final List<CourseMeeting> meetings = meetingsOn(courses, week, startOfDay(day));
+  final List<CourseMeeting> meetings = meetingsForDateIn(courses, term, day);
   return <String, Object?>{
-    'week': week,
     'date': '${day.month}/${day.day}',
+    'weekdayName': '周${kCourseWeekdayNames[day.weekday - 1]}',
+    // 今天/明天/昨天 where they apply, the weekday otherwise: a relative word is
+    // how a person reads a date they are standing in.
+    'relative': switch (offset) {
+      0 => AppStrings.courseWidgetToday,
+      1 => AppStrings.courseWidgetTomorrow,
+      -1 => AppStrings.courseWidgetYesterday,
+      _ => '',
+    },
+    'inTerm': term.weekOf(day) != null,
     'rows': <Object?>[
       for (final CourseMeeting meeting in meetings.take(maxRows))
         <String, Object?>{

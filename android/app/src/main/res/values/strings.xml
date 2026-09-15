@@ -25,8 +25,9 @@
     <string name="course_widget_no_data">打开应用完成一次同步</string>
     <string name="course_widget_stale">新的一天了，打开应用刷新今天的课</string>
     <string name="course_widget_empty">今天没有课</string>
-    <string name="course_widget_prev_week">上一周</string>
-    <string name="course_widget_next_week">下一周</string>
+    <string name="course_widget_prev_day">前一天</string>
+    <string name="course_widget_next_day">后一天</string>
     <string name="course_widget_no_class">这天没有课</string>
-    <string name="course_widget_this_week">本周</string>
+    <string name="course_widget_today_mark">今天</string>
+    <string name="course_widget_outside_term">不在学期内</string>
 </resources>

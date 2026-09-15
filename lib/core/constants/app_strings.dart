@@ -348,6 +348,12 @@ abstract final class AppStrings {
   static const String courseWidgetManualHint =
       '若系统没有弹出确认，请到桌面的「小组件 / 卡片」入口手动添加「课程表小组件」';
   static const String courseWidgetEmpty = '今天没有课';
+  static const String courseWidgetToday = '今天';
+  static const String courseWidgetTomorrow = '明天';
+  static const String courseWidgetYesterday = '昨天';
+  static const String courseWidgetPrevDay = '前一天';
+  static const String courseWidgetNextDay = '后一天';
+  static const String courseWidgetOutsideTerm = '不在学期内';
   static const String courseWidgetStale = '新的一天了，打开应用刷新今天的课';
   static const String courseNew = '新建课程';
   static const String courseEdit = '编辑课程';

@@ -133,6 +133,15 @@
         <item name="android:textSize">12sp</item>
     </style>
 
+    <!-- One page of the course tile's day: the rows, or the message that stands
+         in for them. Two of these exist so the day can slide between them. -->
+    <style name="CourseWidgetPage">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
     <style name="CourseWidgetMessage">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

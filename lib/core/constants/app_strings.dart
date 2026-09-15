@@ -324,6 +324,66 @@ abstract final class AppStrings {
   static const String tipReminder = '每个待办可以单独选择响铃还是仅消息，也能各自挑选铃声';
   static const String tipAppBackground = '设置 →「应用背景」可以给整个应用换背景图，图片可裁剪';
 
+  // --- Timetable (课程表) ----------------------------------------------------
+
+  static const String timetableTitle = '课程表';
+  static const String timetableOpen = '打开课程表';
+  static const String timetableThisWeek = '本周';
+  static const String timetablePrevWeek = '上一周';
+  static const String timetableNextWeek = '下一周';
+  static const String timetableCourseList = '课表列表';
+  static const String timetableTermSettings = '学期设置';
+  static const String timetableWeekEmpty = '这一周没有课';
+  static const String timetableNoCourses = '还没有课程';
+  static const String timetableNoCoursesBody = '点「新建课程」，把课表填起来';
+  static const String timetableToday = '今天';
+  static const String courseNew = '新建课程';
+  static const String courseEdit = '编辑课程';
+  static const String courseNameLabel = '课程名';
+  static const String courseNameHint = '例如：高等数学';
+  static const String courseNameRequired = '课程名不能为空';
+  static const String courseRoomLabel = '教室';
+  static const String courseRoomHint = '例如：教三 201';
+  static const String courseNoteLabel = '备注（如老师）';
+  static const String courseColorLabel = '课程背景色';
+  static const String courseSlotsLabel = '上课时间';
+  static const String courseSlotWeekday = '星期';
+  static const String courseSlotPeriods = '节次';
+  static const String courseAddSlot = '再加一个时间';
+  static const String courseRemoveSlot = '删除这个时间';
+  static const String courseWeeksLabel = '上课周数';
+  static const String courseWeeksAll = '全选';
+  static const String courseWeeksOdd = '单周';
+  static const String courseWeeksEven = '双周';
+  static const String courseWeeksFirstHalf = '前半学期';
+  static const String courseWeeksSecondHalf = '后半学期';
+  static const String courseWeeksClear = '清空';
+  static const String courseWeeksRequired = '至少要选一周';
+  static const String courseSlotsRequired = '至少要有一个上课时间';
+  static const String courseDeleteTitle = '删除这门课程？';
+  static const String courseSaved = '已保存';
+  static const String termNameLabel = '学期名称';
+  static const String termNameHint = '例如：大三上';
+  static const String termStartLabel = '开学第一周的周一';
+  static const String termWeeksLabel = '总周数';
+  static const String termPeriodsLabel = '节次时间';
+  static const String termPeriodsHint = '点某一节可以改它的上下课时间';
+
+  /// The timetable's current week, as the header shows it.
+  static String timetableWeek(int week) => '第 $week 周';
+
+  /// A course that collides with another, said in the editor.
+  static String courseClash(String other, String slot) => '与「$other」在 $slot 冲突';
+
+  static String courseDeleteBody(String name) => '「$name」会从课表里移除，历史不受影响。';
+
+  static String courseDeleted(String name) => '已删除「$name」';
+
+  static String periodCount(int count) =>
+      count == 1 ? '第 1 节' : '第 1-$count 节';
+
+  static String periodLabel(int index) => '第 $index 节';
+
   // --- Habits (打卡) ---------------------------------------------------------
 
   static const String navHabits = '打卡';

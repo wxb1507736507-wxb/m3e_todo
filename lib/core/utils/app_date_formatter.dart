@@ -31,4 +31,12 @@ abstract final class AppDateFormatter {
     }
     return '${date.year}年${date.month}月${date.day}日';
   }
+
+  /// The span a week covers, as a timetable header says it: `9月14日 - 9月20日`.
+  ///
+  /// Both ends are written out rather than abbreviated to one, because the week
+  /// that straddles a month — 30日 to 10月6日 — is exactly where a single month
+  /// name would be wrong.
+  static String weekRange(DateTime monday, DateTime sunday) =>
+      '${calendarDate(monday, monday)} - ${calendarDate(sunday, monday)}';
 }

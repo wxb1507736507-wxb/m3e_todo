@@ -13,6 +13,7 @@ import '../features/habits/domain/entities/habit.dart';
 import '../features/habits/domain/entities/habit_log.dart';
 import '../features/habits/domain/habit_planner.dart';
 import '../features/habits/presentation/habit_permissions.dart';
+import '../features/timetable/presentation/pages/timetable_page.dart';
 import '../features/habits/presentation/habit_widget_sync.dart';
 import '../features/habits/presentation/pages/habits_page.dart';
 import '../features/habits/presentation/providers/habit_providers.dart';
@@ -301,6 +302,21 @@ class _AppShellState extends ConsumerState<AppShell>
                     // and the habits page have nothing for them to act on.
                     if (_selectedIndex < _statuses.length)
                       const TodoSortButton(),
+                    // The timetable is the calendar's sibling rather than a sixth
+                    // destination: it is the same question — what is on, and
+                    // when — asked about a term instead of a month.
+                    if (_selectedIndex == _calendarIndex)
+                      IconButton(
+                        icon: const Icon(Icons.calendar_view_week_outlined),
+                        tooltip: AppStrings.timetableOpen,
+                        onPressed: () => unawaited(
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const TimetablePage(),
+                            ),
+                          ),
+                        ),
+                      ),
                     if ((stats?.completed ?? 0) > 0)
                       IconButton(
                         icon: const Icon(Icons.cleaning_services_outlined),

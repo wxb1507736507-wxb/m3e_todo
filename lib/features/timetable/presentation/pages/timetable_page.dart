@@ -181,13 +181,18 @@ class _Body extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 _PeriodColumn(periods: term.periods),
-                for (int weekday = 1; weekday <= 7; weekday++)
+                // Two columns or seven, from the term's own answer: a timetable
+                // with no Saturday classes is not improved by two empty ones.
+                for (final int weekday in term.shownWeekdays)
                   Expanded(
                     child: _DayColumn(
                       term: term,
                       week: week,
                       weekday: weekday,
                       meetings: timetable.meetingsOnDay(week, weekday),
+                      otherWeeks: term.showOtherWeeks
+                          ? timetable.meetingsOnDayInOtherWeeks(week, weekday)
+                          : const <CourseMeeting>[],
                       isToday: _isToday(term, week, weekday, now),
                     ),
                   ),
@@ -293,7 +298,7 @@ class _DayHeader extends StatelessWidget {
       child: Row(
         children: <Widget>[
           const SizedBox(width: TimetablePage.periodColumnWidth),
-          for (int weekday = 1; weekday <= 7; weekday++)
+          for (final int weekday in term.shownWeekdays)
             Expanded(
               child: Builder(
                 builder: (BuildContext context) {
@@ -381,6 +386,7 @@ class _DayColumn extends ConsumerWidget {
     required this.week,
     required this.weekday,
     required this.meetings,
+    required this.otherWeeks,
     required this.isToday,
   });
 
@@ -388,12 +394,35 @@ class _DayColumn extends ConsumerWidget {
   final int week;
   final int weekday;
   final List<CourseMeeting> meetings;
+
+  /// The courses that meet on this day in weeks other than this one. Empty
+  /// unless the term asked for them.
+  final List<CourseMeeting> otherWeeks;
+
   final bool isToday;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {    final ColorScheme colors = Theme.of(context).colorScheme;
     final int rows = term.periods.length;
     final Timetable? timetable = ref.watch(timetableProvider).value;
+
+    // A course of another week is only drawn where this week has nothing: the
+    // grid is about the week being shown, and a faint block underneath a real
+    // one would be a second thing drawn in the same place.
+    final int firstPeriod = meetings.isEmpty
+        ? rows + 1
+        : meetings.first.slot.startPeriod;
+    final int lastPeriod = meetings.isEmpty
+        ? 0
+        : meetings
+            .map((CourseMeeting meeting) => meeting.slot.endPeriod)
+            .reduce((int a, int b) => a > b ? a : b);
+    final List<CourseMeeting> ghostMeetings = <CourseMeeting>[
+      for (final CourseMeeting meeting in otherWeeks)
+        if (meeting.slot.endPeriod < firstPeriod ||
+            meeting.slot.startPeriod > lastPeriod)
+          meeting,
+    ];
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 1),
@@ -434,6 +463,24 @@ class _DayColumn extends ConsumerWidget {
                   ),
               ],
             ),
+            // The courses of other weeks first, so that a real one of this week
+            // is drawn over them rather than under.
+            for (final CourseMeeting meeting in ghostMeetings)
+              Positioned(
+                top: (meeting.slot.startPeriod - 1) * TimetablePage.rowHeight + 2,
+                left: 0,
+                right: 0,
+                height: meeting.slot.periodCount * TimetablePage.rowHeight - 4,
+                child: _CourseBlock(
+                  meeting: meeting,
+                  term: term,
+                  accent: _accentOf(timetable, meeting.course, colors),
+                  ghost: true,
+                  onTap: () => unawaited(
+                    showCourseEditorSheet(context, existing: meeting.course),
+                  ),
+                ),
+              ),
             for (final CourseMeeting meeting in meetings)
               Positioned(
                 top: (meeting.slot.startPeriod - 1) * TimetablePage.rowHeight + 2,
@@ -480,12 +527,16 @@ class _CourseBlock extends StatelessWidget {
     required this.term,
     required this.accent,
     required this.onTap,
+    this.ghost = false,
   });
 
   final CourseMeeting meeting;
   final Term term;
   final Color accent;
   final VoidCallback onTap;
+
+  /// Whether this is a course of another week: drawn, but not as this week's.
+  final bool ghost;
 
   @override
   Widget build(BuildContext context) {
@@ -524,14 +575,20 @@ class _CourseBlock extends StatelessWidget {
     // block draws the picture rather than the colour — but through the same
     // scrim the app's own background uses, because this is the smallest text in
     // the app and it sits on top of an arbitrary photo.
+    // A course of another week is drawn as an outline: enough to answer "when
+    // does this ever happen", not enough to be mistaken for something to go to
+    // this week. The colour stays, because the colour is how a course is
+    // recognised.
     final Widget body = picture == null
         ? Material(
-            color: accent.withValues(alpha: 0.22),
+            color: ghost
+                ? Colors.transparent
+                : accent.withValues(alpha: 0.22),
             borderRadius: AppShapes.radius(AppShapes.small),
             child: InkWell(
               onTap: onTap,
               borderRadius: AppShapes.radius(AppShapes.small),
-              child: label,
+              child: ghost ? _ghosted(label, accent) : label,
             ),
           )
         : ClipRRect(
@@ -559,18 +616,29 @@ class _CourseBlock extends StatelessWidget {
         body,
         // The colour stays on as a hairline: a picture is what the user chose
         // to see, but the outline is what keeps two adjacent courses apart.
-        if (picture != null)
+        if (picture != null || ghost)
           Positioned.fill(
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: AppShapes.radius(AppShapes.small),
-                  border: Border.all(color: accent.withValues(alpha: 0.5)),
+                  border: Border.all(
+                    color: accent.withValues(alpha: ghost ? 0.6 : 0.5),
+                    // Dashed would say it better than thin, and a dashed border
+                    // is not something a BoxDecoration can draw.
+                    width: ghost ? 1.4 : 1,
+                  ),
                 ),
               ),
             ),
           ),
       ],
     );
+  }
+
+  /// The label of a course that does not run this week, in its own colour but
+  /// washed out towards the surface.
+  Widget _ghosted(Widget label, Color accent) {
+    return Opacity(opacity: 0.55, child: label);
   }
 }

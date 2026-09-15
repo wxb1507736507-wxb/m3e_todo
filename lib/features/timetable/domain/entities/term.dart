@@ -17,7 +17,17 @@ class Term {
     required this.startMonday,
     required this.totalWeeks,
     required this.periods,
+    this.showWeekend = defaultShowWeekend,
+    this.showOtherWeeks = defaultShowOtherWeeks,
   });
+
+  /// What the phone's own timetable asks when a term is set up.
+  ///
+  /// Kept here rather than in the app's settings because they are decisions
+  /// about *this* timetable: whether its week has a Saturday and a Sunday, and
+  /// whether a course that does not run this week is still drawn.
+  static const bool defaultShowWeekend = true;
+  static const bool defaultShowOtherWeeks = false;
 
   /// What the term is called: 大三上, 2026 秋.
   final String name;
@@ -30,6 +40,25 @@ class Term {
 
   /// The day's periods, in order. Sorted by index on the way in.
   final List<PeriodTime> periods;
+
+  /// Whether the timetable has weekend columns at all.
+  ///
+  /// A term with no Saturday classes is two columns of nothing, which on a
+  /// phone is a fifth of the grid spent saying so.
+  final bool showWeekend;
+
+  /// Whether courses that do not run in the week being shown are drawn faintly.
+  ///
+  /// Off by default, because a timetable is read as what have I got this week.
+  /// On, it answers the other question — when does this course ever happen —
+  /// without changing which week is being shown.
+  final bool showOtherWeeks;
+
+  /// The weekdays the grid shows, Monday first.
+  List<int> get shownWeekdays => <int>[
+        for (int weekday = 1; weekday <= (showWeekend ? 7 : 5); weekday++)
+          weekday,
+      ];
 
   /// The week [day] falls in, or `null` when it is outside the term.
   ///
@@ -81,12 +110,16 @@ class Term {
     DateTime? startMonday,
     int? totalWeeks,
     List<PeriodTime>? periods,
+    bool? showWeekend,
+    bool? showOtherWeeks,
   }) {
     return Term(
       name: name ?? this.name,
       startMonday: startMonday ?? this.startMonday,
       totalWeeks: totalWeeks ?? this.totalWeeks,
       periods: periods ?? this.periods,
+      showWeekend: showWeekend ?? this.showWeekend,
+      showOtherWeeks: showOtherWeeks ?? this.showOtherWeeks,
     );
   }
 
@@ -96,13 +129,21 @@ class Term {
       other.name == name &&
       other.startMonday == startMonday &&
       other.totalWeeks == totalWeeks &&
+      other.showWeekend == showWeekend &&
+      other.showOtherWeeks == showOtherWeeks &&
       other.periods.length == periods.length &&
       Iterable<int>.generate(periods.length)
           .every((int i) => other.periods[i] == periods[i]);
 
   @override
-  int get hashCode =>
-      Object.hash(name, startMonday, totalWeeks, Object.hashAll(periods));
+  int get hashCode => Object.hash(
+        name,
+        startMonday,
+        totalWeeks,
+        showWeekend,
+        showOtherWeeks,
+        Object.hashAll(periods),
+      );
 
   @override
   String toString() => 'Term($name, from $startMonday, $totalWeeks weeks)';

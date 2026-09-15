@@ -11,10 +11,11 @@ import '../../domain/entities/timetable.dart';
 abstract final class TimetableModel {
   /// Version 1 is the first shape this document has had.
   ///
-  /// Version 2 adds a course's own `backgroundImage` and `backgroundDim`, both
-  /// optional on read: a version-1 file loads with every course in its colour,
-  /// and a version-2 file still opens in an older build, which ignores them.
-  static const int schemaVersion = 2;
+  /// Version 2 adds a course's own `backgroundImage` and `backgroundDim`, and
+  /// version 3 the term's `showWeekend` and `showOtherWeeks` — all optional on
+  /// read: an older file loads with every course in its colour and the grid as
+  /// it has always been drawn.
+  static const int schemaVersion = 3;
 
   static Map<String, Object?> toJson(Timetable timetable) {
     final Term term = timetable.term;
@@ -24,6 +25,8 @@ abstract final class TimetableModel {
         'name': term.name,
         'startMonday': term.startMonday.toIso8601String(),
         'totalWeeks': term.totalWeeks,
+        'showWeekend': term.showWeekend,
+        'showOtherWeeks': term.showOtherWeeks,
         'periods': <Object?>[
           for (final PeriodTime period in term.periods)
             <String, Object?>{
@@ -134,6 +137,14 @@ abstract final class TimetableModel {
       // A term with no periods cannot be drawn; the default day is a better
       // answer than a timetable with no rows.
       periods: periods.isEmpty ? kDefaultPeriods : periods,
+      // Absent means the file predates these two, and the answer that changes
+      // nothing about how it looked is the one to give it.
+      showWeekend: json['showWeekend'] is bool
+          ? json['showWeekend']! as bool
+          : Term.defaultShowWeekend,
+      showOtherWeeks: json['showOtherWeeks'] is bool
+          ? json['showOtherWeeks']! as bool
+          : Term.defaultShowOtherWeeks,
     );
   }
 

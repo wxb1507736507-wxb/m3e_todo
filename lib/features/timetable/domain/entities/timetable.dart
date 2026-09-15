@@ -59,6 +59,29 @@ class Timetable {
       ]..sort((CourseMeeting a, CourseMeeting b) =>
           a.slot.startPeriod.compareTo(b.slot.startPeriod));
 
+  /// The courses that meet on [weekday] in *some other* week of the term.
+  ///
+  /// What the phone's 显示非本周课程 draws: the classes that exist on this day
+  /// but not in the week being looked at — a two-week rotation, a course that
+  /// only runs in the second half of the term. Each is offered once, however
+  /// many other weeks it runs in, because what the grid can show is *that* it
+  /// happens on this day, and repeating it per week would be the same block
+  /// drawn on top of itself.
+  List<CourseMeeting> meetingsOnDayInOtherWeeks(int week, int weekday) {
+    final List<CourseMeeting> meetings = <CourseMeeting>[];
+    for (final Course course in courses) {
+      if (course.runsInWeek(week)) {
+        continue;
+      }
+      for (final CourseSlot slot in course.slotsOnDay(weekday)) {
+        meetings.add(CourseMeeting(course: course, slot: slot));
+      }
+    }
+    meetings.sort((CourseMeeting a, CourseMeeting b) =>
+        a.slot.startPeriod.compareTo(b.slot.startPeriod));
+    return meetings;
+  }
+
   /// What is on today, for the widget: it has no week selector to offer.
   List<CourseMeeting> meetingsForDate(DateTime day) =>
       meetingsForDateIn(courses, term, day);

@@ -39,6 +39,8 @@ class _TermSheetState extends ConsumerState<TermSheet> {
   late final TextEditingController _nameController;
   late DateTime _startMonday;
   late int _totalWeeks;
+  late bool _showWeekend;
+  late bool _showOtherWeeks;
   late List<PeriodTime> _periods;
   bool _saving = false;
 
@@ -50,6 +52,8 @@ class _TermSheetState extends ConsumerState<TermSheet> {
     _nameController = TextEditingController(text: term.name);
     _startMonday = term.startMonday;
     _totalWeeks = term.totalWeeks;
+    _showWeekend = term.showWeekend;
+    _showOtherWeeks = term.showOtherWeeks;
     _periods = List<PeriodTime>.of(term.periods);
   }
 
@@ -187,6 +191,8 @@ class _TermSheetState extends ConsumerState<TermSheet> {
               startMonday: _startMonday,
               totalWeeks: _totalWeeks,
               periods: _periods,
+              showWeekend: _showWeekend,
+              showOtherWeeks: _showOtherWeeks,
             ),
           );
       navigator.pop();
@@ -257,6 +263,24 @@ class _TermSheetState extends ConsumerState<TermSheet> {
                     icon: const Icon(Icons.add_circle_outline),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              // The two switches the phone's own timetable asks for here, and
+              // for the same reason: they are about how this timetable is laid
+              // out and read, which is the subject of this screen.
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _showWeekend,
+                onChanged: (bool value) => setState(() => _showWeekend = value),
+                title: const Text(AppStrings.termWeekendLabel),
+                subtitle: const Text(AppStrings.termWeekendHint),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _showOtherWeeks,
+                onChanged: (bool value) => setState(() => _showOtherWeeks = value),
+                title: const Text(AppStrings.termOtherWeeksLabel),
+                subtitle: const Text(AppStrings.termOtherWeeksHint),
               ),
               const SizedBox(height: 8),
               Text(AppStrings.termPeriodsLabel, style: text.labelLarge),

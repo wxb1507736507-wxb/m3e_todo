@@ -420,6 +420,10 @@ abstract final class AppStrings {
   static const String termWeeksLabel = '总周数';
   static const String termPeriodsLabel = '节次时间';
   static const String termPeriodsHint = '点某一节可以改它的上下课时间';
+  static const String termWeekendLabel = '周末有课';
+  static const String termWeekendHint = '关掉以后课表只显示周一到周五';
+  static const String termOtherWeeksLabel = '显示非本周课程';
+  static const String termOtherWeeksHint = '打开以后，别的周才上的课也会用浅色画出来';
   static const String timetableBackgroundLabel = '课程表背景';
   static const String timetableBackgroundHint = '给课程表单独换一张背景图；觉得课程名字看不清，就把下面的「遮罩浓度」调高一点，图片会变淡';
 

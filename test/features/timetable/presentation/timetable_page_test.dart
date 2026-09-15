@@ -689,6 +689,129 @@ void main() {
     expect(repository.stored!.courses.single.name, '高等数学');
   });
 
+  testWidgets('周末有课 off takes Saturday and Sunday off the grid', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(
+        term: Term(
+          name: '大三上',
+          startMonday: DateTime(2026, 3, 9),
+          totalWeeks: 18,
+          periods: kDefaultPeriods,
+          showWeekend: false,
+        ),
+        courses: <Course>[course('c1', weekday: DateTime.saturday)],
+      ),
+    );
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    // Five columns, and the Saturday course has nowhere to be drawn — which is
+    // what turning the weekend off means.
+    expect(find.text('五'), findsWidgets);
+    expect(find.text('六'), findsNothing);
+    expect(find.text('日'), findsNothing);
+    expect(find.text('高等数学'), findsNothing);
+  });
+
+  testWidgets('显示非本周课程 draws another week\'s class as an outline', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(
+        term: Term(
+          name: '大三上',
+          startMonday: DateTime(2026, 3, 9),
+          totalWeeks: 18,
+          periods: kDefaultPeriods,
+          showOtherWeeks: true,
+        ),
+        // Runs only in weeks 2 and 3, so week 1 — the week being shown — has
+        // nothing of it.
+        courses: <Course>[
+          course('c1', name: '物理实验', weeks: <int>{2, 3}),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    // Drawn, because the user asked to see when it happens at all; faint,
+    // because it is not something to go to this week.
+    expect(find.text('物理实验'), findsOneWidget);
+    expect(find.byType(Opacity), findsWidgets);
+  });
+
+  testWidgets('without that switch, another week stays invisible', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: FakeTimetableRepository(
+          Timetable(
+            term: term(),
+            courses: <Course>[course('c1', name: '物理实验', weeks: <int>{2, 3})],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    expect(find.text('物理实验'), findsNothing);
+  });
+
+  testWidgets('学期设置 carries the weekend and other-week switches', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(term: term(), courses: const <Course>[]),
+    );
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    await tester.tap(find.byTooltip(AppStrings.timetableTermSettings));
+    await tester.pumpAndSettle();
+
+    // The phone asks both of these while a timetable is being set up, and this
+    // is the screen that sets a timetable up.
+    expect(find.text(AppStrings.termWeekendLabel), findsOneWidget);
+    expect(find.text(AppStrings.termOtherWeeksLabel), findsOneWidget);
+
+    await tester.tap(find.text(AppStrings.termWeekendLabel));
+    await tester.pumpAndSettle();
+    await tapInEditor(tester, AppStrings.save);
+
+    final Term stored = repository.stored!.term;
+    expect(stored.showWeekend, isFalse);
+    // Untouched, because the user did not touch it.
+    expect(stored.showOtherWeeks, isFalse);
+  });
+
   testWidgets('a course is renamed and then deleted from its own editor', (
     WidgetTester tester,
   ) async {

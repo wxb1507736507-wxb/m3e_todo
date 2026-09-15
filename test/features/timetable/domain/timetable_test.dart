@@ -431,6 +431,46 @@ void main() {
       expect(restored.color, 0xFFE53935);
     });
 
+    test('the term remembers its weekend and its other weeks', () {
+      final Timetable original = Timetable(
+        term: term().edited(showWeekend: false, showOtherWeeks: true),
+        courses: const <Course>[],
+      );
+
+      final Timetable restored =
+          TimetableModel.fromJson(TimetableModel.toJson(original))!;
+
+      expect(restored.term.showWeekend, isFalse);
+      expect(restored.term.showOtherWeeks, isTrue);
+      expect(restored.term, original.term);
+    });
+
+    test('a file written before those two existed gets the grid it had', () {
+      final Timetable restored = TimetableModel.fromJson(<String, Object?>{
+        'version': 1,
+        'term': <String, Object?>{
+          'name': '大三上',
+          'startMonday': '2026-08-31T00:00:00.000',
+          'totalWeeks': 18,
+        },
+        'courses': <Object?>[],
+      })!;
+
+      // Seven columns and nothing from other weeks: the way that file was
+      // drawn when it was written.
+      expect(restored.term.showWeekend, isTrue);
+      expect(restored.term.showOtherWeeks, isFalse);
+      expect(restored.term.shownWeekdays, hasLength(7));
+    });
+
+    test('a term without the weekend shows five days', () {
+      expect(term().shownWeekdays, <int>[1, 2, 3, 4, 5, 6, 7]);
+      expect(
+        term().edited(showWeekend: false).shownWeekdays,
+        <int>[1, 2, 3, 4, 5],
+      );
+    });
+
     test('a document with no term is not a timetable', () {
       expect(TimetableModel.fromJson(<String, Object?>{'courses': <Object?>[]}), isNull);
     });

@@ -141,28 +141,40 @@ class _Body extends ConsumerWidget {
           onThisWeek: () => ref.read(selectedWeekProvider.notifier).show(null),
         ),
         _DayHeader(term: term, week: week, now: now),
-        Expanded(
-          child: timetable.isEmpty
-              ? const _NoCourses()
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 96),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      _PeriodColumn(periods: term.periods),
-                      for (int weekday = 1; weekday <= 7; weekday++)
-                        Expanded(
-                          child: _DayColumn(
-                            term: term,
-                            week: week,
-                            weekday: weekday,
-                            meetings: timetable.meetingsOnDay(week, weekday),
-                            isToday: _isToday(term, week, weekday, now),
-                          ),
-                        ),
-                    ],
+        // The grid is drawn whether or not there is anything in it: an empty
+        // timetable is a grid with nothing in it, and that is exactly the thing
+        // you fill in by tapping a cell. A full-screen "no courses" placeholder
+        // would take away the only way to add the first one.
+        if (timetable.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+            child: Text(
+              AppStrings.timetableNoCoursesBody,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                ),
+            ),
+          ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 96),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _PeriodColumn(periods: term.periods),
+                for (int weekday = 1; weekday <= 7; weekday++)
+                  Expanded(
+                    child: _DayColumn(
+                      term: term,
+                      week: week,
+                      weekday: weekday,
+                      meetings: timetable.meetingsOnDay(week, weekday),
+                      isToday: _isToday(term, week, weekday, now),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ],
     );
@@ -313,19 +325,28 @@ class _PeriodColumn extends StatelessWidget {
           for (final PeriodTime period in periods)
             SizedBox(
               height: TimetablePage.rowHeight,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Text('${period.index}', style: text.titleSmall),
-                  Text(
-                    period.startLabel,
-                    style: text.labelSmall?.copyWith(color: colors.outline),
-                  ),
-                  Text(
-                    period.endLabel,
-                    style: text.labelSmall?.copyWith(color: colors.outline),
-                  ),
-                ],
+              // Three lines of text in a fixed-height cell: at a large font
+              // scale they need more room than the row has, and a timetable that
+              // draws yellow and black stripes because somebody turned the system
+              // font up is worse than one whose clock times are a little smaller.
+              // Scaling down only when it does not fit keeps the usual case
+              // exactly as it is.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Text('${period.index}', style: text.titleSmall),
+                    Text(
+                      period.startLabel,
+                      style: text.labelSmall?.copyWith(color: colors.outline),
+                    ),
+                    Text(
+                      period.endLabel,
+                      style: text.labelSmall?.copyWith(color: colors.outline),
+                    ),
+                  ],
+                ),
               ),
             ),
         ],
@@ -362,18 +383,33 @@ class _DayColumn extends ConsumerWidget {
         child: Stack(
           children: <Widget>[
             // The day's ruled lines: every period is a row whether or not
-            // something is in it, which is what makes the grid readable.
+            // something is in it, which is what makes the grid readable — and
+            // every empty cell is also a way to put something in it. Tapping a
+            // cell opens the editor with that day and period already filled in,
+            // because a timetable is filled in *at* a place on the grid rather
+            // than by describing one in a form.
             Column(
               children: <Widget>[
                 for (int index = 0; index < rows; index++)
-                  Container(
-                    height: TimetablePage.rowHeight,
-                    decoration: BoxDecoration(
-                      color: isToday
-                          ? colors.primary.withValues(alpha: 0.04)
-                          : null,
-                      border: Border(
-                        top: BorderSide(color: colors.outlineVariant, width: 0.5),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => unawaited(
+                      showCourseEditorSheet(
+                        context,
+                        weekday: weekday,
+                        period: index + 1,
+                      ),
+                    ),
+                    child: Container(
+                      height: TimetablePage.rowHeight,
+                      decoration: BoxDecoration(
+                        color: isToday
+                            ? colors.primary.withValues(alpha: 0.04)
+                            : null,
+                        border: Border(
+                          top:
+                              BorderSide(color: colors.outlineVariant, width: 0.5),
+                        ),
                       ),
                     ),
                   ),
@@ -468,37 +504,6 @@ class _CourseBlock extends StatelessWidget {
                 Text(time, maxLines: 1, style: text.labelSmall),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The placeholder for a term with nothing in it yet.
-class _NoCourses extends StatelessWidget {
-  const _NoCourses();
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme text = Theme.of(context).textTheme;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(Icons.calendar_view_week, size: 52, color: colors.outline),
-            const SizedBox(height: 14),
-            Text(AppStrings.timetableNoCourses, style: text.titleMedium),
-            const SizedBox(height: 6),
-            Text(
-              AppStrings.timetableNoCoursesBody,
-              textAlign: TextAlign.center,
-              style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-            ),
-          ],
         ),
       ),
     );

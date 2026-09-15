@@ -15,6 +15,8 @@ import 'package:m3e_todo/features/habits/presentation/habit_permissions.dart';
 import 'package:m3e_todo/features/habits/presentation/providers/habit_providers.dart';
 import 'package:m3e_todo/features/settings/domain/app_settings.dart';
 import 'package:m3e_todo/features/settings/presentation/settings_controller.dart';
+import 'package:m3e_todo/features/timetable/domain/repositories/timetable_repository.dart';
+import 'package:m3e_todo/features/timetable/presentation/providers/timetable_providers.dart';
 import 'package:m3e_todo/features/todos/domain/repositories/todo_repository.dart';
 import 'package:m3e_todo/features/todos/presentation/providers/todo_providers.dart';
 
@@ -36,6 +38,7 @@ Widget buildTestApp({
   NoteRepository? noteRepository,
   HabitRepository? habitRepository,
   HabitPermissions? habitPermissions,
+  TimetableRepository? timetableRepository,
 }) {
   // Always redirected away from the real per-user directory. A test must never
   // be able to read or overwrite the developer's actual todos, and defaulting to
@@ -66,6 +69,10 @@ Widget buildTestApp({
       habitPermissionsProvider.overrideWithValue(
         habitPermissions ?? const HabitPermissions(),
       ),
+      // The timetable is opted into per test for the same reason: a widget test
+      // that waits for the disk is a widget test that fails on a slow machine.
+      if (timetableRepository != null)
+        timetableRepositoryProvider.overrideWithValue(timetableRepository),
     ],
     child: const M3eTodoApp(),
   );

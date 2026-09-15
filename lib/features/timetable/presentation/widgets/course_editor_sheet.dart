@@ -412,6 +412,7 @@ class _SlotRow extends StatelessWidget {
           Expanded(
             flex: 3,
             child: DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: slot.weekday,
               decoration: const InputDecoration(
                 labelText: AppStrings.courseSlotWeekday,
@@ -432,6 +433,7 @@ class _SlotRow extends StatelessWidget {
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: slot.startPeriod,
               decoration: const InputDecoration(
                 labelText: '从',
@@ -463,6 +465,7 @@ class _SlotRow extends StatelessWidget {
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: slot.endPeriod,
               decoration: const InputDecoration(
                 labelText: '到',

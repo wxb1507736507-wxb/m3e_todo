@@ -294,4 +294,172 @@ abstract final class AppPlatform {
       _invoke<Object?>('playRingtone', uri);
 
   static Future<void> stopRingtone() => _invoke<Object?>('stopRingtone');
+
+  // --- Habit widgets and their alarms ------------------------------------------
+
+  /// Replaces the whole habit-reminder schedule with [alarms].
+  ///
+  /// Whole-schedule rather than a diff, because a habit's next occurrence is
+  /// computed from a time of day and a weekday mask: it moves every day by
+  /// itself, and the native side owns the repeat. Sending the list on every
+  /// change also carries [HabitAlarm.skipToday], which is how a habit ticked at
+  /// 07:00 stops nagging at 20:00.
+  static Future<void> syncHabitAlarms(List<HabitAlarm> alarms) {
+    return _invoke<Object?>(
+      'syncHabitAlarms',
+      <Object?>[for (final HabitAlarm alarm in alarms) alarm.toChannelArgs()],
+    );
+  }
+
+  /// Hands the home-screen widget everything it draws.
+  ///
+  /// Returns whether any widget is currently on a home screen, which is what
+  /// lets the habits page say "已添加到桌面" instead of offering to add one that
+  /// is already there.
+  static Future<bool> updateHabitWidget(Map<String, Object?> snapshot) async {
+    if (!isAndroid) {
+      return false;
+    }
+    return await _invoke<bool>('updateHabitWidget', snapshot) ?? false;
+  }
+
+  /// Asks the system to place the habit widget on the home screen.
+  ///
+  /// Android 8+ shows its own confirmation sheet, so a `true` here means the
+  /// request was made, not that a widget now exists.
+  static Future<bool> requestHabitWidgetPin() async {
+    if (!isAndroid) {
+      return false;
+    }
+    return await _invoke<bool>('requestHabitWidgetPin') ?? false;
+  }
+
+  /// Takes the check-ins made on the widget since the last call.
+  ///
+  /// The widget can be pressed with the app's process dead, so it cannot write
+  /// the app's documents itself: it queues the taps natively, and this drains
+  /// them. Draining clears the queue, so it must only be called by the one place
+  /// that turns them into stored check-ins.
+  static Future<List<HabitWidgetAction>> drainHabitCheckIns() async {
+    final List<Object?>? raw =
+        await _invoke<List<Object?>>('drainHabitCheckIns');
+    if (raw == null) {
+      return const <HabitWidgetAction>[];
+    }
+    final List<HabitWidgetAction> actions = <HabitWidgetAction>[];
+    for (final Object? entry in raw) {
+      if (entry is! Map) {
+        continue;
+      }
+      final Object? habitId = entry['habitId'];
+      final Object? dayKey = entry['dayKey'];
+      if (habitId is! String || habitId.isEmpty || dayKey is! int) {
+        continue;
+      }
+      final Object? at = entry['atMillis'];
+      actions.add(
+        HabitWidgetAction(
+          habitId: habitId,
+          dayKey: dayKey,
+          done: entry['done'] == true,
+          at: at is int
+              ? DateTime.fromMillisecondsSinceEpoch(at)
+              : DateTime.now(),
+        ),
+      );
+    }
+    return actions;
+  }
+
+  /// Takes the habit the widget asked the app to open, if any.
+  ///
+  /// The widget's ＋ button is the only way to write a note from the home screen:
+  /// a `RemoteViews` cannot take typing, so the tap is handed to the app, which
+  /// opens that habit's check-in editor.
+  static Future<String?> takeHabitOpenRequest() =>
+      _invoke<String>('takeHabitOpenRequest');
+
+  /// Asks to be told when the home-screen widget is used.
+  ///
+  /// The other direction of the same channel, and the only thing the app ever
+  /// *hears* from Android. It exists because a widget tap with the app already
+  /// on screen produces no lifecycle event at all: resuming is how a background
+  /// app notices, and there is nothing to resume when the app never left.
+  static void setHabitWidgetListener(Future<void> Function() listener) {
+    if (!isAndroid) {
+      return;
+    }
+    _channel.setMethodCallHandler((MethodCall call) async {
+      if (call.method == 'habitWidgetChanged') {
+        await listener();
+      }
+      return null;
+    });
+  }
+}
+
+/// One habit reminder for the native scheduler.
+///
+/// Unlike a todo's, this one repeats: [minutes] and [daysMask] describe *when*,
+/// and the native side works out the next occurrence from them — after firing,
+/// and again after a reboot.
+class HabitAlarm {
+  const HabitAlarm({
+    required this.habitId,
+    required this.title,
+    required this.body,
+    required this.minutes,
+    required this.daysMask,
+    required this.ring,
+    this.ringtoneUri,
+    this.skipToday = false,
+  });
+
+  final String habitId;
+  final String title;
+  final String body;
+
+  /// Minutes after local midnight.
+  final int minutes;
+
+  /// Monday-first weekday mask; a habit is reminded only on its own days.
+  final int daysMask;
+
+  final bool ring;
+  final String? ringtoneUri;
+
+  /// Whether today's occurrence should be skipped — set once the habit has
+  /// already been checked off today.
+  final bool skipToday;
+
+  Map<String, Object?> toChannelArgs() => <String, Object?>{
+        'habitId': habitId,
+        'title': title,
+        'body': body,
+        'minutes': minutes,
+        'daysMask': daysMask,
+        'ring': ring,
+        'ringtoneUri': ringtoneUri,
+        'skipToday': skipToday,
+      };
+}
+
+/// Something the user did on the home-screen widget, waiting to be stored.
+class HabitWidgetAction {
+  const HabitWidgetAction({
+    required this.habitId,
+    required this.dayKey,
+    required this.done,
+    required this.at,
+  });
+
+  final String habitId;
+  final int dayKey;
+
+  /// `true` for a check-in, `false` for an undo — the widget's button toggles,
+  /// because a mis-tap on the home screen is otherwise only fixable by opening
+  /// the app.
+  final bool done;
+
+  final DateTime at;
 }

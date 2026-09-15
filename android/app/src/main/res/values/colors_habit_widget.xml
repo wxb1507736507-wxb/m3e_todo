@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The habit widget's own colours: the surface it sits on, and the two text
+  weights. Kept beside the app's window colours so both dark-mode variants live
+  in the same two files.
+
+  A launcher draws the widget into its own process, before (and often without)
+  this app running, so the widget cannot read the Flutter theme; these are the
+  theme's values written down, the same compromise `m3_surface` already makes.
+-->
+<resources>
+    <!-- Slightly translucent, so a wallpaper still reads through the widget
+         instead of being covered by an opaque card. -->
+    <color name="habit_widget_background">#F2FFF7FD</color>
+    <color name="habit_widget_text">#1D1A21</color>
+    <color name="habit_widget_subtle">#5A5560</color>
+    <color name="habit_widget_accent">#6750A4</color>
+    <color name="habit_widget_done">#7A757F</color>
+</resources>

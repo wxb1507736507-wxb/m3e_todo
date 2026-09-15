@@ -323,4 +323,89 @@ abstract final class AppStrings {
   static const String tipAppearance = '在编辑待办时可以自定义色块颜色与背景图片';
   static const String tipReminder = '每个待办可以单独选择响铃还是仅消息，也能各自挑选铃声';
   static const String tipAppBackground = '设置 →「应用背景」可以给整个应用换背景图，图片可裁剪';
+
+  // --- Habits (打卡) ---------------------------------------------------------
+
+  static const String navHabits = '打卡';
+  static const String habitsTitle = '打卡';
+  static const String habitNew = '新建打卡';
+  static const String habitEdit = '编辑打卡';
+  static const String habitEmptyTitle = '还没有打卡项';
+  static const String habitEmptyBody = '添加一件想坚持的事，比如吃药、健身、喝水，每天来点一下。';
+  static const String habitNameLabel = '名称';
+  static const String habitNameHint = '例如：吃药、健身、喝水';
+  static const String habitNameRequired = '给打卡项起个名字';
+  static const String habitIconLabel = '图标';
+  static const String habitDaysLabel = '打卡日期';
+  static const String habitDaysHint = '只在选中的日子需要打卡';
+  static const String habitDaysRequired = '至少要选一天';
+  static const String habitEveryDay = '每天';
+  static const String habitWeekdays = '工作日';
+  static const String habitWeekends = '周末';
+  static const String habitReminderLabel = '提醒';
+  static const String habitReminderNone = '不提醒';
+  static const String habitReminderPick = '选择提醒时间';
+  static const String habitReminderClear = '关闭提醒';
+  static const String habitAllowNote = '允许写文字记录';
+  static const String habitAllowNoteHint = '打开后打卡时可以顺手写一句；关掉就只是一次点击';
+  static const String habitCheckIn = '打卡';
+  static const String habitCheckedIn = '已打卡';
+  static const String habitUndo = '取消打卡';
+  static const String habitCheckInTitle = '今日打卡';
+  static const String habitNoteLabel = '写点什么（可不写）';
+  static const String habitNoteHint = '今天的感受、次数、身体反应……';
+  static const String habitHistory = '打卡记录';
+  static const String habitHistoryEmpty = '还没有打卡记录';
+  static const String habitToday = '今天要打卡';
+  static const String habitTodayNone = '今天不用打卡';
+  static const String habitOthers = '其他打卡项';
+  static const String habitStreak = '连续';
+  static const String habitTotalLabel = '累计';
+  static const String habitDelete = '删除打卡项';
+  static const String habitDeleteTitle = '删除这个打卡项？';
+  static const String habitDeleted = '已删除';
+  static const String habitSaved = '已保存';
+  static const String habitWidgetSection = '桌面小组件';
+  static const String habitWidgetAdd = '添加到桌面';
+  static const String habitWidgetAddHint = '在桌面一键打卡，不用打开应用';
+  static const String habitWidgetAdded = '小组件已添加到桌面';
+  static const String habitWidgetPinRequested = '请在系统弹窗里确认添加';
+  static const String habitWidgetManualHint =
+      '若系统没有弹出确认，请长按桌面空白处 → 在「卡片」旁找到小组件列表，选择「打卡小组件」';
+  static const String habitWidgetUnsupported = '当前设备不支持桌面小组件';
+  static const String habitWidgetOnDesktop = '已添加到桌面';
+  static const String habitWidgetAddMore = '再加一个';
+  static const String habitReminderBody = '今天还没打卡';
+  static const String habitNotificationAction = '打卡';
+  static const String habitWidgetEmptyTitle = '今天没有要打卡的项目';
+  static const String habitWidgetEmptyBody = '在应用里添加打卡项';
+
+  /// The widget's own counter line: `2/3 已完成`.
+  static String habitWidgetCount(int done, int total) =>
+      '$done/$total $habitWidgetCountSuffix';
+
+  /// The words after the numbers in that line.
+  ///
+  /// Sent to the widget as well, because the widget recounts by itself when a
+  /// row is tapped with the app closed — and a header still reading "0/3"
+  /// underneath a ticked row is exactly the kind of small lie a summary must
+  /// never tell.
+  static const String habitWidgetCountSuffix = '已完成';
+
+  /// The widget's overflow line when more habits are due than it can show.
+  static String habitWidgetMore(int count) => '还有 $count 项';
+
+  static String habitReminderStreakBody(int days) => '今天还没打卡，已连续 $days 天';
+
+  static String habitStreakDays(int days) => '连续 $days 天';
+
+  static String habitTotalTimes(int times) => '累计 $times 次';
+
+  static String habitDeleteBody(String name) => '「$name」和它的全部打卡记录都会被删除，无法恢复。';
+
+  static String habitCheckedInToast(String name) => '「$name」打卡成功';
+
+  static String habitUndoneToast(String name) => '已取消「$name」今天的打卡';
+
+  static String habitDaysSummary(String days) => '打卡日期：$days';
 }

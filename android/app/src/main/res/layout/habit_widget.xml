@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The habit widget's layout.
+
+  A `RemoteViews` can only inflate the classic view classes, and cannot build a
+  variable-length list without a collection service — so the rows are fixed and
+  the code hides the ones it does not need. Four is what the payload carries;
+  fewer are shown when the widget is not tall enough (see `HabitWidgetProvider`),
+  which is what makes resizing it behave.
+
+  Ids are numbered rather than named so the code can loop over them, and every
+  row repeats its layout parameters in full: the row is inflated by the launcher
+  from *this* file, and a size that only exists in a style is one more thing that
+  can silently differ between launchers.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/habit_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/habit_widget_background"
+    android:orientation="vertical"
+    android:paddingStart="14dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/habit_widget_title"
+            style="@style/HabitWidgetTitle" />
+
+        <TextView
+            android:id="@+id/habit_widget_count"
+            style="@style/HabitWidgetCount" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/habit_widget_empty_title"
+        style="@style/HabitWidgetEmptyTitle" />
+
+    <TextView
+        android:id="@+id/habit_widget_empty_body"
+        style="@style/HabitWidgetEmptyBody" />
+
+    <LinearLayout
+        android:id="@+id/habit_row_0"
+        style="@style/HabitWidgetRow">
+
+        <TextView
+            android:id="@+id/habit_row_0_emoji"
+            style="@style/HabitWidgetEmoji" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/habit_row_0_name"
+                style="@style/HabitWidgetName" />
+
+            <TextView
+                android:id="@+id/habit_row_0_time"
+                style="@style/HabitWidgetTime" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/habit_row_0_note"
+            style="@style/HabitWidgetNote"
+            android:contentDescription="@string/habit_widget_note" />
+
+        <ImageView
+            android:id="@+id/habit_row_0_check"
+            style="@style/HabitWidgetCheck"
+            android:contentDescription="@string/habit_widget_check" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/habit_row_1"
+        style="@style/HabitWidgetRow">
+
+        <TextView
+            android:id="@+id/habit_row_1_emoji"
+            style="@style/HabitWidgetEmoji" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/habit_row_1_name"
+                style="@style/HabitWidgetName" />
+
+            <TextView
+                android:id="@+id/habit_row_1_time"
+                style="@style/HabitWidgetTime" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/habit_row_1_note"
+            style="@style/HabitWidgetNote"
+            android:contentDescription="@string/habit_widget_note" />
+
+        <ImageView
+            android:id="@+id/habit_row_1_check"
+            style="@style/HabitWidgetCheck"
+            android:contentDescription="@string/habit_widget_check" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/habit_row_2"
+        style="@style/HabitWidgetRow">
+
+        <TextView
+            android:id="@+id/habit_row_2_emoji"
+            style="@style/HabitWidgetEmoji" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/habit_row_2_name"
+                style="@style/HabitWidgetName" />
+
+            <TextView
+                android:id="@+id/habit_row_2_time"
+                style="@style/HabitWidgetTime" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/habit_row_2_note"
+            style="@style/HabitWidgetNote"
+            android:contentDescription="@string/habit_widget_note" />
+
+        <ImageView
+            android:id="@+id/habit_row_2_check"
+            style="@style/HabitWidgetCheck"
+            android:contentDescription="@string/habit_widget_check" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/habit_row_3"
+        style="@style/HabitWidgetRow">
+
+        <TextView
+            android:id="@+id/habit_row_3_emoji"
+            style="@style/HabitWidgetEmoji" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/habit_row_3_name"
+                style="@style/HabitWidgetName" />
+
+            <TextView
+                android:id="@+id/habit_row_3_time"
+                style="@style/HabitWidgetTime" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/habit_row_3_note"
+            style="@style/HabitWidgetNote"
+            android:contentDescription="@string/habit_widget_note" />
+
+        <ImageView
+            android:id="@+id/habit_row_3_check"
+            style="@style/HabitWidgetCheck"
+            android:contentDescription="@string/habit_widget_check" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/habit_widget_more"
+        style="@style/HabitWidgetMore" />
+</LinearLayout>

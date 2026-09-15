@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Strings the Android side needs on its own.
+
+  Only the widget's accessibility labels live here: everything the user reads in
+  the app comes from Dart (`AppStrings`), but a widget is described by the
+  launcher, which asks Android — not Flutter — for those labels.
+-->
+<resources>
+    <string name="habit_widget_label">打卡小组件</string>
+    <string name="habit_widget_description">在今天要打卡的项目上点一下就能打卡</string>
+    <string name="habit_widget_note">写记录</string>
+    <string name="habit_widget_check">打卡</string>
+    <string name="habit_widget_no_data">打开应用完成一次同步</string>
+    <!-- The overflow line: `还有 2 项`. -->
+    <string name="habit_widget_more">还有 %1$d 项</string>
+    <string name="habit_notification_action">打卡</string>
+</resources>

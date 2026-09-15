@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the launcher needs to know before it shows the habit widget.
+
+  `updatePeriodMillis` is 0 on purpose: the widget is redrawn when the app says
+  the day changed (or when the user taps it), and a periodic wake-up every half
+  hour to redraw four unchanged rows would be a battery cost for nothing.
+
+  The cell sizes are the Android 12+ hints; `minWidth`/`minHeight` cover the
+  older launchers that only understand those.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/habit_widget_description"
+    android:initialLayout="@layout/habit_widget"
+    android:minHeight="110dp"
+    android:minWidth="180dp"
+    android:previewLayout="@layout/habit_widget"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="3"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

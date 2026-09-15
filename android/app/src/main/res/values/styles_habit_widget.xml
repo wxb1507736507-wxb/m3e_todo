@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The sizes and colours of every view inside the habit widget.
+
+  They live here rather than inline so the four identical rows cannot drift
+  apart, and because the *sizes* are also what `HabitWidgetProvider` counts when
+  it decides how many rows fit the space the launcher gave the widget. Changing a
+  row's height here changes that arithmetic; the two are deliberately next to
+  each other in the same file.
+-->
+<resources>
+
+    <!-- One row: 38dp tall, which is what fits a thumb. -->
+    <style name="HabitWidgetRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">38dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="HabitWidgetTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textColor">@color/habit_widget_text</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="HabitWidgetCount">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textColor">@color/habit_widget_accent</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="HabitWidgetEmptyTitle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">10dp</item>
+        <item name="android:textColor">@color/habit_widget_text</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="HabitWidgetEmptyBody">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textColor">@color/habit_widget_subtle</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="HabitWidgetEmoji">
+        <item name="android:layout_width">30dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textSize">17sp</item>
+    </style>
+
+    <style name="HabitWidgetName">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textColor">@color/habit_widget_text</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="HabitWidgetTime">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textColor">@color/habit_widget_subtle</item>
+        <item name="android:textSize">10sp</item>
+    </style>
+
+    <!-- 40dp of touch target for a 24dp glyph: the widget is used one-handed,
+         with a thumb, so the pressable area is what matters, not the drawing. -->
+    <style name="HabitWidgetNote">
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:padding">9dp</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:src">@drawable/habit_note_add</item>
+    </style>
+
+    <style name="HabitWidgetCheck">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:padding">9dp</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:src">@drawable/habit_check_todo</item>
+    </style>
+
+    <style name="HabitWidgetMore">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/habit_widget_subtle</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:visibility">gone</item>
+    </style>
+</resources>

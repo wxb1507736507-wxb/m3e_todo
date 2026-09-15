@@ -40,6 +40,28 @@
         <receiver
             android:name=".DueAlarmReceiver"
             android:exported="false"/>
+        <!-- Fires habit reminders, and re-arms the next one every time: a habit
+             repeats, so its alarm is never simply consumed. -->
+        <receiver
+            android:name=".HabitAlarmReceiver"
+            android:exported="false"/>
+        <!-- The habit widget.
+
+             Exported, and listening for APPWIDGET_UPDATE, because the launcher
+             is a different process: it is the launcher that instantiates this
+             receiver to draw the widget and to deliver taps on it, whether or
+             not the app itself is running. -->
+        <receiver
+            android:name=".HabitWidgetProvider"
+            android:exported="true"
+            android:label="@string/habit_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/habit_widget_info"/>
+        </receiver>
         <!-- Re-registers pending reminders after a reboot. -->
         <receiver
             android:name=".BootReceiver"

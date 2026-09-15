@@ -10,6 +10,8 @@ import 'package:m3e_todo/features/categories/domain/repositories/category_reposi
 import 'package:m3e_todo/features/notes/domain/repositories/note_repository.dart';
 import 'package:m3e_todo/features/notes/presentation/providers/note_providers.dart';
 import 'package:m3e_todo/features/categories/presentation/providers/category_providers.dart';
+import 'package:m3e_todo/features/habits/domain/repositories/habit_repository.dart';
+import 'package:m3e_todo/features/habits/presentation/providers/habit_providers.dart';
 import 'package:m3e_todo/features/settings/domain/app_settings.dart';
 import 'package:m3e_todo/features/settings/presentation/settings_controller.dart';
 import 'package:m3e_todo/features/todos/domain/repositories/todo_repository.dart';
@@ -31,6 +33,7 @@ Widget buildTestApp({
   Directory? dataDirectory,
   CategoryRepository? categoryRepository,
   NoteRepository? noteRepository,
+  HabitRepository? habitRepository,
 }) {
   // Always redirected away from the real per-user directory. A test must never
   // be able to read or overwrite the developer's actual todos, and defaulting to
@@ -52,6 +55,10 @@ Widget buildTestApp({
         categoryRepositoryProvider.overrideWithValue(categoryRepository),
       if (noteRepository != null)
         noteRepositoryProvider.overrideWithValue(noteRepository),
+      // Same reason as the folders: two documents behind a real filesystem, and
+      // nothing in a widget test should be waiting on that.
+      if (habitRepository != null)
+        habitRepositoryProvider.overrideWithValue(habitRepository),
     ],
     child: const M3eTodoApp(),
   );

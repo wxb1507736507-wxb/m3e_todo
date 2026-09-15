@@ -1,7 +1,7 @@
 name: m3e_todo
 description: "A Material 3 Expressive todo, habit and timetable app, phone first."
 publish_to: 'none'
-version: 0.3.0+5
+version: 0.3.1+6
 
 environment:
   sdk: ^3.13.3

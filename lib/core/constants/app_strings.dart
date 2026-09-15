@@ -333,6 +333,13 @@ abstract final class AppStrings {
   static const String timetableTitle = '课程表';
   static const String timetableOpen = '打开课程表';
   static const String timetableThisWeek = '本周';
+
+  /// The week button once the grid has been dragged off this week.
+  ///
+  /// "本周" alone was read as a *statement* — that the week on screen was this
+  /// one — when it is the button's label for the way back, which a device pass
+  /// caught on `第 2 周 · 本周` while today was still in week 1.
+  static const String timetableBackToThisWeek = '回到本周';
   static const String timetablePrevWeek = '上一周';
   static const String timetableNextWeek = '下一周';
   static const String timetableCourseList = '课表列表';

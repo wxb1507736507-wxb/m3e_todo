@@ -234,8 +234,8 @@ void main() {
     // It runs in week 1 only, so week 2 has nothing on it.
     expect(find.text('高等数学'), findsNothing);
 
-    // 本周 comes back, which is the tap a timetable is used with most.
-    await tester.tap(find.textContaining(AppStrings.timetableThisWeek));
+    // 回到本周 comes back, which is the tap a timetable is used with most.
+    await tester.tap(find.textContaining(AppStrings.timetableBackToThisWeek));
     await tester.pumpAndSettle();
     expect(find.text('高等数学'), findsOneWidget);
   });
@@ -801,6 +801,15 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining(AppStrings.timetableWeek(2)), findsOneWidget);
+    // The suffix is the way back, and it has to say so: "本周" alone read as a
+    // statement that week 2 *was* the current week, which a device pass caught
+    // while today was still in week 1.
+    expect(
+      find.text(
+        '${AppStrings.timetableWeek(2)} · ${AppStrings.timetableBackToThisWeek}',
+      ),
+      findsOneWidget,
+    );
 
     // And back, to the previous one.
     await tester.flingFrom(_firstCell(tester, column: 3), const Offset(260, 0), 900);
@@ -899,6 +908,14 @@ void main() {
       lessThan(0.2),
       reason: 'ink, not a pale colour that has to be squinted at on white',
     );
+    // What the paper is *painted* with, which is not the same question as what
+    // `surface` says: a copied `ThemeData` keeps the `scaffoldBackgroundColor`
+    // the app's theme resolved, so overriding the scheme alone left the page on
+    // the app's tinted surface. A device pixel sample caught exactly that — the
+    // grid reading (252,252,252) instead of white — and only an assertion on the
+    // painted colour can catch it again.
+    expect(Theme.of(page).scaffoldBackgroundColor, Colors.white);
+    expect(Theme.of(page).appBarTheme.backgroundColor, Colors.white);
   });
 
   testWidgets('a course is renamed and then deleted from its own editor', (

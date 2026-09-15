@@ -94,8 +94,18 @@ class TimetablePage extends ConsumerWidget {
     // The timetable's own background, painted the way the app's is: this page is
     // pushed over the shell, so without this it would hide whatever the user
     // chose for the app behind an opaque surface of its own.
+    //
+    // `scaffoldBackgroundColor` is set explicitly rather than left to follow the
+    // scheme: a copied `ThemeData` keeps the value it resolved when the app's
+    // theme was built, so overriding `colorScheme` alone left the page on the
+    // app's tinted surface — which is what a pixel check caught, the grid
+    // sampling (252,252,252) instead of white.
     return Theme(
-      data: Theme.of(context).copyWith(colorScheme: paper),
+      data: Theme.of(context).copyWith(
+        colorScheme: paper,
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(backgroundColor: Colors.white),
+      ),
       child: AppBackground(
         imagePath: settings.timetableBackgroundImage,
         dim: settings.timetableBackgroundDim,
@@ -471,7 +481,8 @@ class _WeekHeader extends StatelessWidget {
               child: Text(
                 week == currentWeek
                     ? AppStrings.timetableWeek(week)
-                    : '${AppStrings.timetableWeek(week)} · ${AppStrings.timetableThisWeek}',
+                    : '${AppStrings.timetableWeek(week)} · '
+                        '${AppStrings.timetableBackToThisWeek}',
                 style: text.labelLarge,
                 maxLines: 1,
                 softWrap: false,

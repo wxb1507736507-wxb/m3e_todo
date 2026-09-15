@@ -512,6 +512,51 @@ class MainActivity : FlutterActivity() {
             .getOrDefault(false)
     }
 
+    /**
+     * Opens this app's notification settings.
+     *
+     * The screen, not the dialog: once the runtime prompt has been refused, the
+     * system will not offer it again, so a reminder that cannot be delivered has
+     * to be fixable somewhere — and that somewhere is this screen.
+     */
+    private fun openNotificationSettings(): Boolean {
+        val intent =
+            if (Build.VERSION.SDK_INT >= 26) {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            } else {
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(Uri.fromParts("package", packageName, null))
+            }
+        return runCatching {
+            startActivity(intent)
+            true
+        }.getOrElse {
+            Log.w(TAG, "No notification settings screen: ${it.message}")
+            false
+        }
+    }
+
+    /**
+     * Opens this app's own page in system settings.
+     *
+     * The generic destination, used when what is missing is not a runtime
+     * permission: several launchers gate placing a widget behind a permission of
+     * their own, and the app cannot request that — it can only take the user to
+     * the page where it lives.
+     */
+    private fun openAppSettings(): Boolean {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .setData(Uri.fromParts("package", packageName, null))
+        return runCatching {
+            startActivity(intent)
+            true
+        }.getOrElse {
+            Log.w(TAG, "No app settings screen: ${it.message}")
+            false
+        }
+    }
+
     private fun handle(method: String, arguments: Any?, result: MethodChannel.Result) {
         when (method) {
             "areNotificationsEnabled" -> result.success(notificationsEnabled())
@@ -552,6 +597,12 @@ class MainActivity : FlutterActivity() {
                     requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO_PERMISSION)
                 }
             }
+            // Where a permission has to be granted by hand rather than by a
+            // dialog: Android stops showing the notification prompt after a
+            // refusal or two, and the exact-alarm grant has no dialog at all.
+            // Sending the user to the screen itself is the only way left to ask.
+            "openNotificationSettings" -> result.success(openNotificationSettings())
+            "openAppSettings" -> result.success(openAppSettings())
             "systemRingtoneUri" -> result.success(
                 RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION).toString(),
             )

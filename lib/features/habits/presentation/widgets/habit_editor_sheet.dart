@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_shapes.dart';
 import '../../domain/entities/habit.dart';
+import '../habit_permissions.dart';
 import '../providers/habit_providers.dart';
 
 /// Opens the habit editor: name, icon, which days, and whether it reminds.
@@ -120,6 +121,15 @@ class _HabitEditorSheetState extends ConsumerState<HabitEditorSheet> {
         );
       }
       navigator.pop(saved);
+      // Asked *after* the sheet closes, and with the messenger captured before
+      // it did: turning on a reminder is the one moment the permission request
+      // makes sense, and a dialog behind a closing sheet is a dialog nobody
+      // reads.
+      if (saved.reminds) {
+        unawaited(
+          ref.read(habitPermissionsProvider).ensureReminderDelivery(messenger),
+        );
+      }
     } on Object catch (error) {
       if (!mounted) {
         return;

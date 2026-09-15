@@ -11,6 +11,7 @@ import 'package:m3e_todo/features/notes/domain/repositories/note_repository.dart
 import 'package:m3e_todo/features/notes/presentation/providers/note_providers.dart';
 import 'package:m3e_todo/features/categories/presentation/providers/category_providers.dart';
 import 'package:m3e_todo/features/habits/domain/repositories/habit_repository.dart';
+import 'package:m3e_todo/features/habits/presentation/habit_permissions.dart';
 import 'package:m3e_todo/features/habits/presentation/providers/habit_providers.dart';
 import 'package:m3e_todo/features/settings/domain/app_settings.dart';
 import 'package:m3e_todo/features/settings/presentation/settings_controller.dart';
@@ -34,6 +35,7 @@ Widget buildTestApp({
   CategoryRepository? categoryRepository,
   NoteRepository? noteRepository,
   HabitRepository? habitRepository,
+  HabitPermissions? habitPermissions,
 }) {
   // Always redirected away from the real per-user directory. A test must never
   // be able to read or overwrite the developer's actual todos, and defaulting to
@@ -59,6 +61,11 @@ Widget buildTestApp({
       // nothing in a widget test should be waiting on that.
       if (habitRepository != null)
         habitRepositoryProvider.overrideWithValue(habitRepository),
+      // The permission asker is a double by default in tests, not just when
+      // asked for: the real one talks to Android, and there is no Android here.
+      habitPermissionsProvider.overrideWithValue(
+        habitPermissions ?? const HabitPermissions(),
+      ),
     ],
     child: const M3eTodoApp(),
   );

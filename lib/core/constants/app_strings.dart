@@ -377,6 +377,11 @@ abstract final class AppStrings {
   static const String habitWidgetAddMore = '再加一个';
   static const String habitReminderBody = '今天还没打卡';
   static const String habitNotificationAction = '打卡';
+  static const String habitNotificationPermissionHint =
+      '没有通知权限，打卡提醒无法显示。已为你打开通知设置，请打开「允许通知」';
+  static const String habitExactAlarmHint =
+      '未授权「闹钟和提醒」，提醒可能延迟约 1 小时。已为你打开系统设置，请允许精确闹钟';
+  static const String habitOpenSettings = '打开权限设置';
   static const String habitWidgetEmptyTitle = '今天没有要打卡的项目';
   static const String habitWidgetEmptyBody = '在应用里添加打卡项';
 

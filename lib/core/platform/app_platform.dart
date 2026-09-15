@@ -111,6 +111,29 @@ abstract final class AppPlatform {
     return await _invoke<bool>('canScheduleExactAlarms') ?? false;
   }
 
+  /// Opens this app's notification settings.
+  ///
+  /// Used when asking is no longer possible: Android shows the runtime prompt
+  /// only until it has been refused, and after that the switch can only be
+  /// found — so the app takes the user to it.
+  static Future<bool> openNotificationSettings() async {
+    if (!isAndroid) {
+      return false;
+    }
+    return await _invoke<bool>('openNotificationSettings') ?? false;
+  }
+
+  /// Opens this app's own page in system settings.
+  ///
+  /// The destination for anything the app cannot request itself, including a
+  /// launcher's own gate on placing a widget.
+  static Future<bool> openAppSettings() async {
+    if (!isAndroid) {
+      return false;
+    }
+    return await _invoke<bool>('openAppSettings') ?? false;
+  }
+
   /// Opens the system screen where the user grants [canScheduleExactAlarms].
   ///
   /// Returns whether the screen could be opened; the answer to the grant itself

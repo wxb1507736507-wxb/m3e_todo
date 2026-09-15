@@ -12,6 +12,7 @@ import '../features/calendar/presentation/providers/special_day_providers.dart';
 import '../features/habits/domain/entities/habit.dart';
 import '../features/habits/domain/entities/habit_log.dart';
 import '../features/habits/domain/habit_planner.dart';
+import '../features/habits/presentation/habit_permissions.dart';
 import '../features/habits/presentation/habit_widget_sync.dart';
 import '../features/habits/presentation/pages/habits_page.dart';
 import '../features/habits/presentation/providers/habit_providers.dart';
@@ -108,6 +109,9 @@ class _AppShellState extends ConsumerState<AppShell>
       return;
     }
     await ref.read(habitWidgetSyncProvider).sync();
+    // The user may have just come back from a settings screen, so what the app
+    // is allowed to do is re-read rather than remembered.
+    ref.invalidate(habitPermissionStatusProvider);
     final String? habitId = await AppPlatform.takeHabitOpenRequest();
     if (habitId == null || !mounted) {
       return;

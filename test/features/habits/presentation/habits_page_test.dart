@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/core/constants/app_strings.dart';
 import 'package:m3e_todo/features/habits/domain/entities/habit.dart';
 import 'package:m3e_todo/features/habits/domain/entities/habit_log.dart';
+import 'package:m3e_todo/features/habits/presentation/habit_permissions.dart';
 import 'package:m3e_todo/features/habits/presentation/widgets/habit_checkin_sheet.dart';
 import 'package:m3e_todo/features/habits/presentation/widgets/habit_editor_sheet.dart';
 
@@ -330,6 +331,68 @@ void main() {
     expect(find.text('喝了 8 杯'), findsOneWidget);
   });
 
+  testWidgets('setting a reminder asks for what a reminder needs, right then', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    final _RecordingPermissions permissions = _RecordingPermissions();
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        habitRepository: FakeHabitRepository(),
+        habitPermissions: permissions,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openHabits(tester);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '吃药');
+    // The reminder row is also its switch: no reminder until a time is picked.
+    final Finder reminder = find.text(AppStrings.habitReminderNone);
+    await tester.ensureVisible(reminder);
+    await tester.pumpAndSettle();
+    await tester.tap(reminder);
+    await tester.pumpAndSettle();
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+    // The app runs in Chinese, so the picker's confirm button does too.
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AppStrings.create));
+    await tester.pumpAndSettle();
+
+    // Asked once, and only because a reminder was actually set: the permission
+    // belongs to the promise, not to the habit.
+    expect(permissions.reminderChecks, 1);
+  });
+
+  testWidgets('a habit with no reminder asks for no permissions', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    final _RecordingPermissions permissions = _RecordingPermissions();
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        habitRepository: FakeHabitRepository(),
+        habitPermissions: permissions,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openHabits(tester);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '喝水');
+    await tester.tap(find.text(AppStrings.create));
+    await tester.pumpAndSettle();
+
+    // Nothing was promised, so nothing is asked: a permission prompt on a habit
+    // that cannot ring would be noise.
+    expect(permissions.reminderChecks, 0);
+  });
+
   testWidgets('the widget section is only offered where there is a home screen', (
     WidgetTester tester,
   ) async {
@@ -358,4 +421,19 @@ void _usePhoneWindow(WidgetTester tester) {
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
+}
+
+/// The permission asker, counting how often it was asked to check.
+///
+/// A double rather than the real thing because the real one talks to Android:
+/// what a widget test can check is the *wiring* — that a reminder triggers the
+/// check and a habit without one does not.
+class _RecordingPermissions implements HabitPermissions {
+  int reminderChecks = 0;
+
+  @override
+  Future<bool> ensureReminderDelivery(ScaffoldMessengerState messenger) async {
+    reminderChecks++;
+    return true;
+  }
 }

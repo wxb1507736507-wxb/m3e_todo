@@ -10,6 +10,7 @@ import '../../../../core/utils/calendar.dart';
 import '../../domain/entities/habit.dart';
 import '../../domain/entities/habit_log.dart';
 import '../../domain/habit_planner.dart';
+import '../habit_permissions.dart';
 import '../habit_widget_sync.dart';
 import '../providers/habit_providers.dart';
 import '../widgets/habit_checkin_sheet.dart';
@@ -78,6 +79,12 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
       children: <Widget>[
+        // Only when it matters: a habit that reminds and an app that cannot. A
+        // permission warning on a screen with no reminders would be nagging.
+        if (habits.any((Habit habit) => habit.reminds))
+          _ReminderPermissionBanner(
+            status: ref.watch(habitPermissionStatusProvider),
+          ),
         _TodayHeader(
           dueCount: today.length,
           doneCount: today.where((HabitDayStatus s) => s.done).length,
@@ -291,7 +298,16 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
               ? AppStrings.habitWidgetAdded
               : AppStrings.habitWidgetManualHint,
         ),
-        duration: const Duration(seconds: 6),
+        duration: const Duration(seconds: 8),
+        // Several launchers gate placing a widget behind a permission of their
+        // own, which no app can request — so the page it lives on is opened
+        // instead of describing where to find it.
+        action: placed
+            ? null
+            : SnackBarAction(
+                label: AppStrings.habitOpenSettings,
+                onPressed: () => unawaited(AppPlatform.openAppSettings()),
+              ),
       ),
     );
   }
@@ -315,6 +331,62 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
               style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The warning that a habit's reminder cannot reach the user, with the one
+/// action that fixes it.
+///
+/// Shown rather than silently logged because the failure is invisible by
+/// nature: a reminder that never arrives looks exactly like a reminder that was
+/// never set.
+class _ReminderPermissionBanner extends ConsumerWidget {
+  const _ReminderPermissionBanner({required this.status});
+
+  final AsyncValue<HabitPermissionStatus> status;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final HabitPermissionStatus? value = status.value;
+    // Still loading, unsupported, or fine: nothing to say.
+    if (value == null || value.remindersWork) {
+      return const SizedBox.shrink();
+    }
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: colors.errorContainer,
+        borderRadius: AppShapes.radius(AppShapes.small),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.notifications_off_outlined, color: colors.onErrorContainer),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  value.notifications
+                      ? AppStrings.habitExactAlarmHint
+                      : AppStrings.habitNotificationPermissionHint,
+                  style: text.bodySmall?.copyWith(
+                    color: colors.onErrorContainer,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => unawaited(
+                  openReminderPermissionSettings(value),
+                ),
+                child: const Text(AppStrings.habitOpenSettings),
+              ),
+            ],
+          ),
         ),
       ),
     );

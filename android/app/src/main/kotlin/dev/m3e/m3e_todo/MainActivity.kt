@@ -1164,7 +1164,7 @@ internal object WidgetBackground {
      * would flicker between the two every time the day changed.
      */
     fun apply(context: Context, views: RemoteViews, backgroundId: Int, scrimId: Int) {
-        val bitmap = path(context)?.let { decode(it) }
+        val bitmap = bitmapFor(context)
         if (bitmap == null) {
             // No picture, or one that has been deleted behind the app's back: the
             // tile falls back to its own surface rather than to a blank card.
@@ -1191,6 +1191,36 @@ internal object WidgetBackground {
             ),
         )
         views.setViewVisibility(scrimId, if (strength > 0f) View.VISIBLE else View.GONE)
+    }
+
+    /**
+     * The tile's picture, decoded once and then kept.
+     *
+     * A tile is redrawn whenever anything about it changes — the app publishing a
+     * new payload, a tap on a week arrow, the launcher asking again — and every
+     * one of those redraws used to decode the user's photograph from scratch, on
+     * the main thread, before the tile could be handed over. Measured on the
+     * device with a 12-megapixel background, that was the one piece of work here
+     * big enough to be felt. The picture only changes when the *path* changes, so
+     * the decode is kept until then.
+     */
+    private var cachedPath: String? = null
+    private var cachedBitmap: Bitmap? = null
+
+    private fun bitmapFor(context: Context): Bitmap? {
+        val path = path(context)
+        if (path == null) {
+            cachedPath = null
+            cachedBitmap = null
+            return null
+        }
+        if (path == cachedPath && cachedBitmap?.isRecycled == false) {
+            return cachedBitmap
+        }
+        val decoded = decode(path)
+        cachedPath = if (decoded == null) null else path
+        cachedBitmap = decoded
+        return decoded
     }
 
     /**

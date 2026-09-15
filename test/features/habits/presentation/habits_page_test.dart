@@ -393,6 +393,58 @@ void main() {
     expect(permissions.reminderChecks, 0);
   });
 
+  testWidgets('a habit can be set to come back every few days', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    final FakeHabitRepository repository = FakeHabitRepository();
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        habitRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openHabits(tester);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '浇花');
+
+    final Finder intervalMode = find.text(AppStrings.habitScheduleInterval);
+    await tester.ensureVisible(intervalMode);
+    await tester.pumpAndSettle();
+    await tester.tap(intervalMode);
+    await tester.pumpAndSettle();
+    // Two days apart is where the mode starts, and the weekday chips are gone:
+    // the two ways of counting are alternatives, not settings that add up.
+    expect(find.text(AppStrings.habitEveryNDays(2)), findsOneWidget);
+    expect(find.text(AppStrings.habitWeekdays), findsNothing);
+
+    // Scoped to the sheet: the floating action button is also a plus.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(HabitEditorSheet),
+        matching: find.byIcon(Icons.add),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(AppStrings.habitEveryNDays(3)), findsOneWidget);
+
+    final Finder create = find.text(AppStrings.create);
+    await tester.ensureVisible(create);
+    await tester.pumpAndSettle();
+    await tester.tap(create);
+    await tester.pumpAndSettle();
+
+    final Habit stored = (await repository.loadHabits()).single;
+    expect(stored.intervalDays, 3);
+    expect(stored.scheduleLabel, '每隔 3 天');
+    expect(find.text('浇花'), findsOneWidget);
+    // Either way of counting, it is due today: it was made today.
+    expect(find.text(AppStrings.habitTodayNone), findsNothing);
+  });
+
   testWidgets('the widget section is only offered where there is a home screen', (
     WidgetTester tester,
   ) async {

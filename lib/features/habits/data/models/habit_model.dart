@@ -16,6 +16,7 @@ abstract final class HabitModel {
       // Absent rather than null, and absent rather than `false`: the common
       // habit is "every day, no reminder, notes allowed", and spelling out the
       // defaults on every record would bury the fields that differ.
+      if (habit.intervalDays != null) 'intervalDays': habit.intervalDays,
       if (habit.reminderMinutes != null) 'reminderMinutes': habit.reminderMinutes,
       if (!habit.allowNote) 'allowNote': false,
       if (habit.color != null) 'color': habit.color,
@@ -38,6 +39,7 @@ abstract final class HabitModel {
         ? days & kHabitEveryDay
         : kHabitEveryDay;
 
+    final Object? interval = json['intervalDays'];
     final Object? minutes = json['reminderMinutes'];
     final Object? createdAt = json['createdAt'];
     final Object? color = json['color'];
@@ -49,6 +51,11 @@ abstract final class HabitModel {
       createdAt: createdAt is String
           ? (DateTime.tryParse(createdAt) ?? DateTime.now())
           : DateTime.now(),
+      // An interval outside what the editor can produce is dropped rather than
+      // trusted: the weekday mask is then the schedule, which is always valid.
+      intervalDays: interval is int && isValidHabitInterval(interval)
+          ? interval
+          : null,
       reminderMinutes:
           minutes is int && minutes >= 0 && minutes < 24 * 60 ? minutes : null,
       allowNote: json['allowNote'] is bool ? json['allowNote']! as bool : true,

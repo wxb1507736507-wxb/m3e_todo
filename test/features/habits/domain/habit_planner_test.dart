@@ -213,6 +213,63 @@ void main() {
     });
   });
 
+  group('interval habits', () {
+    Habit everyOtherDay() => Habit.create(
+          id: 'h',
+          name: '浇花',
+          emoji: '💧',
+          days: kHabitEveryDay,
+          createdAt: DateTime(2026, 9, 16),
+          intervalDays: 2,
+        );
+
+    test('are listed only on their own days', () {
+      final List<Habit> habits = <Habit>[everyOtherDay()];
+      expect(
+        habitsDueOn(habits, const <HabitLog>[], DateTime(2026, 9, 16)),
+        hasLength(1),
+      );
+      expect(
+        habitsDueOn(habits, const <HabitLog>[], DateTime(2026, 9, 17)),
+        isEmpty,
+      );
+      expect(
+        habitsDueOn(habits, const <HabitLog>[], DateTime(2026, 9, 18)),
+        hasLength(1),
+      );
+    });
+
+    test('a streak counts their days and ignores the days between', () {
+      final Habit habit = everyOtherDay();
+      // 16th, 18th and 20th are its days; the 18th is today.
+      final Set<int> days = <int>{
+        habitDayKey(DateTime(2026, 9, 16)),
+        habitDayKey(DateTime(2026, 9, 18)),
+      };
+      expect(
+        habitStreak(habit: habit, doneDays: days, today: DateTime(2026, 9, 18)),
+        2,
+      );
+    });
+
+    test('their next reminder lands on the next due day, not tomorrow', () {
+      final Habit habit = Habit.create(
+        id: 'h',
+        name: '浇花',
+        emoji: '💧',
+        days: kHabitEveryDay,
+        createdAt: DateTime(2026, 9, 16),
+        intervalDays: 3,
+        reminderMinutes: 8 * 60,
+      );
+      final DateTime? trigger = nextHabitTrigger(
+        habit: habit,
+        now: DateTime(2026, 9, 16, 9),
+      );
+      expect(trigger, DateTime(2026, 9, 19, 8));
+    });
+  });
+
   group('widget snapshot', () {
     test("carries today's habits, counts and the day it is counting for", () {
       final DateTime now = DateTime(2026, 9, 16, 7);

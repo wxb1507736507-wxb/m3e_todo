@@ -37,6 +37,10 @@ class _HabitEditorSheetState extends ConsumerState<HabitEditorSheet> {
   late final TextEditingController _nameController;
   late String _emoji;
   late int _days;
+
+  /// Set when the habit counts days instead of following the week; `null` means
+  /// the weekday chips are the schedule.
+  late int? _intervalDays;
   late int? _reminderMinutes;
   late bool _allowNote;
   bool _saving = false;
@@ -48,6 +52,7 @@ class _HabitEditorSheetState extends ConsumerState<HabitEditorSheet> {
     _nameController = TextEditingController(text: existing?.name ?? '');
     _emoji = existing?.emoji ?? kHabitEmoji.first;
     _days = existing?.days ?? kHabitEveryDay;
+    _intervalDays = existing?.intervalDays;
     _reminderMinutes = existing?.reminderMinutes;
     _allowNote = existing?.allowNote ?? true;
   }
@@ -77,7 +82,7 @@ class _HabitEditorSheetState extends ConsumerState<HabitEditorSheet> {
     if (_saving || !(_formKey.currentState?.validate() ?? false)) {
       return;
     }
-    if (_days & kHabitEveryDay == 0) {
+    if (_intervalDays == null && _days & kHabitEveryDay == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(AppStrings.habitDaysRequired)),
       );
@@ -96,6 +101,7 @@ class _HabitEditorSheetState extends ConsumerState<HabitEditorSheet> {
           name: _nameController.text,
           emoji: _emoji,
           days: _days,
+          intervalDays: _intervalDays,
           reminderMinutes: _reminderMinutes,
           allowNote: _allowNote,
         );
@@ -106,6 +112,8 @@ class _HabitEditorSheetState extends ConsumerState<HabitEditorSheet> {
             name: _nameController.text,
             emoji: _emoji,
             days: _days,
+            intervalDays: _intervalDays,
+            clearInterval: _intervalDays == null,
             reminderMinutes: _reminderMinutes,
             clearReminder: _reminderMinutes == null,
             allowNote: _allowNote,
@@ -115,6 +123,8 @@ class _HabitEditorSheetState extends ConsumerState<HabitEditorSheet> {
           name: _nameController.text,
           emoji: _emoji,
           days: _days,
+          intervalDays: _intervalDays,
+          clearInterval: _intervalDays == null,
           reminderMinutes: _reminderMinutes,
           clearReminder: _reminderMinutes == null,
           allowNote: _allowNote,
@@ -230,40 +240,94 @@ class _HabitEditorSheetState extends ConsumerState<HabitEditorSheet> {
               const SizedBox(height: 18),
               _Label(AppStrings.habitDaysLabel),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: <Widget>[
-                  // Three shortcuts first: almost every habit is one of them,
-                  // and picking "每天" should not mean tapping seven chips.
-                  _Shortcut(
-                    label: AppStrings.habitEveryDay,
-                    selected: _days == kHabitEveryDay,
-                    onTap: () => setState(() => _days = kHabitEveryDay),
+              // Two ways to say when, and they are alternatives rather than
+              // settings that add up: a habit follows the week or it follows a
+              // count of days, never both.
+              SegmentedButton<bool>(
+                segments: const <ButtonSegment<bool>>[
+                  ButtonSegment<bool>(
+                    value: false,
+                    label: Text(AppStrings.habitScheduleWeekly),
                   ),
-                  _Shortcut(
-                    label: AppStrings.habitWeekdays,
-                    selected: _days == kHabitWeekdays,
-                    onTap: () => setState(() => _days = kHabitWeekdays),
+                  ButtonSegment<bool>(
+                    value: true,
+                    label: Text(AppStrings.habitScheduleInterval),
                   ),
-                  _Shortcut(
-                    label: AppStrings.habitWeekends,
-                    selected: _days == kHabitWeekends,
-                    onTap: () => setState(() => _days = kHabitWeekends),
-                  ),
-                  for (int bit = 0; bit < 7; bit++)
-                    _DayChip(
-                      label: kHabitWeekdayNames[bit],
-                      selected: _days & (1 << bit) != 0,
-                      onTap: () => setState(() {
-                        _days = _days ^ (1 << bit);
-                      }),
-                    ),
                 ],
+                selected: <bool>{_intervalDays != null},
+                onSelectionChanged: (Set<bool> selection) => setState(() {
+                  if (selection.contains(true)) {
+                    _intervalDays = _intervalDays ?? 2;
+                  } else {
+                    _intervalDays = null;
+                  }
+                }),
               ),
+              const SizedBox(height: 10),
+              if (_intervalDays == null)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    // Three shortcuts first: almost every habit is one of them,
+                    // and picking "每天" should not mean tapping seven chips.
+                    _Shortcut(
+                      label: AppStrings.habitEveryDay,
+                      selected: _days == kHabitEveryDay,
+                      onTap: () => setState(() => _days = kHabitEveryDay),
+                    ),
+                    _Shortcut(
+                      label: AppStrings.habitWeekdays,
+                      selected: _days == kHabitWeekdays,
+                      onTap: () => setState(() => _days = kHabitWeekdays),
+                    ),
+                    _Shortcut(
+                      label: AppStrings.habitWeekends,
+                      selected: _days == kHabitWeekends,
+                      onTap: () => setState(() => _days = kHabitWeekends),
+                    ),
+                    for (int bit = 0; bit < 7; bit++)
+                      _DayChip(
+                        label: kHabitWeekdayNames[bit],
+                        selected: _days & (1 << bit) != 0,
+                        onTap: () => setState(() {
+                          _days = _days ^ (1 << bit);
+                        }),
+                      ),
+                  ],
+                )
+              else
+                Row(
+                  children: <Widget>[
+                    IconButton.filledTonal(
+                      onPressed: _intervalDays! <= kHabitMinIntervalDays
+                          ? null
+                          : () => setState(() => _intervalDays = _intervalDays! - 1),
+                      icon: const Icon(Icons.remove),
+                      tooltip: AppStrings.habitIntervalLess,
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          AppStrings.habitEveryNDays(_intervalDays!),
+                          style: text.titleMedium,
+                        ),
+                      ),
+                    ),
+                    IconButton.filledTonal(
+                      onPressed: _intervalDays! >= kHabitMaxIntervalDays
+                          ? null
+                          : () => setState(() => _intervalDays = _intervalDays! + 1),
+                      icon: const Icon(Icons.add),
+                      tooltip: AppStrings.habitIntervalMore,
+                    ),
+                  ],
+                ),
               const SizedBox(height: 6),
               Text(
-                AppStrings.habitDaysHint,
+                _intervalDays == null
+                    ? AppStrings.habitDaysHint
+                    : AppStrings.habitIntervalHint(_intervalDays!),
                 style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 12),

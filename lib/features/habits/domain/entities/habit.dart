@@ -8,6 +8,8 @@
 /// keep it — would have nowhere to live.
 library;
 
+import '../../../../core/utils/calendar.dart';
+
 /// Monday-first weekday mask: bit 0 is Monday, bit 6 is Sunday.
 ///
 /// `DateTime.weekday` is 1 (Monday) through 7 (Sunday), so the bit for a weekday
@@ -18,6 +20,19 @@ const int kHabitWeekends = 0x60;
 
 /// The bit that stands for [weekday] in a habit's mask.
 int habitDayBit(int weekday) => 1 << (weekday - 1);
+
+/// How often a habit can ask to be done, in days.
+///
+/// A single day of the week is the shortest interval that is not "every day" —
+/// and "every day" is spelled as a weekday mask — so 2 is the smallest interval
+/// that means anything. A year covers the doctor's "once a year" kind of habit
+/// without turning the field into a date picker.
+const int kHabitMinIntervalDays = 2;
+const int kHabitMaxIntervalDays = 366;
+
+/// Whether [days] is an interval a habit can be set to.
+bool isValidHabitInterval(int days) =>
+    days >= kHabitMinIntervalDays && days <= kHabitMaxIntervalDays;
 
 /// Weekday names in mask order, Monday first, so index 0 is bit 0.
 const List<String> kHabitWeekdayNames = <String>['一', '二', '三', '四', '五', '六', '日'];
@@ -50,6 +65,7 @@ class Habit {
     required this.emoji,
     required this.days,
     required this.createdAt,
+    this.intervalDays,
     this.reminderMinutes,
     this.allowNote = true,
     this.color,
@@ -63,6 +79,7 @@ class Habit {
     required String emoji,
     required int days,
     required DateTime createdAt,
+    int? intervalDays,
     int? reminderMinutes,
     bool allowNote = true,
     int? color,
@@ -71,15 +88,20 @@ class Habit {
     if (trimmed.isEmpty) {
       throw const HabitValidationException('打卡项需要一个名字');
     }
-    if (days & kHabitEveryDay == 0) {
+    final int mask = days & kHabitEveryDay;
+    if (intervalDays == null && mask == 0) {
       throw const HabitValidationException('至少要选一天');
+    }
+    if (intervalDays != null && !isValidHabitInterval(intervalDays)) {
+      throw const HabitValidationException('间隔天数不合适');
     }
     return Habit(
       id: id,
       name: trimmed,
       emoji: emoji,
-      days: days,
+      days: mask,
       createdAt: createdAt,
+      intervalDays: intervalDays,
       reminderMinutes: reminderMinutes,
       allowNote: allowNote,
       color: color,
@@ -93,7 +115,17 @@ class Habit {
   final String emoji;
 
   /// Which weekdays this habit is due, as a [kHabitEveryDay]-style mask.
+  ///
+  /// Only consulted when [intervalDays] is `null`: a habit counts its days one
+  /// way or the other, never both.
   final int days;
+
+  /// How many days apart this habit comes back, or `null` for a habit that
+  /// follows the week instead.
+  ///
+  /// Counted from [createdAt]'s day, so "每隔 3 天" means today, then the third
+  /// day after, and does not drift when the app is not opened.
+  final int? intervalDays;
 
   final DateTime createdAt;
 
@@ -111,8 +143,23 @@ class Habit {
 
   bool get reminds => reminderMinutes != null;
 
+  /// Whether this habit counts its days by interval rather than by weekday.
+  bool get repeatsEveryFewDays => intervalDays != null;
+
   /// Whether this habit is due on [day]. Only the date is looked at.
-  bool isDueOn(DateTime day) => days & habitDayBit(day.weekday) != 0;
+  ///
+  /// The interval case is a subtraction, not a counter: there is no stored
+  /// "next due" date to fall out of step with the calendar, so a habit set up
+  /// on a phone that is then left alone for a month is still due on the right
+  /// days when it comes back.
+  bool isDueOn(DateTime day) {
+    final int? interval = intervalDays;
+    if (interval != null) {
+      final int elapsed = daysBetween(startOfDay(createdAt), day);
+      return elapsed >= 0 && elapsed % interval == 0;
+    }
+    return days & habitDayBit(day.weekday) != 0;
+  }
 
   /// The reminder time as `08:30`, or `null` when there is no reminder.
   String? get reminderLabel {
@@ -125,12 +172,17 @@ class Habit {
     return '$hour:$minute';
   }
 
-  /// How the schedule reads in a list: 每天, 工作日, 周末, or the days themselves.
+  /// How the schedule reads in a list: 每天, 工作日, 周末, 每隔 N 天, or the days
+  /// themselves.
   ///
   /// The three common masks get their own words because they are what almost
   /// every habit is, and "一二三四五" makes the reader decode something they
   /// already knew.
   String get scheduleLabel {
+    final int? interval = intervalDays;
+    if (interval != null) {
+      return '每隔 $interval 天';
+    }
     if (days == kHabitEveryDay) {
       return '每天';
     }
@@ -152,6 +204,8 @@ class Habit {
     String? emoji,
     int? days,
     DateTime? createdAt,
+    int? intervalDays,
+    bool clearInterval = false,
     int? reminderMinutes,
     bool clearReminder = false,
     bool? allowNote,
@@ -162,9 +216,14 @@ class Habit {
     if (nextName.isEmpty) {
       throw const HabitValidationException('打卡项需要一个名字');
     }
-    final int nextDays = days ?? this.days;
-    if (nextDays & kHabitEveryDay == 0) {
+    final int nextDays = (days ?? this.days) & kHabitEveryDay;
+    final int? nextInterval =
+        clearInterval ? null : (intervalDays ?? this.intervalDays);
+    if (nextInterval == null && nextDays == 0) {
       throw const HabitValidationException('至少要选一天');
+    }
+    if (nextInterval != null && !isValidHabitInterval(nextInterval)) {
+      throw const HabitValidationException('间隔天数不合适');
     }
     return Habit(
       id: id,
@@ -172,6 +231,7 @@ class Habit {
       emoji: emoji ?? this.emoji,
       days: nextDays,
       createdAt: createdAt ?? this.createdAt,
+      intervalDays: nextInterval,
       reminderMinutes:
           clearReminder ? null : (reminderMinutes ?? this.reminderMinutes),
       allowNote: allowNote ?? this.allowNote,
@@ -186,6 +246,7 @@ class Habit {
       other.name == name &&
       other.emoji == emoji &&
       other.days == days &&
+      other.intervalDays == intervalDays &&
       other.createdAt == createdAt &&
       other.reminderMinutes == reminderMinutes &&
       other.allowNote == allowNote &&
@@ -197,6 +258,7 @@ class Habit {
         name,
         emoji,
         days,
+        intervalDays,
         createdAt,
         reminderMinutes,
         allowNote,

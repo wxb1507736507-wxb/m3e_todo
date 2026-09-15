@@ -339,6 +339,10 @@ abstract final class AppStrings {
   static const String habitDaysLabel = '打卡日期';
   static const String habitDaysHint = '只在选中的日子需要打卡';
   static const String habitDaysRequired = '至少要选一天';
+  static const String habitScheduleWeekly = '按星期';
+  static const String habitScheduleInterval = '每隔几天';
+  static const String habitIntervalLess = '少一天';
+  static const String habitIntervalMore = '多一天';
   static const String habitEveryDay = '每天';
   static const String habitWeekdays = '工作日';
   static const String habitWeekends = '周末';
@@ -403,6 +407,11 @@ abstract final class AppStrings {
   static String habitReminderStreakBody(int days) => '今天还没打卡，已连续 $days 天';
 
   static String habitStreakDays(int days) => '连续 $days 天';
+
+  static String habitEveryNDays(int days) => '每隔 $days 天';
+
+  static String habitIntervalHint(int days) =>
+      '从创建那天算起，每 $days 天需要打卡一次';
 
   static String habitTotalTimes(int times) => '累计 $times 次';
 

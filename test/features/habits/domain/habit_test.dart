@@ -111,6 +111,73 @@ void main() {
     });
   });
 
+  group('interval schedule', () {
+    Habit everyThreeDays() => Habit.create(
+          id: 'h2',
+          name: '浇花',
+          emoji: '💧',
+          days: kHabitEveryDay,
+          createdAt: DateTime(2026, 9, 14),
+          intervalDays: 3,
+        );
+
+    test('is due on the day it was made, then every N days', () {
+      final Habit habit = everyThreeDays();
+      expect(habit.isDueOn(DateTime(2026, 9, 14)), isTrue);
+      expect(habit.isDueOn(DateTime(2026, 9, 15)), isFalse);
+      expect(habit.isDueOn(DateTime(2026, 9, 16)), isFalse);
+      expect(habit.isDueOn(DateTime(2026, 9, 17)), isTrue);
+      expect(habit.isDueOn(DateTime(2026, 9, 20)), isTrue);
+    });
+
+    test('is not due before it existed', () {
+      expect(everyThreeDays().isDueOn(DateTime(2026, 9, 11)), isFalse);
+    });
+
+    test('counts days, not occurrences, so a missed day does not shift it', () {
+      // Nothing was checked off on the 17th; the 20th is still a due day,
+      // because the interval is measured against the calendar.
+      expect(everyThreeDays().isDueOn(DateTime(2026, 9, 20)), isTrue);
+    });
+
+    test('reads as its interval rather than as weekdays', () {
+      expect(everyThreeDays().scheduleLabel, '每隔 3 天');
+      expect(everyThreeDays().repeatsEveryFewDays, isTrue);
+      expect(build().repeatsEveryFewDays, isFalse);
+    });
+
+    test('refuses an interval that is not an interval', () {
+      expect(() => build().edited(intervalDays: 1), throwsA(isA<HabitValidationException>()));
+      expect(
+        () => build().edited(intervalDays: 1000),
+        throwsA(isA<HabitValidationException>()),
+      );
+    });
+
+    test('a habit can move between the two ways of counting', () {
+      final Habit interval = everyThreeDays();
+      final Habit weekly = interval.edited(clearInterval: true, days: kHabitWeekends);
+      expect(weekly.repeatsEveryFewDays, isFalse);
+      expect(weekly.scheduleLabel, '周末');
+
+      final Habit back = weekly.edited(intervalDays: 2);
+      expect(back.repeatsEveryFewDays, isTrue);
+      expect(back.scheduleLabel, '每隔 2 天');
+    });
+
+    test('an interval habit needs no weekday at all', () {
+      final Habit habit = Habit.create(
+        id: 'h3',
+        name: '理发',
+        emoji: '✍️',
+        days: 0,
+        createdAt: DateTime(2026, 9, 14),
+        intervalDays: 30,
+      );
+      expect(habit.isDueOn(DateTime(2026, 9, 14)), isTrue);
+    });
+  });
+
   test('equality is by value, so providers can skip a rebuild', () {
     expect(build(), build());
     expect(build(name: '健身') == build(), isFalse);

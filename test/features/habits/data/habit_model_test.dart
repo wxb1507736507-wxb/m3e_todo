@@ -54,6 +54,41 @@ void main() {
       expect(restored, habit);
     });
 
+    test('an interval habit keeps its interval through the file', () {
+      final Habit habit = Habit.create(
+        id: 'h1',
+        name: '浇花',
+        emoji: '💧',
+        days: kHabitEveryDay,
+        createdAt: DateTime(2026, 9, 1),
+        intervalDays: 3,
+      );
+      final Map<String, Object?> json = HabitModel.toJson(habit);
+      expect(json['intervalDays'], 3);
+      expect(HabitModel.fromJson(json), habit);
+    });
+
+    test('an interval nobody could have chosen is dropped', () {
+      // The weekday mask then decides, which is always a valid schedule.
+      final Habit restored = HabitModel.fromJson(<String, Object?>{
+        'id': 'h1',
+        'name': '浇花',
+        'days': kHabitWeekends,
+        'intervalDays': 0,
+      })!;
+      expect(restored.intervalDays, isNull);
+      expect(restored.scheduleLabel, '周末');
+    });
+
+    test('a record with no interval and no days still works', () {
+      final Habit restored = HabitModel.fromJson(<String, Object?>{
+        'id': 'h1',
+        'name': '吃药',
+      })!;
+      expect(restored.intervalDays, isNull);
+      expect(restored.days, kHabitEveryDay);
+    });
+
     test('drops a record with no id or no name', () {
       expect(HabitModel.fromJson(<String, Object?>{'name': '吃药'}), isNull);
       expect(HabitModel.fromJson(<String, Object?>{'id': 'h1'}), isNull);

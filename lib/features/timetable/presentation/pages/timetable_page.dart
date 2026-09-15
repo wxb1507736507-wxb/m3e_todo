@@ -487,39 +487,85 @@ class _CourseBlock extends StatelessWidget {
     final TextTheme text = Theme.of(context).textTheme;
     final bool dense = meeting.slot.periodCount == 1;
     final String? time = meeting.timeLabel(term);
+    final String? picture = meeting.course.backgroundImage;
 
-    return Material(
-      color: accent.withValues(alpha: 0.22),
-      borderRadius: AppShapes.radius(AppShapes.small),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: AppShapes.radius(AppShapes.small),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                meeting.course.name,
-                maxLines: dense ? 1 : 2,
-                overflow: TextOverflow.ellipsis,
-                style: text.labelMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              if (meeting.course.room != null)
-                Text(
-                  meeting.course.room!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.labelSmall,
-                ),
-              // The clock range only fits when the block is more than one period
-              // tall; on a single period it would push the name out.
-              if (!dense && time != null)
-                Text(time, maxLines: 1, style: text.labelSmall),
-            ],
+    final Widget label = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            meeting.course.name,
+            maxLines: dense ? 1 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: text.labelMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
-        ),
+          if (meeting.course.room != null)
+            Text(
+              meeting.course.room!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: text.labelSmall,
+            ),
+          // The clock range only fits when the block is more than one period
+          // tall; on a single period it would push the name out.
+          if (!dense && time != null)
+            Text(time, maxLines: 1, style: text.labelSmall),
+        ],
       ),
+    );
+
+    // A course with a picture of its own is a small window onto it, so the
+    // block draws the picture rather than the colour — but through the same
+    // scrim the app's own background uses, because this is the smallest text in
+    // the app and it sits on top of an arbitrary photo.
+    final Widget body = picture == null
+        ? Material(
+            color: accent.withValues(alpha: 0.22),
+            borderRadius: AppShapes.radius(AppShapes.small),
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: AppShapes.radius(AppShapes.small),
+              child: label,
+            ),
+          )
+        : ClipRRect(
+            borderRadius: AppShapes.radius(AppShapes.small),
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                return AppBackground(
+                  imagePath: picture,
+                  dim: meeting.course.backgroundDim,
+                  cacheWidth:
+                      (constraints.maxWidth * MediaQuery.devicePixelRatioOf(context))
+                          .round(),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(onTap: onTap, child: label),
+                  ),
+                );
+              },
+            ),
+          );
+
+    return Stack(
+      fit: StackFit.passthrough,
+      children: <Widget>[
+        body,
+        // The colour stays on as a hairline: a picture is what the user chose
+        // to see, but the outline is what keeps two adjacent courses apart.
+        if (picture != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: AppShapes.radius(AppShapes.small),
+                  border: Border.all(color: accent.withValues(alpha: 0.5)),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

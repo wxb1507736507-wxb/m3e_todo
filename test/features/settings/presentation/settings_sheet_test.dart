@@ -69,10 +69,14 @@ void main() {
     await openSettings(tester);
 
     expect(find.text(AppStrings.settingsSectionBackground), findsOneWidget);
-    expect(find.text(AppStrings.appBackgroundPick), findsOneWidget);
+    // One picker for the app and one for the home-screen tiles, which are two
+    // different pictures on purpose: a tile is seen through a launcher's own
+    // chrome, a few centimetres from the app's own screens.
+    expect(find.text(AppStrings.appBackgroundPick), findsNWidgets(2));
+    expect(find.text(AppStrings.widgetBackgroundLabel), findsOneWidget);
     // With no image chosen there is nothing to crop, remove or dim yet — the
     // controls appear only once there is.
-    expect(find.text(AppStrings.appBackgroundNone), findsOneWidget);
+    expect(find.text(AppStrings.appBackgroundNone), findsNWidgets(2));
     expect(find.text(AppStrings.cropBackgroundImage), findsNothing);
     expect(find.text(AppStrings.appBackgroundRemove), findsNothing);
     expect(find.byType(Slider), findsNothing);

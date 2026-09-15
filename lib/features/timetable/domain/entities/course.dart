@@ -80,8 +80,17 @@ class Course {
     this.room,
     this.note,
     this.color,
+    this.backgroundImage,
+    this.backgroundDim = defaultBackgroundDim,
     required this.createdAt,
   });
+
+  /// How strongly the surface covers a course's own picture by default.
+  ///
+  /// Weaker than the app's, because a course block is small and its text is
+  /// short: at the app's default a picture behind a card this size is barely
+  /// there at all, and choosing one would look like it had not worked.
+  static const double defaultBackgroundDim = 0.25;
 
   /// Builds a course, rejecting the shapes that would leave a block on the
   /// timetable with nothing to draw or nowhere to draw it.
@@ -93,6 +102,8 @@ class Course {
     String? room,
     String? note,
     int? color,
+    String? backgroundImage,
+    double backgroundDim = defaultBackgroundDim,
     required DateTime createdAt,
   }) {
     final String trimmed = name.trim();
@@ -118,6 +129,8 @@ class Course {
       room: _blankToNull(room),
       note: _blankToNull(note),
       color: color,
+      backgroundImage: _blankToNull(backgroundImage),
+      backgroundDim: backgroundDim.clamp(0.0, 0.9),
       createdAt: createdAt,
     );
   }
@@ -139,6 +152,13 @@ class Course {
 
   /// Background colour (ARGB32), or `null` to take one from the palette by name.
   final int? color;
+
+  /// The private copy of a picture to draw behind this course's block, or
+  /// `null` to leave it in the colour above.
+  final String? backgroundImage;
+
+  /// How strongly the surface covers [backgroundImage], in `[0, 0.9]`.
+  final double backgroundDim;
 
   final DateTime createdAt;
 
@@ -211,6 +231,9 @@ class Course {
     bool clearNote = false,
     int? color,
     bool clearColor = false,
+    String? backgroundImage,
+    bool clearBackgroundImage = false,
+    double? backgroundDim,
   }) {
     return Course.create(
       id: id,
@@ -220,6 +243,9 @@ class Course {
       room: clearRoom ? null : (room ?? this.room),
       note: clearNote ? null : (note ?? this.note),
       color: clearColor ? null : (color ?? this.color),
+      backgroundImage:
+          clearBackgroundImage ? null : (backgroundImage ?? this.backgroundImage),
+      backgroundDim: backgroundDim ?? this.backgroundDim,
       createdAt: createdAt,
     );
   }
@@ -232,6 +258,8 @@ class Course {
       other.room == room &&
       other.note == note &&
       other.color == color &&
+      other.backgroundImage == backgroundImage &&
+      other.backgroundDim == backgroundDim &&
       other.slots.length == slots.length &&
       Iterable<int>.generate(slots.length).every((int i) => other.slots[i] == slots[i]) &&
       other.weeks.length == weeks.length &&
@@ -245,6 +273,8 @@ class Course {
         room,
         note,
         color,
+        backgroundImage,
+        backgroundDim,
         Object.hashAll(slots),
         Object.hashAllUnordered(weeks),
         createdAt,

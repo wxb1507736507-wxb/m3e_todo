@@ -13,8 +13,11 @@ abstract final class AppSettingsCodec {
   /// version-3 file still opens in an older build, where the extra fields are
   /// simply ignored.
   /// Version 5 adds the timetable's own `timetableBackgroundImage` and
-  /// `timetableBackgroundDim`, both optional on read for the same reason.
-  static const int schemaVersion = 5;
+  /// `timetableBackgroundDim`, and version 6 the home-screen tiles'
+  /// `widgetBackgroundImage` and `widgetBackgroundDim` — all optional on read
+  /// for the same reason: an older file loads with the app's defaults, and a
+  /// newer one still opens in an older build.
+  static const int schemaVersion = 6;
 
   static Map<String, Object?> toJson(AppSettings settings) {
     return <String, Object?>{
@@ -32,6 +35,9 @@ abstract final class AppSettingsCodec {
       if (settings.timetableBackgroundImage != null)
         'timetableBackgroundImage': settings.timetableBackgroundImage,
       'timetableBackgroundDim': settings.timetableBackgroundDim,
+      if (settings.widgetBackgroundImage != null)
+        'widgetBackgroundImage': settings.widgetBackgroundImage,
+      'widgetBackgroundDim': settings.widgetBackgroundDim,
     };
   }
 
@@ -77,6 +83,13 @@ abstract final class AppSettingsCodec {
           : null,
       timetableBackgroundDim: _unitInterval(
         json['timetableBackgroundDim'],
+        AppSettings.defaultBackgroundDim,
+      ),
+      widgetBackgroundImage: json['widgetBackgroundImage'] is String
+          ? json['widgetBackgroundImage'] as String
+          : null,
+      widgetBackgroundDim: _unitInterval(
+        json['widgetBackgroundDim'],
         AppSettings.defaultBackgroundDim,
       ),
     );

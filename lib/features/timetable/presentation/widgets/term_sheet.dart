@@ -1,16 +1,14 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/utils/app_date_formatter.dart';
-import '../../../../core/theme/app_shapes.dart';
 import '../../../../core/utils/calendar.dart';
-import '../../../media/presentation/image_crop_page.dart';
 import '../../../settings/domain/app_settings.dart';
 import '../../../settings/presentation/settings_controller.dart';
+import '../../../settings/presentation/widgets/background_controls.dart';
 import '../../domain/entities/period_time.dart';
 import '../../domain/entities/term.dart';
 import '../../domain/entities/timetable.dart';
@@ -121,16 +119,13 @@ class _TermSheetState extends ConsumerState<TermSheet> {
   /// the app''s private directory and cropped to the screen, so nothing outside
   /// can delete it and no letterboxing appears.
   Future<void> _pickBackground() async {
-    final CroppedImage? cropped = await pickAndCropImage(
-      context,
-      initialAspect: CropAspect.screen,
-    );
-    if (cropped == null) {
+    final String? path = await pickBackgroundImage(context);
+    if (path == null) {
       return;
     }
     await ref
         .read(settingsProvider.notifier)
-        .setTimetableBackgroundImage(cropped.path);
+        .setTimetableBackgroundImage(path);
   }
 
   Future<void> _recropBackground() async {
@@ -138,25 +133,21 @@ class _TermSheetState extends ConsumerState<TermSheet> {
     if (current == null) {
       return;
     }
-    final CroppedImage? cropped = await cropImage(
-      context,
-      sourcePath: current,
-      initialAspect: CropAspect.screen,
-    );
-    if (cropped == null) {
+    final String? recropped = await recropBackgroundImage(context, current);
+    if (recropped == null) {
       return;
     }
     await ref
         .read(settingsProvider.notifier)
-        .setTimetableBackgroundImage(cropped.path);
+        .setTimetableBackgroundImage(recropped);
   }
 
+  /// The timetable's own background: the app's controls, on its own picture.
   Widget _buildBackgroundControls(BuildContext context) {
     final AppSettings settings = ref.watch(settingsProvider);
     final SettingsController controller = ref.read(settingsProvider.notifier);
-    final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
-    final String? path = settings.timetableBackgroundImage;
+    final ColorScheme colors = Theme.of(context).colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,68 +158,21 @@ class _TermSheetState extends ConsumerState<TermSheet> {
           AppStrings.timetableBackgroundHint,
           style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
         ),
-        const SizedBox(height: 8),
-        if (path != null)
-          ClipRRect(
-            borderRadius: AppShapes.radius(AppShapes.small),
-            child: SizedBox(
-              height: 120,
-              width: double.infinity,
-              child: Image.file(File(path), fit: BoxFit.cover),
-            ),
+        const SizedBox(height: 12),
+        BackgroundControls(
+          imagePath: settings.timetableBackgroundImage,
+          dim: settings.timetableBackgroundDim,
+          onPick: () => unawaited(_pickBackground()),
+          onRecrop: () => unawaited(_recropBackground()),
+          onRemove: () => unawaited(
+            controller.setTimetableBackgroundImage(null),
           ),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 8,
-          children: <Widget>[
-            FilledButton.tonalIcon(
-              onPressed: () => unawaited(_pickBackground()),
-              icon: const Icon(Icons.image_outlined),
-              label: Text(
-                path == null
-                    ? AppStrings.appBackgroundPick
-                    : AppStrings.appBackgroundChange,
-              ),
-            ),
-            if (path != null) ...<Widget>[
-              TextButton.icon(
-                onPressed: () => unawaited(_recropBackground()),
-                icon: const Icon(Icons.crop),
-                label: const Text(AppStrings.cropBackgroundImage),
-              ),
-              TextButton.icon(
-                onPressed: () => unawaited(
-                  controller.setTimetableBackgroundImage(null),
-                ),
-                icon: const Icon(Icons.delete_outline),
-                label: const Text(AppStrings.appBackgroundRemove),
-              ),
-            ],
-          ],
+          onDimChanged: controller.setTimetableBackgroundDim,
         ),
-        // The scrim only means something when there is a picture under it, and
-        // it is the control that keeps course names readable over one.
-        if (path != null) ...<Widget>[
-          const SizedBox(height: 10),
-          Text(AppStrings.backgroundDimLabel, style: text.labelLarge),
-          Slider(
-            value: settings.timetableBackgroundDim,
-            onChanged: controller.setTimetableBackgroundDim,
-            label: AppStrings.backgroundDimValue(
-              (settings.timetableBackgroundDim * 100).round(),
-            ),
-            divisions: 20,
-          ),
-          Text(
-            AppStrings.backgroundDimValue(
-              (settings.timetableBackgroundDim * 100).round(),
-            ),
-            style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-          ),
-        ],
       ],
     );
   }
+
 
   Future<void> _submit() async {
     if (_saving || !(_formKey.currentState?.validate() ?? false)) {

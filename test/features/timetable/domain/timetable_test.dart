@@ -21,6 +21,8 @@ void main() {
     Set<int>? weeks,
     String? room,
     String? note,
+    String? backgroundImage,
+    double? backgroundDim,
   }) {
     return Course.create(
       id: id,
@@ -32,6 +34,8 @@ void main() {
       weeks: weeks ?? <int>{1, 2, 3},
       room: room,
       note: note,
+      backgroundImage: backgroundImage,
+      backgroundDim: backgroundDim ?? Course.defaultBackgroundDim,
       createdAt: DateTime(2026, 8, 20),
     );
   }
@@ -105,6 +109,33 @@ void main() {
         ),
         throwsA(isA<CourseValidationException>()),
       );
+    });
+
+    test('a course background is set, changed and cleared', () {
+      final Course plain = course('a');
+      expect(plain.backgroundImage, isNull);
+
+      final Course withPicture = plain.edited(
+        backgroundImage: '/files/attachments/first.png',
+        backgroundDim: 0.5,
+      );
+      expect(withPicture.backgroundImage, '/files/attachments/first.png');
+      expect(withPicture.backgroundDim, 0.5);
+
+      // Editing the room is not editing the picture: the two decisions are
+      // independent, and losing one while making the other would be a bug the
+      // user only sees on the grid.
+      final Course renamed = withPicture.edited(name: '高数(下)', room: '教三 201');
+      expect(renamed.backgroundImage, '/files/attachments/first.png');
+      expect(renamed.backgroundDim, 0.5);
+
+      expect(renamed.edited(clearBackgroundImage: true).backgroundImage, isNull);
+    });
+
+    test('a scrim outside the slider range is clamped on the way in', () {
+      expect(course('a', backgroundDim: 3).backgroundDim, 0.9);
+      expect(course('a', backgroundDim: -1).backgroundDim, 0.0);
+      expect(course('a', backgroundDim: 0.4).backgroundDim, 0.4);
     });
 
     test('a slot reads as a weekday and a period range', () {
@@ -337,6 +368,67 @@ void main() {
       final Map<String, Object?> json =
           TimetableModel.courseToJson(course('a', weeks: <int>{9, 1, 5}));
       expect(json['weeks'], <int>[1, 5, 9]);
+    });
+
+    test("a course's own picture and scrim survive the round trip", () {
+      final Course withPicture = course(
+        'a',
+        backgroundImage: '/files/attachments/course.png',
+        backgroundDim: 0.55,
+      );
+      final Course restored = TimetableModel.courseFromJson(
+        TimetableModel.courseToJson(withPicture),
+      )!;
+      expect(restored.backgroundImage, '/files/attachments/course.png');
+      expect(restored.backgroundDim, 0.55);
+      expect(restored, withPicture);
+    });
+
+    test('a course in a colour only carries no picture keys', () {
+      final Map<String, Object?> json = TimetableModel.courseToJson(course('a'));
+      expect(json.containsKey('backgroundImage'), isFalse);
+      expect(json.containsKey('backgroundDim'), isFalse);
+      expect(
+        TimetableModel.courseFromJson(json)!.backgroundImage,
+        isNull,
+      );
+    });
+
+    test('a scrim nobody could have chosen is clamped, not kept', () {
+      Map<String, Object?> withDim(Object? raw) => <String, Object?>{
+            'id': 'a',
+            'name': '高数',
+            'backgroundImage': '/files/attachments/course.png',
+            'backgroundDim': raw,
+            'slots': <Object?>[
+              <String, Object?>{'weekday': 1, 'start': 1, 'end': 2},
+            ],
+            'weeks': <int>[1],
+          };
+      // Above the slider's ceiling the picture would be gone; below zero it
+      // would be at full strength over the text. Neither is reachable from the
+      // UI, which is exactly why a hand-edited file has to be clamped.
+      expect(TimetableModel.courseFromJson(withDim(4))!.backgroundDim, 0.9);
+      expect(TimetableModel.courseFromJson(withDim(-2))!.backgroundDim, 0.0);
+      expect(
+        TimetableModel.courseFromJson(withDim('very dim'))!.backgroundDim,
+        Course.defaultBackgroundDim,
+      );
+    });
+
+    test('an older file without pictures loads in colour', () {
+      final Course restored = TimetableModel.courseFromJson(<String, Object?>{
+        'id': 'a',
+        'name': '高数',
+        'color': 0xFFE53935,
+        'slots': <Object?>[
+          <String, Object?>{'weekday': 1, 'start': 1, 'end': 2},
+        ],
+        'weeks': <int>[1],
+      })!;
+      expect(restored.backgroundImage, isNull);
+      expect(restored.backgroundDim, Course.defaultBackgroundDim);
+      expect(restored.color, 0xFFE53935);
     });
 
     test('a document with no term is not a timetable', () {

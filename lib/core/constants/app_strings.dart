@@ -379,6 +379,14 @@ abstract final class AppStrings {
   static const String timetableBackgroundLabel = '课程表背景';
   static const String timetableBackgroundHint = '给课程表单独换一张背景图；觉得课程名字看不清，就把下面的「遮罩浓度」调高一点，图片会变淡';
 
+  /// A course's own picture, set in the course editor.
+  static const String courseBackgroundLabel = '课程背景';
+  static const String courseBackgroundHint = '给这门课单独换一张背景图，只有它的方块会变；「遮罩浓度」越高，图片越淡、课程名越清楚';
+
+  /// The home-screen widgets' background, set with the app's own controls.
+  static const String widgetBackgroundLabel = '小组件背景';
+  static const String widgetBackgroundHint = '桌面上的小组件（打卡、课程）用这张背景图；「遮罩浓度」越高，图片越淡、小组件上的字越清楚';
+
   /// The timetable's current week, as the header shows it.
   static String timetableWeek(int week) => '第 $week 周';
 

@@ -68,6 +68,8 @@ class TimetableController extends AsyncNotifier<Timetable> {
     String? room,
     String? note,
     int? color,
+    String? backgroundImage,
+    double backgroundDim = Course.defaultBackgroundDim,
   }) async {
     final Course created = Course.create(
       id: ref.read(courseIdGeneratorProvider)(),
@@ -77,6 +79,8 @@ class TimetableController extends AsyncNotifier<Timetable> {
       room: room,
       note: note,
       color: color,
+      backgroundImage: backgroundImage,
+      backgroundDim: backgroundDim,
       createdAt: ref.read(clockProvider)(),
     );
     await _replace((Timetable current) => current.withCourse(created));

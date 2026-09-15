@@ -24,6 +24,7 @@ class AppBackground extends StatelessWidget {
     required this.imagePath,
     required this.dim,
     required this.child,
+    this.cacheWidth,
     super.key,
   });
 
@@ -32,6 +33,15 @@ class AppBackground extends StatelessWidget {
 
   /// Strength of the scrim, in `[0, 1]`.
   final double dim;
+
+  /// Width, in physical pixels, to decode the picture at, or `null` to use the
+  /// window's.
+  ///
+  /// A caller that paints this behind something smaller than the window — a
+  /// course block is a seventh of it — says so, because decoding a 1440px photo
+  /// to draw it 140px wide is decode time and texture memory spent on pixels
+  /// that are then thrown away.
+  final int? cacheWidth;
 
   final Widget child;
 
@@ -67,7 +77,7 @@ class AppBackground extends StatelessWidget {
                 // at 1440px, but on a narrow phone screen that is still more
                 // than twice the pixels needed, and every extra pixel is decode
                 // time plus texture memory.
-                cacheWidth: _decodeWidth(context),
+                cacheWidth: cacheWidth ?? _decodeWidth(context),
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
               if (dim > 0)

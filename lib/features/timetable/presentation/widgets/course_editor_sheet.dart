@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_palette.dart';
+import '../../../settings/presentation/widgets/background_controls.dart';
 import '../../domain/entities/course.dart';
 import '../../domain/entities/timetable.dart';
 import '../providers/timetable_providers.dart';
@@ -71,6 +72,8 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
   late List<CourseSlot> _slots;
   late Set<int> _weeks;
   late int? _color;
+  String? _backgroundImage;
+  late double _backgroundDim;
   bool _saving = false;
 
   @override
@@ -93,6 +96,8 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
         ? <int>{for (int week = 1; week <= 18; week++) week}
         : Set<int>.of(existing.weeks);
     _color = existing?.color;
+    _backgroundImage = existing?.backgroundImage;
+    _backgroundDim = existing?.backgroundDim ?? Course.defaultBackgroundDim;
   }
 
   @override
@@ -134,6 +139,8 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
           room: _roomController.text,
           note: _noteController.text,
           color: _color,
+          backgroundImage: _backgroundImage,
+          backgroundDim: _backgroundDim,
         );
       } else {
         await controller.editCourse(
@@ -148,6 +155,9 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
             clearNote: _noteController.text.trim().isEmpty,
             color: _color,
             clearColor: _color == null,
+            backgroundImage: _backgroundImage,
+            clearBackgroundImage: _backgroundImage == null,
+            backgroundDim: _backgroundDim,
           ),
         );
         saved = existing.edited(name: _nameController.text);
@@ -164,6 +174,31 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
 
   void _say(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Picks a picture for this course alone, copied and cropped by the picker.
+  ///
+  /// The copy happens before the course is saved, so a dismissed editor leaves
+  /// a file behind — the same bargain the app's own background makes, and the
+  /// reason removal deletes the file rather than only forgetting its name.
+  Future<void> _pickBackground() async {
+    final String? path = await pickBackgroundImage(context);
+    if (path == null) {
+      return;
+    }
+    setState(() => _backgroundImage = path);
+  }
+
+  Future<void> _recropBackground() async {
+    final String? current = _backgroundImage;
+    if (current == null) {
+      return;
+    }
+    final String? recropped = await recropBackgroundImage(context, current);
+    if (recropped == null) {
+      return;
+    }
+    setState(() => _backgroundImage = recropped);
   }
 
   Future<void> _confirmDelete() async {
@@ -314,6 +349,23 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
                       }),
                     ),
                 ],
+              ),
+              const SizedBox(height: 18),
+              _Label(AppStrings.courseBackgroundLabel),
+              const SizedBox(height: 2),
+              Text(
+                AppStrings.courseBackgroundHint,
+                style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              BackgroundControls(
+                imagePath: _backgroundImage,
+                dim: _backgroundDim,
+                onPick: () => unawaited(_pickBackground()),
+                onRecrop: () => unawaited(_recropBackground()),
+                onRemove: () => setState(() => _backgroundImage = null),
+                onDimChanged: (double value) =>
+                    setState(() => _backgroundDim = value),
               ),
               // Said before saving, not after: a clash is invisible on the grid
               // until the term has started, which is far too late to notice.

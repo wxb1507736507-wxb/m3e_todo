@@ -440,6 +440,26 @@ abstract final class AppPlatform {
     return await _invoke<bool>('requestCourseWidgetPin') ?? false;
   }
 
+  /// Hands the home-screen tiles their background.
+  ///
+  /// The tiles are drawn by the launcher, in the launcher's own process, so they
+  /// cannot read the app's settings file: this pushes the picture's path and the
+  /// scrim strength into the preferences a widget provider can reach, and asks
+  /// both tiles to repaint from them. Called whenever the setting changes, and
+  /// once at startup so the cache cannot drift.
+  static Future<void> updateWidgetBackground({
+    required String? path,
+    required double dim,
+  }) async {
+    if (!isAndroid) {
+      return;
+    }
+    await _invoke<bool>('updateWidgetBackground', <String, Object?>{
+      'path': path,
+      'dim': dim,
+    });
+  }
+
   /// Takes the timetable request a course tile made, if any.
   ///
   /// A tap on a course row has to land on the timetable rather than on whatever

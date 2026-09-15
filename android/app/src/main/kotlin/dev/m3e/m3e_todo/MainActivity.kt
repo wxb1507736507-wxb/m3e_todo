@@ -25,6 +25,11 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import kotlin.math.roundToInt
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
@@ -804,6 +809,22 @@ class MainActivity : FlutterActivity() {
                 CourseWidgetProvider.refresh(this)
                 result.success(CourseWidgetProvider.placed(this))
             }
+            // --- The tiles' background --------------------------------------
+            // One picture and one scrim strength for every home-screen tile: the
+            // app has a single background setting for its widgets, so both tiles
+            // repaint together and neither can be left showing a picture the
+            // user has already removed.
+            "updateWidgetBackground" -> {
+                val args = arguments as? Map<*, *>
+                WidgetBackground.store(
+                    this,
+                    args?.get("path") as? String,
+                    (args?.get("dim") as? Number)?.toDouble() ?: 0.35,
+                )
+                HabitWidgetProvider.refresh(this)
+                CourseWidgetProvider.refresh(this)
+                result.success(true)
+            }
             "requestCourseWidgetPin" -> result.success(requestCourseWidgetPin())
             // A tap on the course tile asks for the timetable, which is a screen
             // rather than a habit: Dart pushes the page when it hears about it.
@@ -1097,6 +1118,114 @@ class MainActivity : FlutterActivity() {
  * convenience, not the truth: the queue is the truth, and the app republishes
  * the snapshot from its own records as soon as it drains it.
  */
+/**
+ * The picture the home-screen tiles are drawn on, and how strongly the surface
+ * covers it.
+ *
+ * Kept here rather than read from Flutter's settings file because a tile is
+ * drawn by the launcher, in the launcher's process, before — and often without
+ * — this app ever running: whatever a tile needs has to be somewhere the widget
+ * provider can reach on its own. Dart writes it through `updateWidgetBackground`
+ * whenever the setting changes, so the two cannot drift apart for long.
+ */
+internal object WidgetBackground {
+    private const val PREFS = "widget_background"
+    private const val KEY_PATH = "path"
+    private const val KEY_DIM = "dim"
+
+    /** The default when a tile is drawn before the app has ever said. */
+    private const val DEFAULT_DIM = 0.35f
+
+    /** Widest the picture is decoded to, in pixels. */
+    private const val MAX_WIDTH = 512
+
+    fun store(context: Context, path: String?, dim: Double) {
+        prefs(context).edit()
+            .putString(KEY_PATH, path)
+            .putFloat(KEY_DIM, dim.toFloat().coerceIn(0f, 0.9f))
+            .apply()
+    }
+
+    fun path(context: Context): String? =
+        prefs(context).getString(KEY_PATH, null)?.takeIf { it.isNotBlank() }
+
+    fun dim(context: Context): Float =
+        prefs(context).getFloat(KEY_DIM, DEFAULT_DIM).coerceIn(0f, 0.9f)
+
+    /**
+     * Binds the picture into a tile's tree, or hides the two views it lives in.
+     *
+     * Every branch of a tile's `buildViews` has to call this, which is why it is
+     * called once at the top of each: a tile saying "no classes today" still has
+     * a background, and one that lost its picture by taking a different branch
+     * would flicker between the two every time the day changed.
+     */
+    fun apply(context: Context, views: RemoteViews, backgroundId: Int, scrimId: Int) {
+        val bitmap = path(context)?.let { decode(it) }
+        if (bitmap == null) {
+            // No picture, or one that has been deleted behind the app's back: the
+            // tile falls back to its own surface rather than to a blank card.
+            views.setViewVisibility(backgroundId, View.GONE)
+            views.setViewVisibility(scrimId, View.GONE)
+            return
+        }
+        views.setImageViewBitmap(backgroundId, bitmap)
+        views.setViewVisibility(backgroundId, View.VISIBLE)
+
+        // The scrim is the same surface the card is drawn on, at the user's
+        // strength rather than at its own: the picture has to be dimmed by the
+        // colour the tile's text was chosen against.
+        val surface = context.getColor(R.color.widget_background)
+        val strength = dim(context)
+        views.setInt(
+            scrimId,
+            "setBackgroundColor",
+            Color.argb(
+                (strength * 255f).roundToInt().coerceIn(0, 255),
+                Color.red(surface),
+                Color.green(surface),
+                Color.blue(surface),
+            ),
+        )
+        views.setViewVisibility(scrimId, if (strength > 0f) View.VISIBLE else View.GONE)
+    }
+
+    /**
+     * Decodes the picture at tile size, never as a second copy of the photo.
+     *
+     * Two limits decide the numbers. A tile's tree travels to the launcher as a
+     * bitmap in a binder transaction, and anything approaching a megabyte is
+     * over that limit on its own — so RGB_565, and a width a home screen cannot
+     * show more of. And the file is the user's own photo, straight out of the
+     * camera, so decoding it whole to draw it 400dp wide would spend most of the
+     * memory and time on pixels that are then thrown away.
+     */
+    private fun decode(path: String): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            return null
+        }
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= MAX_WIDTH) {
+            sample *= 2
+        }
+        return runCatching {
+            BitmapFactory.decodeFile(
+                path,
+                BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                    inScaled = false
+                },
+            )
+        }.getOrNull()
+    }
+
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+}
+
 internal object HabitWidgetStore {
     private const val PREFS = "habit_widget"
     private const val KEY_SNAPSHOT = "snapshot"
@@ -1269,6 +1398,14 @@ class HabitWidgetProvider : AppWidgetProvider() {
             habitIds: List<String>,
         ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.habit_widget)
+            // First, so that every branch below — data, no data, stale — leaves
+            // the tile wearing the same background.
+            WidgetBackground.apply(
+                context,
+                views,
+                R.id.habit_widget_background,
+                R.id.habit_widget_scrim,
+            )
 
             if (payload == null) {
                 views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
@@ -1829,6 +1966,42 @@ internal object WidgetSelfCheck {
         return texts
     }
 
+    /**
+     * Draws one view tree and answers with the colours it painted, sampled on a
+     * coarse grid.
+     *
+     * The text a tree binds says nothing about what is *behind* the text, and a
+     * launcher that will not host the widget cannot be asked — so the tile's
+     * background would otherwise be the one part of it nobody ever sees until a
+     * user does. Drawing it here is the same tree, the same inflation and the
+     * same bitmap the launcher would get; the colours are the proof that the
+     * user's picture and its scrim actually reached the tile.
+     *
+     * Only ever called from a debug build.
+     */
+    fun renderColors(context: Context, views: RemoteViews, size: Int = 200): List<String> {
+        val root = views.apply(context, FrameLayout(context))
+        val spec = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)
+        root.measure(spec, spec)
+        root.layout(0, 0, size, size)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        root.draw(Canvas(bitmap))
+
+        // The corners are the card's own rounded surface and the middle is
+        // whatever the tile draws over it, so a 3x3 sample says both what colour
+        // the picture came out as and whether anything was drawn over it at all.
+        val colours = ArrayList<String>()
+        for (row in 0 until 3) {
+            for (column in 0 until 3) {
+                val x = (size * (2 * column + 1) / 6).coerceIn(0, size - 1)
+                val y = (size * (2 * row + 1) / 6).coerceIn(0, size - 1)
+                colours.add(String.format("#%08X", bitmap.getPixel(x, y)))
+            }
+        }
+        bitmap.recycle()
+        return colours
+    }
+
     /** A copy of [payload] dated [daysFromToday] days ago. */
     fun forcedDay(payload: JSONObject?, daysFromToday: Int): JSONObject? {
         if (payload == null) return null
@@ -2170,6 +2343,14 @@ class CourseWidgetProvider : AppWidgetProvider() {
          */
         internal fun buildViews(context: Context, snapshot: JSONObject?): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.course_widget)
+            // First, so that the "no classes today" branch wears the same
+            // background as the one that lists them.
+            WidgetBackground.apply(
+                context,
+                views,
+                R.id.course_widget_background,
+                R.id.course_widget_scrim,
+            )
             // Every tap on this tile goes to the timetable: there is nothing to
             // change here, and the timetable is what a row is *about*.
             val open = openTimetable(context)
@@ -2314,6 +2495,14 @@ internal object CourseWidgetSelfCheck {
                     CourseWidgetProvider.buildViews(context, null),
                 ),
                 "rows" to (payload?.optJSONArray("rows")?.length() ?: 0),
+                // What the tile actually painted, since no launcher here will
+                // show it: the sampled colours are the tile's background.
+                "colors" to WidgetSelfCheck.renderColors(
+                    context,
+                    CourseWidgetProvider.buildViews(context, payload),
+                ),
+                "background" to WidgetBackground.path(context),
+                "dim" to WidgetBackground.dim(context).toDouble(),
             )
         }.getOrElse { error ->
             mapOf("ok" to false, "reason" to error.toString())

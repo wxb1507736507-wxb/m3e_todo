@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -51,6 +53,17 @@ Future<void> bootstrap() async {
   // a page looks like the app opening, which is exactly what a widget tap should
   // not look like.
   final bool opensOnTimetable = await AppPlatform.takeCourseOpenRequest();
+
+  // The tiles cache the background in their own process's preferences, so they
+  // can be drawn before this app runs. Pushing it on every start is what keeps
+  // that cache honest — after a reinstall, after a settings file restored from a
+  // backup, and after a picture that was deleted behind the app's back.
+  unawaited(
+    AppPlatform.updateWidgetBackground(
+      path: settings.widgetBackgroundImage,
+      dim: settings.widgetBackgroundDim,
+    ),
+  );
 
   runApp(
     ProviderScope(

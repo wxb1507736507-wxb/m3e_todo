@@ -10,7 +10,11 @@ import '../../domain/entities/timetable.dart';
 /// read at all answers `null`, which the controller turns into a fresh term.
 abstract final class TimetableModel {
   /// Version 1 is the first shape this document has had.
-  static const int schemaVersion = 1;
+  ///
+  /// Version 2 adds a course's own `backgroundImage` and `backgroundDim`, both
+  /// optional on read: a version-1 file loads with every course in its colour,
+  /// and a version-2 file still opens in an older build, which ignores them.
+  static const int schemaVersion = 2;
 
   static Map<String, Object?> toJson(Timetable timetable) {
     final Term term = timetable.term;
@@ -43,6 +47,12 @@ abstract final class TimetableModel {
       if (course.room != null) 'room': course.room,
       if (course.note != null) 'note': course.note,
       if (course.color != null) 'color': course.color,
+      // Absent rather than null, like every other optional field here: absent
+      // means "no picture, use the colour".
+      if (course.backgroundImage != null)
+        'backgroundImage': course.backgroundImage,
+      if (course.backgroundImage != null)
+        'backgroundDim': course.backgroundDim,
       'slots': <Object?>[
         for (final CourseSlot slot in course.slots)
           <String, Object?>{
@@ -181,9 +191,23 @@ abstract final class TimetableModel {
       room: json['room'] is String ? json['room']! as String : null,
       note: json['note'] is String ? json['note']! as String : null,
       color: json['color'] is int ? json['color']! as int : null,
+      backgroundImage:
+          json['backgroundImage'] is String ? json['backgroundImage']! as String : null,
+      backgroundDim: _dim(json['backgroundDim']),
       createdAt: createdAt is String
           ? (DateTime.tryParse(createdAt) ?? DateTime.now())
           : DateTime.now(),
     );
+  }
+
+  /// Reads a scrim strength, clamped rather than rejected.
+  ///
+  /// A truncated or hand-edited value must not be able to paint the picture
+  /// fully opaque (dim above the slider's ceiling) or fully absent.
+  static double _dim(Object? raw) {
+    if (raw is! num || raw.toDouble().isNaN) {
+      return Course.defaultBackgroundDim;
+    }
+    return raw.toDouble().clamp(0.0, 0.9);
   }
 }

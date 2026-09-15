@@ -1,17 +1,16 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/platform/app_platform.dart';
-import '../../media/presentation/image_crop_page.dart';
 import '../domain/app_settings.dart';
 import '../../notifications/domain/reminder.dart';
 import '../../notifications/presentation/reminder_lead_picker.dart';
 import 'appearance_sheet.dart';
 import 'settings_controller.dart';
+import 'widgets/background_controls.dart';
 
 /// Opens the integrated settings sheet.
 Future<void> showSettingsSheet(BuildContext context) {
@@ -112,14 +111,11 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet>
     // Picked and cropped in one step: the image is drawn `cover` across the
     // whole window, so an uncropped 4:3 photo would be scaled down to its
     // middle band and lose the composition the user chose.
-    final CroppedImage? cropped = await pickAndCropImage(
-      context,
-      initialAspect: CropAspect.screen,
-    );
-    if (cropped == null) {
+    final String? path = await pickBackgroundImage(context);
+    if (path == null) {
       return;
     }
-    await ref.read(settingsProvider.notifier).setBackgroundImage(cropped.path);
+    await ref.read(settingsProvider.notifier).setBackgroundImage(path);
   }
 
   Future<void> _recropBackground() async {
@@ -127,19 +123,40 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet>
     if (current == null) {
       return;
     }
-    final CroppedImage? cropped = await cropImage(
-      context,
-      sourcePath: current,
-      initialAspect: CropAspect.screen,
-    );
-    if (cropped == null) {
+    final String? recropped = await recropBackgroundImage(context, current);
+    if (recropped == null) {
       return;
     }
-    await ref.read(settingsProvider.notifier).setBackgroundImage(cropped.path);
+    await ref.read(settingsProvider.notifier).setBackgroundImage(recropped);
   }
 
   Future<void> _removeBackground() =>
       ref.read(settingsProvider.notifier).setBackgroundImage(null);
+
+  /// Picks the picture the home-screen tiles will be drawn on.
+  ///
+  /// The same file the app's own background would produce, kept in the same
+  /// place: a tile is a widget of this app, and a second directory for its
+  /// pictures would only be a second thing to keep clean.
+  Future<void> _pickWidgetBackground() async {
+    final String? path = await pickBackgroundImage(context);
+    if (path == null) {
+      return;
+    }
+    await ref.read(settingsProvider.notifier).setWidgetBackgroundImage(path);
+  }
+
+  Future<void> _recropWidgetBackground() async {
+    final String? current = ref.read(settingsProvider).widgetBackgroundImage;
+    if (current == null) {
+      return;
+    }
+    final String? recropped = await recropBackgroundImage(context, current);
+    if (recropped == null) {
+      return;
+    }
+    await ref.read(settingsProvider.notifier).setWidgetBackgroundImage(recropped);
+  }
 
   /// Background image picker, preview, crop and scrim strength.
   Widget _buildBackgroundControls(
@@ -147,110 +164,16 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet>
     AppSettings settings,
     SettingsController controller,
   ) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme text = Theme.of(context).textTheme;
-    final String? path = settings.backgroundImage;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            if (path != null && AppPlatform.isAndroid)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: Image.file(
-                    File(path),
-                    fit: BoxFit.cover,
-                    // A 56dp thumbnail does not need a 1440px decode.
-                    cacheWidth: 160,
-                    errorBuilder: (_, _, _) => ColoredBox(
-                      color: colors.surfaceContainerHighest,
-                      child: Icon(
-                        Icons.image_not_supported_outlined,
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            if (path != null && AppPlatform.isAndroid) const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                path == null
-                    ? AppStrings.appBackgroundNone
-                    : AppStrings.backgroundImageLabel,
-                style: text.bodyMedium?.copyWith(
-                  color: path == null ? colors.onSurfaceVariant : null,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: <Widget>[
-            FilledButton.tonalIcon(
-              onPressed: () => unawaited(_pickBackground()),
-              icon: const Icon(Icons.image_outlined),
-              label: Text(
-                path == null
-                    ? AppStrings.appBackgroundPick
-                    : AppStrings.appBackgroundChange,
-              ),
-            ),
-            if (path != null)
-              OutlinedButton.icon(
-                onPressed: () => unawaited(_recropBackground()),
-                icon: const Icon(Icons.crop),
-                label: const Text(AppStrings.cropBackgroundImage),
-              ),
-            if (path != null)
-              TextButton.icon(
-                onPressed: () => unawaited(_removeBackground()),
-                icon: const Icon(Icons.delete_outline),
-                label: const Text(AppStrings.appBackgroundRemove),
-              ),
-          ],
-        ),
-        if (path != null) ...<Widget>[
-          const SizedBox(height: 12),
-          Row(
-            children: <Widget>[
-              Text(AppStrings.backgroundDimLabel, style: text.labelLarge),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Slider(
-                  value: settings.backgroundDim,
-                  max: 0.9,
-                  divisions: 18,
-                  label: AppStrings.backgroundDimValue(
-                    (settings.backgroundDim * 100).round(),
-                  ),
-                  onChanged: controller.setBackgroundDim,
-                ),
-              ),
-              SizedBox(
-                width: 44,
-                child: Text(
-                  AppStrings.backgroundDimValue(
-                    (settings.backgroundDim * 100).round(),
-                  ),
-                  style: text.labelMedium,
-                  textAlign: TextAlign.end,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
+    return BackgroundControls(
+      imagePath: settings.backgroundImage,
+      dim: settings.backgroundDim,
+      onPick: () => unawaited(_pickBackground()),
+      onRecrop: () => unawaited(_recropBackground()),
+      onRemove: () => unawaited(_removeBackground()),
+      onDimChanged: controller.setBackgroundDim,
     );
   }
+
 
   /// A tappable strip reporting a permission this app needs and does not have.
   Widget _banner(BuildContext context, String message, VoidCallback onTap) {
@@ -430,6 +353,25 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet>
               ),
               const SizedBox(height: 12),
               _buildBackgroundControls(context, settings, controller),
+
+              const SizedBox(height: 20),
+              Text(AppStrings.widgetBackgroundLabel, style: text.titleMedium),
+              const SizedBox(height: 2),
+              Text(
+                AppStrings.widgetBackgroundHint,
+                style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              BackgroundControls(
+                imagePath: settings.widgetBackgroundImage,
+                dim: settings.widgetBackgroundDim,
+                onPick: () => unawaited(_pickWidgetBackground()),
+                onRecrop: () => unawaited(_recropWidgetBackground()),
+                onRemove: () => unawaited(
+                  controller.setWidgetBackgroundImage(null),
+                ),
+                onDimChanged: controller.setWidgetBackgroundDim,
+              ),
 
               const SizedBox(height: 12),
               const Divider(),

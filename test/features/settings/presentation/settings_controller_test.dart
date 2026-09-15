@@ -184,4 +184,66 @@ void main() {
       expect(stored.backgroundImage, isNull);
     });
   });
+
+  group('widget background', () {
+    test('persists the tiles picture and its scrim strength', () async {
+      final SettingsController controller =
+          container.read(settingsProvider.notifier);
+
+      await controller.setWidgetBackgroundImage('/tmp/tiles.png');
+      controller.setWidgetBackgroundDim(0.6);
+      await controller.pendingWrite;
+
+      final AppSettings stored = await repository().load();
+      expect(stored.widgetBackgroundImage, '/tmp/tiles.png');
+      expect(stored.widgetBackgroundDim, 0.6);
+      // The app's own background is a different decision and stays untouched.
+      expect(stored.backgroundImage, isNull);
+    });
+
+    test('clamps the tiles scrim to the slider range', () {
+      final SettingsController controller =
+          container.read(settingsProvider.notifier);
+
+      // Short of opaque on purpose: at 1.0 the picture is gone and the slider
+      // that would bring it back reads as if it were already at the end.
+      controller.setWidgetBackgroundDim(4);
+      expect(container.read(settingsProvider).widgetBackgroundDim, 0.9);
+
+      controller.setWidgetBackgroundDim(-3);
+      expect(container.read(settingsProvider).widgetBackgroundDim, 0.0);
+    });
+
+    test('removing the tiles picture deletes the file it replaced', () async {
+      final File image = File('${tempDir.path}${Platform.pathSeparator}tiles.png')
+        ..writeAsStringSync('not really a png');
+      final SettingsController controller =
+          container.read(settingsProvider.notifier);
+
+      await controller.setWidgetBackgroundImage(image.path);
+      await controller.setWidgetBackgroundImage(null);
+      await controller.pendingWrite;
+
+      expect(container.read(settingsProvider).widgetBackgroundImage, isNull);
+      expect(image.existsSync(), isFalse);
+    });
+
+    test('a version-5 file still loads, with the new fields defaulted', () async {
+      settingsFile().writeAsStringSync(
+        '{"version":5,"themeMode":"dark","colorSeed":"rose",'
+        '"backgroundImage":"/tmp/app.png","backgroundDim":0.4,'
+        '"timetableBackgroundImage":"/tmp/grid.png","timetableBackgroundDim":0.5}',
+      );
+
+      final AppSettings stored = await repository().load();
+
+      expect(stored.themeMode, AppThemeMode.dark);
+      // The fields that were already there are kept, and only the ones this
+      // version adds fall back.
+      expect(stored.timetableBackgroundImage, '/tmp/grid.png');
+      expect(stored.timetableBackgroundDim, 0.5);
+      expect(stored.widgetBackgroundImage, isNull);
+      expect(stored.widgetBackgroundDim, AppSettings.defaultBackgroundDim);
+    });
+  });
 }

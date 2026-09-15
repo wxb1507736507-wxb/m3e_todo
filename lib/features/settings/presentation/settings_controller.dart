@@ -146,6 +146,34 @@ class SettingsController extends Notifier<AppSettings> {
     _apply(state.copyWith(timetableBackgroundDim: clamped));
   }
 
+  /// Sets the picture the home-screen tiles are drawn on, or clears it.
+  ///
+  /// The tiles keep their own copy of this in the preferences their process can
+  /// read — see [AppPlatform.updateWidgetBackground], which this reaches through
+  /// [_apply] — and the file it replaces is deleted here for the same reason the
+  /// app's own background deletes its old one.
+  Future<void> setWidgetBackgroundImage(String? path) async {
+    final String? previous = state.widgetBackgroundImage;
+    _apply(
+      state.copyWith(
+        widgetBackgroundImage: path,
+        clearWidgetBackgroundImage: path == null,
+      ),
+    );
+    if (previous != null && previous != path) {
+      await _deleteQuietly(previous);
+    }
+  }
+
+  /// Sets how strongly the surface covers the tiles' background image.
+  void setWidgetBackgroundDim(double dim) {
+    final double clamped = dim.clamp(0.0, 0.9);
+    if (state.widgetBackgroundDim == clamped) {
+      return;
+    }
+    _apply(state.copyWith(widgetBackgroundDim: clamped));
+  }
+
   static Future<void> _deleteQuietly(String path) async {
     try {
       await File(path).delete();
@@ -166,6 +194,13 @@ class SettingsController extends Notifier<AppSettings> {
   Future<void> get pendingWrite => _pendingWrite ?? Future<void>.value();
 
   void _apply(AppSettings settings) {
+    // Read before the assignment: what the tiles were showing is the *old*
+    // state, and a push that is not needed is a repaint of a widget nobody
+    // asked to change.
+    final bool tilesChanged =
+        settings.widgetBackgroundImage != state.widgetBackgroundImage ||
+        settings.widgetBackgroundDim != state.widgetBackgroundDim;
+
     state = settings;
     // Persisting is deliberately fire-and-forget: the new value is already
     // applied to the UI, and a preference write is not worth making the user
@@ -173,6 +208,19 @@ class SettingsController extends Notifier<AppSettings> {
     final Future<void> write = _persist(settings);
     _pendingWrite = write;
     unawaited(write);
+
+    // The tiles are drawn by the launcher, which cannot read this file, so the
+    // one place every settings change passes through is also the place that
+    // keeps their copy current — including the paths that are not a tap on the
+    // tile controls, such as a settings document restored from a backup.
+    if (tilesChanged) {
+      unawaited(
+        AppPlatform.updateWidgetBackground(
+          path: settings.widgetBackgroundImage,
+          dim: settings.widgetBackgroundDim,
+        ),
+      );
+    }
   }
 
   Future<void> _persist(AppSettings settings) async {

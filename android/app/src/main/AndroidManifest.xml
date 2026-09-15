@@ -9,6 +9,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Voice memos record through the microphone, with a runtime prompt. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Several launchers (ColorOS among them) refuse to place a widget unless
+         the app also declares the shortcut permission, even though nothing here
+         creates a shortcut. It is declared for the widget's sake. -->
+    <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
 
     <application
         android:label="M3E Todo"

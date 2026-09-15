@@ -1191,12 +1191,10 @@ class HabitWidgetProvider : AppWidgetProvider() {
         ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.habit_widget)
 
-            // Tapping the tile anywhere the two buttons are not brings the app
-            // forward: the tile is a shortcut for one thing, and everything else
-            // about the habit lives in the app.
-            views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
-
             if (snapshot == null) {
+                // Nothing to draw yet: the tap is the way to the app that will
+                // fill it in.
+                views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
                 return messageTile(
                     context,
                     views,
@@ -1204,19 +1202,22 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 )
             }
             if (snapshot.optBoolean("empty", false)) {
+                views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
                 return messageTile(context, views, snapshot.optString("emptyTitle"))
             }
-            if (habitId.isNullOrEmpty()) {
-                // Added from the launcher's own list, where nothing chose a
-                // habit: the tile says so and the system's configuration screen
-                // is what fixes it (adding it from the app's menu preselects).
-                return messageTile(context, views, snapshot.optString("unconfiguredText"))
-            }
+
             val tiles = snapshot.optJSONObject("tiles")
-            val tile = tiles?.optJSONObject(habitId)
-            if (tile == null) {
-                // The habit this tile was pointed at has been deleted.
-                return messageTile(context, views, snapshot.optString("missingText"))
+            // A tile nobody chose a habit for still gets one: the first the app
+            // sent. Demanding a choice before it does anything leaves a widget on
+            // the home screen that can only open the app — which is what a widget
+            // is for *not* doing — and several launchers never run the
+            // configuration screen at all.
+            val drawnId = habitId?.takeIf { tiles?.optJSONObject(it) != null }
+                ?: tiles?.keys()?.asSequence()?.firstOrNull()
+            val tile = drawnId?.let { tiles?.optJSONObject(it) }
+            if (drawnId == null || tile == null) {
+                views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
+                return messageTile(context, views, snapshot.optString("unconfiguredText"))
             }
 
             // A payload is a picture of one day, and the day it was taken for is
@@ -1251,15 +1252,25 @@ class HabitWidgetProvider : AppWidgetProvider() {
                     if (done) R.color.habit_widget_done else R.color.habit_widget_text,
                 ),
             )
-            if (!stale) {
+            if (stale) {
+                // No target on a stale day: the tap would file a check-in against
+                // yesterday. The tile still leads to the app, which is what fixes
+                // it — that is the one thing it is good for until it is refreshed.
+                views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
+            } else {
+                // The whole tile checks the habit off, not just the circle: a
+                // 2×2 square is small, and a tap that lands a few millimetres off
+                // the ring and lands on "open the app" instead is a tap that did
+                // the opposite of what it looked like it would do.
+                val toggle = toggleIntent(context, drawnId, dayKey, !done)
+                views.setOnClickPendingIntent(R.id.habit_widget_root, toggle)
                 views.setImageViewResource(
                     R.id.habit_widget_check,
                     if (done) R.drawable.habit_check_done else R.drawable.habit_check_todo,
                 )
-                views.setOnClickPendingIntent(
-                    R.id.habit_widget_check,
-                    toggleIntent(context, habitId, dayKey, !done),
-                )
+                // The same intent as the root's, so pressing either is one action
+                // and not two ways to do two different things.
+                views.setOnClickPendingIntent(R.id.habit_widget_check, toggle)
             }
 
             // Only habits that accept a note get the ＋: offering to write
@@ -1273,7 +1284,7 @@ class HabitWidgetProvider : AppWidgetProvider() {
             if (allowsNote) {
                 views.setOnClickPendingIntent(
                     R.id.habit_widget_note,
-                    noteIntent(context, habitId, dayKey),
+                    noteIntent(context, drawnId, dayKey),
                 )
             }
             return views
@@ -1332,9 +1343,9 @@ class HabitWidgetProvider : AppWidgetProvider() {
                         forcedDay(payload, -1),
                         tiles?.keys()?.asSequence()?.firstOrNull(),
                     ),
-                    // A widget added from the launcher's list, where nothing has
-                    // chosen a habit yet.
-                    "unconfigured" to renderTexts(context, payload, null),
+                    // A tile nobody chose a habit for: it falls back to the first
+                    // habit the app sent rather than being a dead square.
+                    "unchosen" to renderTexts(context, payload, null),
                     "empty" to renderTexts(context, null, null),
                     "habits" to (tiles?.length() ?: 0),
                 )
@@ -1505,8 +1516,14 @@ class HabitWidgetProvider : AppWidgetProvider() {
                     )
                     HabitWidgetStore.markLocally(context, habitId, done)
                     refresh(context)
-                    notifyRunningApp(context)
                 }
+                // Deliberately nothing else: a tap on the tile checks the habit
+                // off and stays where it is. Starting the app here — which this
+                // used to do, to tell a running app its queue had grown — made
+                // every check-in on the home screen throw the user into the app,
+                // which is the opposite of what a widget is for. The queue keeps
+                // until the app is next opened, and opening it drains the queue
+                // before it publishes anything.
             }
             ACTION_NOTE -> {
                 // Only reachable from an older widget build; the ＋ button now
@@ -1518,23 +1535,6 @@ class HabitWidgetProvider : AppWidgetProvider() {
             }
         }
         super.onReceive(context, intent)
-    }
-
-    /**
-     * Tells a *running* app that the widget was used.
-     *
-     * A tap with the app in the background is picked up by its resume; a tap
-     * while the app is on screen produces no resume at all, so the running
-     * activity has to be told. Doing nothing here would leave the check-in
-     * invisible until the user happened to leave and come back.
-     */
-    private fun notifyRunningApp(context: Context) {
-        val intent = Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        // Delivered through the activity's own `onNewIntent`, which forwards it
-        // to Dart; starting an activity that is already on screen is a no-op
-        // otherwise, which is exactly what is wanted.
-        runCatching { context.startActivity(intent) }
     }
 }
 

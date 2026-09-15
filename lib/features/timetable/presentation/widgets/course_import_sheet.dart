@@ -7,7 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/platform/app_platform.dart';
+import '../../../settings/domain/app_settings.dart';
+import '../../../settings/presentation/settings_controller.dart';
+import '../../data/vision_import_client.dart';
 import '../../domain/timetable_import.dart';
+import '../../domain/timetable_import_vision.dart';
 import '../providers/timetable_providers.dart';
 
 /// Reads a timetable out of a picture, shows what it found, and imports it.
@@ -99,6 +103,16 @@ class _CourseImportSheetState extends ConsumerState<CourseImportSheet> {
   bool _busy = true;
   bool _importing = false;
 
+  /// Whether the courses on screen came from the network reader.
+  bool _usedNetwork = false;
+
+  /// What the network reader said, when it was tried and did not answer.
+  ///
+  /// Kept rather than swallowed: the user chose the network reader because it
+  /// reads better, and "it fell back to the device" is something they have to
+  /// know before judging the result.
+  String? _networkTrouble;
+
   /// The courses the user has kept, by the name they were read as.
   final Set<String> _dropped = <String>{};
 
@@ -112,7 +126,54 @@ class _CourseImportSheetState extends ConsumerState<CourseImportSheet> {
   }
 
   Future<void> _read() async {
+    final AppSettings settings = ref.read(settingsProvider);
+    final int periodCount = ref.read(periodsProvider).length;
+    final int totalWeeks =
+        ref.read(timetableProvider).value?.term.totalWeeks ?? 18;
+
     try {
+      if (settings.visionImportReady) {
+        try {
+          final String reply = await ref.read(visionCompleteProvider)(
+            VisionRequest(
+              baseUrl: settings.visionBaseUrl!,
+              apiKey: settings.visionApiKey!,
+              model: settings.visionModel!,
+              prompt: timetableImportPrompt(
+                periodCount: periodCount,
+                totalWeeks: totalWeeks,
+              ),
+              imagePath: widget.imagePath,
+            ),
+          );
+          final ImportedTimetable read = parseImportedTimetable(
+            reply,
+            periodCount: periodCount,
+            totalWeeks: totalWeeks,
+          );
+          if (!mounted) {
+            return;
+          }
+          if (read.courses.isNotEmpty) {
+            setState(() {
+              _courses = read.courses;
+              _skippedLines = read.skippedLines;
+              _usedNetwork = true;
+              _busy = false;
+            });
+            return;
+          }
+          // A model that answered with nothing usable is a failure like any
+          // other, and the device reader costs nothing to try next.
+          _networkTrouble = AppStrings.courseImportEmpty;
+        } on Object catch (error) {
+          _networkTrouble = '$error';
+        }
+        if (kDebugMode) {
+          debugPrint('course-import-vision-failed: $_networkTrouble');
+        }
+      }
+
       // Through the provider rather than straight to the platform: this is the
       // one step no test machine can perform, and the rest of the feature is
       // worth testing.
@@ -132,7 +193,7 @@ class _CourseImportSheetState extends ConsumerState<CourseImportSheet> {
               bottom: (line['b'] as num?)?.toDouble() ?? 0,
             ),
         ],
-        periodCount: ref.read(periodsProvider).length,
+        periodCount: periodCount,
       );
       if (kDebugMode) {
         // Debug-only, and the only place it can be seen: what the recogniser
@@ -311,6 +372,18 @@ class _CourseImportSheetState extends ConsumerState<CourseImportSheet> {
                 Text(
                   AppStrings.courseImportWeeksHint,
                   style: text.bodySmall?.copyWith(color: colors.outline),
+                ),
+                const SizedBox(height: 4),
+                // Which reader produced this, and if the chosen one failed, why.
+                Text(
+                  _usedNetwork
+                      ? AppStrings.courseImportByNetwork
+                      : _networkTrouble == null
+                          ? AppStrings.courseImportOnDevice
+                          : AppStrings.courseImportFellBack(_networkTrouble!),
+                  style: text.bodySmall?.copyWith(
+                    color: _networkTrouble == null ? colors.outline : colors.error,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 for (final ImportedCourse course in _courses!)

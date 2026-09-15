@@ -426,6 +426,31 @@ abstract final class AppStrings {
   static const String courseImportRename = '改课程名';
   static String courseImportSkipped(int lines) => '另有 $lines 行文字没落在表格里，已跳过';
   static String courseImportFound(int count) => '认出 $count 门课';
+
+  /// Which reader produced the list, said plainly: the user chose the network
+  /// reader for its accuracy, so whether it was used is part of the result.
+  static const String courseImportByNetwork = '识别方式：网络模型';
+  static const String courseImportOnDevice = '识别方式：本机（离线）';
+  static String courseImportFellBack(String reason) =>
+      '网络识别没成功，已改用本机识别：$reason';
+
+  // --- 识图导课 · 网络识别（设置） ------------------------------------------
+
+  static const String visionSectionTitle = '识图导课';
+  static const String visionEnabledLabel = '用网络模型识别';
+  static const String visionEnabledHint =
+      '课表照片会发给你选的服务商识别，比本机识别准得多；关掉就只用本机离线识别';
+  static const String visionProviderLabel = '服务商';
+  static const String visionBaseUrlLabel = '接口地址';
+  static const String visionBaseUrlHint = '例如 https://dashscope.aliyuncs.com/compatible-mode/v1';
+  static const String visionModelLabel = '模型';
+  static const String visionApiKeyLabel = 'API Key';
+  static const String visionApiKeyHint = '只保存在本机应用私有目录，不会外传';
+  static const String visionTest = '测试连接';
+  static const String visionTestRunning = '正在测试…';
+  static const String visionTestOk = '连接成功，可以用了';
+  static String visionTestFailed(String reason) => '测试失败：$reason';
+  static const String visionKeyMissing = '还没有填 API Key';
   static String courseImportAction(int count) => '导入 $count 门课';
   static String courseImportDone(int count) => '已导入 $count 门课';
   static String courseImportDoneSome(int count, int alreadyThere) =>

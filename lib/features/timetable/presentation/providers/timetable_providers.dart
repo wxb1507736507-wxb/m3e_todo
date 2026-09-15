@@ -13,6 +13,7 @@ import '../../domain/entities/period_time.dart';
 import '../../domain/entities/term.dart';
 import '../../domain/entities/timetable.dart';
 import '../../domain/repositories/timetable_repository.dart';
+import '../../data/vision_import_client.dart';
 import '../../domain/timetable_import.dart';
 
 export '../../../todos/presentation/providers/todo_providers.dart' show clockProvider;
@@ -210,6 +211,17 @@ class SelectedWeek extends Notifier<int?> {
     state = (from + delta).clamp(1, 60);
   }
 }
+
+/// The network reader, as a function a test can stand in for.
+///
+/// Same reason as [textRecognitionProvider]: the call itself cannot be made on a
+/// test machine, and everything around it — the prompt, the parsing, the
+/// fallback when it fails — can be.
+final Provider<VisionComplete> visionCompleteProvider =
+    Provider<VisionComplete>(
+  (Ref ref) => completeWithVision,
+  name: 'visionComplete',
+);
 
 final NotifierProvider<SelectedWeek, int?> selectedWeekProvider =
     NotifierProvider<SelectedWeek, int?>(

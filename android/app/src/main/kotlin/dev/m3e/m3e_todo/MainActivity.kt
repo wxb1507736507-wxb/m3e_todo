@@ -2536,6 +2536,18 @@ class CourseWidgetProvider : AppWidgetProvider() {
                 snapshot = snapshot,
                 stale = stale,
             )
+            // Which page is on screen is decided here, and this call is what
+            // moves between them.
+            //
+            // That it *animates* is not a hope: `ViewAnimator.setDisplayedChild`
+            // is a `@RemotableViewMethod` — so a RemoteViews may call it — and it
+            // ends in `showOnly(index)`, whose `animate` is `!mFirstTime ||
+            // mAnimateFirstTime`. `mFirstTime` is cleared by the first paint, and
+            // `animateFirstView="false"` keeps that first paint still, so a tile
+            // appears without movement and every arrow tap after it runs the
+            // in/out animations the layout declares. Read from `ViewAnimator` in
+            // the platform sources rather than guessed at, because a widget's
+            // animation cannot be watched from here: the launcher draws it.
             views.setDisplayedChild(R.id.course_widget_flipper, page)
             return views
         }

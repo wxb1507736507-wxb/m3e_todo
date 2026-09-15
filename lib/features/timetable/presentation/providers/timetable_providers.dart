@@ -27,7 +27,10 @@ final Provider<DocumentStore> timetableDocumentStoreProvider =
 final Provider<TimetableRepository> timetableRepositoryProvider =
     Provider<TimetableRepository>(
   (ref) => LocalTimetableRepository(
-    TimetableLocalDataSource(ref.watch(timetableDocumentStoreProvider)),
+    TimetableLocalDataSource(
+      ref.watch(timetableDocumentStoreProvider),
+      now: ref.watch(clockProvider),
+    ),
   ),
   name: 'timetableRepository',
 );

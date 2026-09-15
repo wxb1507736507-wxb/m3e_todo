@@ -475,6 +475,28 @@ void main() {
       expect(TimetableModel.fromJson(<String, Object?>{'courses': <Object?>[]}), isNull);
     });
 
+    test('courses outlive a term that cannot be read', () {
+      // A term is what the grid hangs on, so an unreadable one costs the term —
+      // but not the afternoon the user spent typing courses in. Reading the term
+      // first, as this used to, threw the courses away with it, and the next save
+      // wrote that loss to disk: a whole timetable gone without a warning.
+      final Map<String, Object?> document = <String, Object?>{
+        'version': 3,
+        'term': <String, Object?>{'name': '大三上', 'totalWeeks': 18},
+        'courses': <Object?>[TimetableModel.courseToJson(course('c1'))],
+      };
+
+      expect(TimetableModel.fromJson(document), isNull);
+
+      final Timetable restored = TimetableModel.fromJson(
+        document,
+        today: DateTime(2026, 9, 15),
+      )!;
+      expect(restored.courses.map((Course c) => c.id), <String>['c1']);
+      expect(restored.term.name, '我的课程表');
+      expect(restored.term.startMonday, DateTime(2026, 9, 14));
+    });
+
     test('a course with no slots or no weeks is dropped, not fatal', () {
       expect(
         TimetableModel.courseFromJson(<String, Object?>{

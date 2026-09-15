@@ -70,16 +70,16 @@ abstract final class TimetableModel {
     };
   }
 
-  static Timetable? fromJson(Map<String, Object?> json) {
-    final Object? rawTerm = json['term'];
-    if (rawTerm is! Map) {
-      return null;
-    }
-    final Term? term = termFromJson(Map<String, Object?>.from(rawTerm));
-    if (term == null) {
-      return null;
-    }
-
+  /// Reads a timetable, or `null` when the document holds nothing worth drawing.
+  ///
+  /// [today] is only used when the term itself cannot be read. The courses are
+  /// parsed either way, and that is the whole point: the term is what the grid
+  /// hangs on, but it is not what the user typed in for an afternoon — so a
+  /// document whose term is unreadable keeps its courses on a term made from
+  /// [today] rather than being thrown away whole. Losing a term is an annoyance;
+  /// losing eight courses silently, and then writing that loss back on the next
+  /// save, is the one failure this app must not have.
+  static Timetable? fromJson(Map<String, Object?> json, {DateTime? today}) {
     final List<Course> courses = <Course>[];
     final Object? rawCourses = json['courses'];
     if (rawCourses is List) {
@@ -93,7 +93,17 @@ abstract final class TimetableModel {
         }
       }
     }
-    return Timetable(term: term, courses: courses);
+
+    final Object? rawTerm = json['term'];
+    final Term? term =
+        rawTerm is Map ? termFromJson(Map<String, Object?>.from(rawTerm)) : null;
+    if (term != null) {
+      return Timetable(term: term, courses: courses);
+    }
+    if (courses.isEmpty || today == null) {
+      return null;
+    }
+    return Timetable(term: Timetable.fresh(today).term, courses: courses);
   }
 
   static Term? termFromJson(Map<String, Object?> json) {

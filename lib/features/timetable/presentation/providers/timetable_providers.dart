@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/platform/app_platform.dart';
 import '../../../../core/storage/document_store.dart';
 import '../../../../core/storage/storage_providers.dart';
 import '../../../../core/utils/calendar.dart';
@@ -12,6 +13,7 @@ import '../../domain/entities/period_time.dart';
 import '../../domain/entities/term.dart';
 import '../../domain/entities/timetable.dart';
 import '../../domain/repositories/timetable_repository.dart';
+import '../../domain/timetable_import.dart';
 
 export '../../../todos/presentation/providers/todo_providers.dart' show clockProvider;
 
@@ -94,6 +96,82 @@ class TimetableController extends AsyncNotifier<Timetable> {
     });
   }
 
+  /// Adds every course read out of a picture, in one write.
+  ///
+  /// One save rather than one per course: a term imported from a photo is a
+  /// dozen courses, and a dozen saves of the same document is a dozen chances
+  /// to be interrupted in the middle of an import and leave half a timetable
+  /// behind. The weeks are the whole term because a picture cannot say which
+  /// weeks a course runs — the review sheet says so before importing.
+  ///
+  /// A course the picture described in a way this app cannot hold — no name, no
+  /// time — is left out rather than failing the whole import, and a course the
+  /// timetable already has by name is left out too: importing the same
+  /// screenshot twice is a thing people do, and a timetable with every class
+  /// doubled is worse than one that refused.
+  Future<({int imported, int alreadyThere})> importCourses(
+    List<ImportedCourse> courses,
+  ) async {
+    final DateTime now = ref.read(clockProvider)();
+    final String Function() nextId = ref.read(courseIdGeneratorProvider);
+    final Timetable current = await future;
+    final Set<int> weeks = <int>{
+      for (int week = 1; week <= current.term.totalWeeks; week++) week,
+    };
+    final Set<String> existing = <String>{
+      for (final Course course in current.courses) _courseKey(course.name),
+    };
+
+    final List<Course> created = <Course>[];
+    int alreadyThere = 0;
+    for (final ImportedCourse imported in courses) {
+      if (imported.slots.isEmpty) {
+        continue;
+      }
+      final String key = _courseKey(imported.name);
+      if (existing.contains(key)) {
+        alreadyThere++;
+        continue;
+      }
+      try {
+        created.add(
+          Course.create(
+            id: nextId(),
+            name: imported.name,
+            slots: imported.slots,
+            weeks: weeks,
+            room: imported.room,
+            note: imported.note,
+            createdAt: now,
+          ),
+        );
+        // Within one picture, too: two cells naming the same course are one
+        // course that meets twice, and that has already been merged upstream —
+        // but a file that repeats a name would otherwise still double it.
+        existing.add(key);
+      } on CourseValidationException {
+        // Left out, not fatal: the rest of the picture is still worth having.
+      }
+    }
+    if (created.isEmpty) {
+      return (imported: 0, alreadyThere: alreadyThere);
+    }
+    await _replace(
+      (Timetable current) => created.fold(
+        current,
+        (Timetable timetable, Course course) => timetable.withCourse(course),
+      ),
+    );
+    return (imported: created.length, alreadyThere: alreadyThere);
+  }
+
+  /// Two names that mean the same course on a timetable.
+  ///
+  /// Spaces are what a screenshot and a person disagree about most, and case is
+  /// what an English course name disagrees about.
+  static String _courseKey(String name) =>
+      name.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+
   Future<void> removeCourse(String id) {
     return _replace((Timetable current) => current.withoutCourse(id));
   }
@@ -137,6 +215,23 @@ final NotifierProvider<SelectedWeek, int?> selectedWeekProvider =
     NotifierProvider<SelectedWeek, int?>(
   SelectedWeek.new,
   name: 'selectedWeek',
+);
+
+/// Reads the text lines out of a picture, boxes and all.
+///
+/// A provider rather than a direct call so the import can be tested without a
+/// device: what the recogniser *says* is the one part of 识图导课 that cannot be
+/// exercised on a test machine, and everything downstream of it — the grid
+/// arithmetic, the review list, the import itself — can be, given a made-up
+/// answer. A test overrides this and the whole feature runs.
+typedef TextRecognition = Future<List<Map<String, Object?>>> Function(
+  String imagePath,
+);
+
+final Provider<TextRecognition> textRecognitionProvider =
+    Provider<TextRecognition>(
+  (Ref ref) => AppPlatform.recognizeText,
+  name: 'textRecognition',
 );
 
 /// The week the timetable is showing, resolving "follow today" against the term.

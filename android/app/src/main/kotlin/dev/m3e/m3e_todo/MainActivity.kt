@@ -29,6 +29,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import kotlin.math.roundToInt
 import android.view.View
 import android.view.ViewGroup
@@ -825,6 +828,10 @@ class MainActivity : FlutterActivity() {
                 CourseWidgetProvider.refresh(this)
                 result.success(true)
             }
+            // --- 识图导课 ----------------------------------------------------
+            // A picture of a timetable in, its lines and boxes out. What those
+            // become is decided on the Dart side, where it can be tested.
+            "recognizeTimetable" -> recognizeTimetable(arguments as String, result)
             "requestCourseWidgetPin" -> result.success(requestCourseWidgetPin())
             // A tap on the course tile asks for the timetable, which is a screen
             // rather than a habit: Dart pushes the page when it hears about it.
@@ -850,6 +857,58 @@ class MainActivity : FlutterActivity() {
     private fun canScheduleExactAlarms(): Boolean =
         Build.VERSION.SDK_INT < 31 ||
             (getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
+
+    // --- 识图导课 ---------------------------------------------------------------
+
+    /**
+     * Reads the text in a picture of a timetable, with where each line sits in it.
+     *
+     * The boxes are most of the answer. What the lines *say* is a third of the
+     * problem — the rest is which weekday column and which period row each one
+     * fell into, and that is arithmetic about numbers the caller can only do if
+     * it is given them. So this hands back lines and rectangles, and nothing
+     * else: turning them into courses is the app's job, where the rules are
+     * ordinary Dart that can be tested against a made-up page.
+     *
+     * The recogniser is closed on both paths: it holds a native model, and a
+     * leak here is a leak of something large.
+     */
+    private fun recognizeTimetable(path: String, result: MethodChannel.Result) {
+        val recognizer = TextRecognition.getClient(
+            ChineseTextRecognizerOptions.Builder().build(),
+        )
+        val image = runCatching {
+            InputImage.fromFilePath(this, Uri.fromFile(File(path)))
+        }.getOrElse { error ->
+            recognizer.close()
+            result.error("recognize_failed", error.message, null)
+            return
+        }
+        recognizer.process(image)
+            .addOnSuccessListener { text ->
+                val lines = ArrayList<Map<String, Any?>>()
+                for (block in text.textBlocks) {
+                    for (line in block.lines) {
+                        val box = line.boundingBox ?: continue
+                        lines.add(
+                            mapOf(
+                                "text" to line.text,
+                                "l" to box.left,
+                                "t" to box.top,
+                                "r" to box.right,
+                                "b" to box.bottom,
+                            ),
+                        )
+                    }
+                }
+                recognizer.close()
+                result.success(lines)
+            }
+            .addOnFailureListener { error ->
+                recognizer.close()
+                result.error("recognize_failed", error.message, null)
+            }
+    }
 
     // --- Attachment picking -----------------------------------------------------
 

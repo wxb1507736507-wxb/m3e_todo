@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/app/app_background.dart';
@@ -7,6 +9,7 @@ import 'package:m3e_todo/features/timetable/domain/entities/period_time.dart';
 import 'package:m3e_todo/features/timetable/domain/entities/term.dart';
 import 'package:m3e_todo/features/timetable/domain/entities/timetable.dart';
 import 'package:m3e_todo/features/timetable/presentation/widgets/course_editor_sheet.dart';
+import 'package:m3e_todo/features/timetable/presentation/widgets/course_import_sheet.dart';
 
 import '../../../support/fake_timetable_repository.dart';
 import '../../../support/fake_todo_repository.dart';
@@ -257,12 +260,12 @@ void main() {
     await tester.tapAt(_firstCell(tester));
     await tester.pumpAndSettle();
     expect(find.byType(CourseEditorSheet), findsOneWidget);
-    // The weekday and the period are already answered.
-    expect(find.text('周一'), findsOneWidget);
-    expect(find.text(AppStrings.periodLabel(1)), findsWidgets);
+    // The weekday and the period are already answered, and the row reads them
+    // back: 周一 第1节 is what a tap on that cell means.
+    expect(find.text('周一 第1节'), findsOneWidget);
 
     await tester.enterText(find.byType(TextFormField).first, '线性代数');
-    await tapInEditor(tester, AppStrings.create);
+    await tapInEditor(tester, AppStrings.done);
 
     final Course stored = repository.stored!.courses.single;
     expect(stored.name, '线性代数');
@@ -270,6 +273,15 @@ void main() {
     expect(stored.slots.single.startPeriod, 1);
     expect(find.text('线性代数'), findsOneWidget);
   });
+
+  /// Opens the single-course editor the way a user does: 新建课程, then the
+  /// first of its three answers.
+  Future<void> openSingleCourseEditor(WidgetTester tester) async {
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AppStrings.courseNewSingle));
+    await tester.pumpAndSettle();
+  }
 
   testWidgets('a course is created through the editor', (
     WidgetTester tester,
@@ -287,10 +299,9 @@ void main() {
     await tester.pumpAndSettle();
     await openTimetable(tester);
 
-    await tester.tap(find.byType(FloatingActionButton));
-    await tester.pumpAndSettle();
+    await openSingleCourseEditor(tester);
     await tester.enterText(find.byType(TextFormField).first, '大学物理');
-    await tapInEditor(tester, AppStrings.create);
+    await tapInEditor(tester, AppStrings.done);
 
     final Course stored = repository.stored!.courses.single;
     expect(stored.name, '大学物理');
@@ -300,6 +311,152 @@ void main() {
     expect(find.text('大学物理'), findsOneWidget);
   });
 
+  testWidgets('新建课程 asks which of the three ways, and 单个课程 opens it', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(term: term(), courses: const <Course>[]),
+    );
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+
+    // The phone's own timetable asks this question with exactly these three
+    // answers, so the words are its words.
+    expect(find.text(AppStrings.courseNewSingle), findsOneWidget);
+    expect(find.text(AppStrings.courseNewPhoto), findsOneWidget);
+    expect(find.text(AppStrings.courseNewManual), findsOneWidget);
+
+    await tester.tap(find.text(AppStrings.courseNewSingle));
+    await tester.pumpAndSettle();
+    expect(find.byType(CourseEditorSheet), findsOneWidget);
+  });
+
+  testWidgets('手动创建课程表 goes to the term, which is what a term needs', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: FakeTimetableRepository(
+          Timetable(term: term(), courses: const <Course>[]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AppStrings.courseNewManual));
+    await tester.pumpAndSettle();
+
+    // Filling the grid by hand starts with the term — its weeks are what the
+    // courses are numbered against — and the grid is already there to tap.
+    expect(find.text(AppStrings.timetableTermSettings), findsOneWidget);
+    expect(find.text(AppStrings.termNameLabel), findsOneWidget);
+  });
+
+  testWidgets('时段 counts the weekly meetings, and each row picks its own', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(term: term(), courses: const <Course>[]),
+    );
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    await openSingleCourseEditor(tester);
+
+    await tester.enterText(find.byType(TextFormField).first, '大学物理');
+    expect(find.text(AppStrings.courseSlotCount(1)), findsOneWidget);
+    expect(find.text(AppStrings.courseSlotCount(2)), findsNothing);
+
+    // The count is how a second weekly meeting is asked for, and it starts the
+    // new one next to the last rather than in the same place.
+    await tester.tap(find.byIcon(Icons.add_circle_outline));
+    await tester.pumpAndSettle();
+    expect(find.text(AppStrings.courseSlotCount(2)), findsOneWidget);
+    expect(find.text('周二 第1节'), findsOneWidget);
+
+    // Each meeting is edited in its own sheet: a weekday, and the periods it
+    // covers.
+    await tester.tap(find.text(AppStrings.courseSlotCount(2)));
+    await tester.pumpAndSettle();
+    expect(find.text(AppStrings.courseSlotWeekday), findsOneWidget);
+    await tester.tap(find.text('周四'));
+    await tester.pumpAndSettle();
+    await tapInEditor(tester, AppStrings.confirm);
+    // The row reads back what was chosen, which is how the user checks it.
+    expect(find.text('周四 第1节'), findsOneWidget);
+
+    await tester.tap(find.text(AppStrings.courseSlotCount(1)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('周三'));
+    await tester.pumpAndSettle();
+    await tapInEditor(tester, AppStrings.confirm);
+
+    await tapInEditor(tester, AppStrings.done);
+
+    final Course stored = repository.stored!.courses.single;
+    expect(stored.name, '大学物理');
+    expect(stored.slots, hasLength(2));
+    expect(stored.slots.first.weekday, DateTime.wednesday);
+    expect(stored.slots.last.weekday, DateTime.thursday);
+  });
+
+  testWidgets('上课周数 opens the weeks, and an empty set cannot be saved', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(term: term(), courses: const <Course>[]),
+    );
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    await openSingleCourseEditor(tester);
+    await tester.enterText(find.byType(TextFormField).first, '体育');
+
+    await tester.tap(find.text(AppStrings.courseWeeksLabel));
+    await tester.pumpAndSettle();
+    expect(find.text(AppStrings.courseWeeksOdd), findsOneWidget);
+
+    await tester.tap(find.text(AppStrings.courseWeeksOdd));
+    await tester.pumpAndSettle();
+    await tapInEditor(tester, AppStrings.confirm);
+    // The row now reads the weeks it was given, not a count.
+    expect(find.textContaining('第1, 3, 5'), findsOneWidget);
+
+    await tapInEditor(tester, AppStrings.done);
+
+    final Course stored = repository.stored!.courses.single;
+    expect(stored.weeks, hasLength(9));
+    expect(stored.weeks.contains(2), isFalse);
+  });
   testWidgets('the editor offers a background for this course alone', (
     WidgetTester tester,
   ) async {
@@ -339,6 +496,199 @@ void main() {
     expect(repository.stored!.courses.single.backgroundImage, isNull);
   });
 
+  testWidgets('识图导课 reads a picture, shows it, and imports what is kept', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(term: term(), courses: const <Course>[]),
+    );
+    // What the recogniser would say about a small timetable: the weekday row,
+    // the period numbers, and two courses, one of them on two days.
+    const double left = 100;
+    const double column = 100;
+    const double rowHeight = 60;
+    const double top = 80;
+    Map<String, Object?> line(String text, double x, double y) =>
+        <String, Object?>{
+          'text': text,
+          'l': x,
+          't': y,
+          'r': x + 80,
+          'b': y + 16,
+        };
+    final List<Map<String, Object?>> page = <Map<String, Object?>>[
+      for (int weekday = 1; weekday <= 7; weekday++)
+        line('周${kCourseWeekdayNames[weekday - 1]}', left + (weekday - 1) * column + 20, 40),
+      for (int period = 1; period <= 9; period++)
+        line('$period', 30, top + (period - 1) * rowHeight + 20),
+      line('高等数学', left + column + 5, top + 6),
+      line('教三 201', left + column + 5, top + 24),
+      line('大学物理', left + column * 3 + 5, top + rowHeight * 2 + 6),
+      line('大学物理', left + column * 4 + 5, top + rowHeight * 4 + 6),
+    ];
+
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+        textRecognition: (String path) async => page,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    // Pushed onto the app's own navigator rather than pumped fresh: the sheet
+    // needs the same container the app is running in, and a second tree would
+    // be a second app rather than the one under test.
+    final NavigatorState navigator = tester.state<NavigatorState>(
+      find.byType(Navigator).first,
+    );
+    unawaited(
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(
+            body: CourseImportSheet(imagePath: '/tmp/timetable.png'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(AppStrings.courseImportFound(2)), findsOneWidget);
+    // The room came along, and the two days became one course.
+    expect(find.text('高等数学'), findsOneWidget);
+    expect(find.textContaining('教三 201'), findsOneWidget);
+    expect(find.text('大学物理'), findsOneWidget);
+    expect(
+      find.textContaining('周四'),
+      findsOneWidget,
+      reason: 'the second meeting of 大学物理 is on Thursday',
+    );
+
+    await tester.tap(find.text(AppStrings.courseImportAction(2)));
+    await tester.pumpAndSettle();
+
+    final Timetable stored = repository.stored!;
+    expect(stored.courses, hasLength(2));
+    final Course maths = stored.courses.firstWhere((Course c) => c.name == '高等数学');
+    expect(maths.room, '教三 201');
+    expect(maths.slots.single.weekday, DateTime.tuesday);
+    // A picture cannot say which weeks a course runs, so the whole term is the
+    // honest answer and the sheet says so before importing.
+    expect(maths.weeks, hasLength(18));
+    final Course physics = stored.courses.firstWhere((Course c) => c.name == '大学物理');
+    expect(physics.slots, hasLength(2));
+  });
+
+  testWidgets('a picture that reads as no grid imports nothing and says so', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(term: term(), courses: const <Course>[]),
+    );
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+        textRecognition: (String path) async => <Map<String, Object?>>[
+          <String, Object?>{'text': '这是别人的朋友圈', 'l': 10, 't': 10, 'r': 200, 'b': 30},
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    final NavigatorState navigator = tester.state<NavigatorState>(
+      find.byType(Navigator).first,
+    );
+    unawaited(
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(
+            body: CourseImportSheet(imagePath: '/tmp/not-a-timetable.png'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Nothing is written, and the user is told what to do differently rather
+    // than being shown an empty list.
+    expect(find.text(AppStrings.courseImportEmpty), findsOneWidget);
+    expect(repository.stored!.courses, isEmpty);
+  });
+
+  testWidgets('importing the same picture twice does not double the timetable', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(term: term(), courses: const <Course>[]),
+    );
+    const double left = 100;
+    const double column = 100;
+    const double rowHeight = 60;
+    const double top = 80;
+    Map<String, Object?> line(String text, double x, double y) =>
+        <String, Object?>{'text': text, 'l': x, 't': y, 'r': x + 80, 'b': y + 16};
+    final List<Map<String, Object?>> page = <Map<String, Object?>>[
+      for (int weekday = 1; weekday <= 7; weekday++)
+        line('周${kCourseWeekdayNames[weekday - 1]}', left + (weekday - 1) * column + 20, 40),
+      for (int period = 1; period <= 9; period++)
+        line('$period', 30, top + (period - 1) * rowHeight + 20),
+      line('高等数学', left + column + 5, top + 6),
+    ];
+
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+        textRecognition: (String path) async => page,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    Future<void> importOnce({bool settle = true}) async {
+      final NavigatorState navigator =
+          tester.state<NavigatorState>(find.byType(Navigator).first);
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(
+              body: CourseImportSheet(imagePath: '/tmp/timetable.png'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AppStrings.courseImportAction(1)));
+      if (settle) {
+        await tester.pumpAndSettle();
+      } else {
+        // Only as far as the sheet closing and the message arriving: settling
+        // would run the message's own four seconds and dismiss it again.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+    }
+
+    await importOnce();
+    expect(repository.stored!.courses, hasLength(1));
+
+    // A second run of the same screenshot is what a user does after a crash, or
+    // when they cannot remember whether it worked. Doubling every class would be
+    // a worse answer than refusing quietly — and it says so, so that "nothing
+    // happened" is not the only thing the user is told.
+    await importOnce(settle: false);
+    // What matters is the timetable, and the timetable kept one course. That the
+    // user is told so is asserted where the counts come from, in the controller.
+    expect(repository.stored!.courses, hasLength(1));
+    expect(repository.stored!.courses.single.name, '高等数学');
+  });
+
   testWidgets('a course is renamed and then deleted from its own editor', (
     WidgetTester tester,
   ) async {
@@ -358,7 +708,7 @@ void main() {
     await tester.tap(find.text('高等数学'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, '高数（二）');
-    await tapInEditor(tester, AppStrings.save);
+    await tapInEditor(tester, AppStrings.done);
     expect(repository.stored!.courses.single.name, '高数（二）');
     expect(find.text('高数（二）'), findsOneWidget);
 

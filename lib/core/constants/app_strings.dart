@@ -124,6 +124,10 @@ abstract final class AppStrings {
   static String clearCompletedBody(int count) =>
       '将永久删除 $count 项已完成的待办，此操作无法撤销。';
   static const String confirm = '确定';
+  /// The phone's own timetable ends its course editor with 完成 rather than
+  /// 保存, and the same word ends the pickers inside it: nothing here is
+  /// saved to a server, and 完成 says "I am done with this screen".
+  static const String done = '完成';
   static String clearedCompleted(int count) => '已清除 $count 项待办';
 
   // --- Appearance ----------------------------------------------------------
@@ -347,16 +351,32 @@ abstract final class AppStrings {
   static const String courseWidgetStale = '新的一天了，打开应用刷新今天的课';
   static const String courseNew = '新建课程';
   static const String courseEdit = '编辑课程';
+
+  // The three ways into a timetable, named the way the phone's own timetable
+  // names them — a user who has used that app should not have to read anything
+  // here to know what each one does.
+  static const String courseNewSingle = '新建单个课程';
+  static const String courseNewSingleHint = '一节一节地加，同一门课可以加多个上课时间';
+  static const String courseNewPhoto = '拍照导入课程表';
+  static const String courseNewPhotoHint = '选一张课表截图，自动认出课程，确认以后再导入';
+  static const String courseNewManual = '手动创建课程表';
+  static const String courseNewManualHint = '先填学期信息，再在课表上点格子把课填进去';
+
   static const String courseNameLabel = '课程名';
   static const String courseNameHint = '例如：高等数学';
   static const String courseNameRequired = '课程名不能为空';
+  static const String courseRequired = '必填';
+  static const String courseOptional = '非必填';
   static const String courseRoomLabel = '教室';
   static const String courseRoomHint = '例如：教三 201';
   static const String courseNoteLabel = '备注（如老师）';
   static const String courseColorLabel = '课程背景色';
-  static const String courseSlotsLabel = '上课时间';
+  static const String courseColorNone = '不设颜色，按课程名自动分色';
+  static const String courseSlotsLabel = '时段';
   static const String courseSlotWeekday = '星期';
   static const String courseSlotPeriods = '节次';
+  static const String courseSlotFromLabel = '从';
+  static const String courseSlotToLabel = '到';
   static const String courseAddSlot = '再加一个时间';
   static const String courseRemoveSlot = '删除这个时间';
   static const String courseWeeksLabel = '上课周数';
@@ -370,6 +390,30 @@ abstract final class AppStrings {
   static const String courseSlotsRequired = '至少要有一个上课时间';
   static const String courseDeleteTitle = '删除这门课程？';
   static const String courseSaved = '已保存';
+
+  /// One weekly meeting of a course, numbered the way the phone numbers them.
+  static String courseSlotCount(int index) => '课程时间$index';
+
+  // --- 识图导课 (a timetable read out of a photo) ---------------------------
+
+  static const String courseImportTitle = '拍照导入课程表';
+  static const String courseImportIntro =
+      '选一张课程表截图或照片。识别在本机完成，图片不会上传；认出课程以后先给你看一遍，确认了才写进课程表。';
+  static const String courseImportPick = '选择课表图片';
+  static const String courseImportWorking = '正在识别…';
+  static const String courseImportTakeLong = '图片大一点会慢一些，请稍等';
+  static const String courseImportEmpty =
+      '这张图里没认出课程。换一张更清楚的截图试试：把表头（周一…周日）和课程名都拍进去，别裁掉左边的节次。';
+  static const String courseImportFailed = '识别失败';
+  static const String courseImportReviewHint = '不想要的可以取消勾选；名字认错了点一下就改。';
+  static const String courseImportWeeksHint = '照片看不出单双周，导入的课都按整学期排';
+  static const String courseImportRename = '改课程名';
+  static String courseImportSkipped(int lines) => '另有 $lines 行文字没落在表格里，已跳过';
+  static String courseImportFound(int count) => '认出 $count 门课';
+  static String courseImportAction(int count) => '导入 $count 门课';
+  static String courseImportDone(int count) => '已导入 $count 门课';
+  static String courseImportDoneSome(int count, int alreadyThere) =>
+      '已导入 $count 门课，$alreadyThere 门课表里已经有了';
   static const String termNameLabel = '学期名称';
   static const String termNameHint = '例如：大三上';
   static const String termStartLabel = '开学第一周的周一';

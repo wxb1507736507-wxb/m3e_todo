@@ -19,6 +19,7 @@ import '../course_widget_sync.dart';
 import '../providers/timetable_providers.dart';
 import '../widgets/course_editor_sheet.dart';
 import '../widgets/course_list_page.dart';
+import '../widgets/course_new_menu.dart';
 import '../widgets/term_sheet.dart';
 
 /// The week grid: seven days across, the day's periods down.
@@ -124,7 +125,11 @@ class TimetablePage extends ConsumerWidget {
           data: (Timetable timetable) => _Body(timetable: timetable, now: now),
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => unawaited(showCourseEditorSheet(context)),
+          // The three ways in — one course, a picture of the whole term, or
+          // filling the grid by hand — are one decision, so they are asked as
+          // one. A tap on an empty cell still goes straight to the editor: the
+          // cell already answered "when".
+          onPressed: () => unawaited(showCourseNewMenu(context)),
           icon: const Icon(Icons.add),
           label: const Text(AppStrings.courseNew),
         ),

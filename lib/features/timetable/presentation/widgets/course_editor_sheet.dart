@@ -46,6 +46,12 @@ List<AppPaletteColor> courseColors(ColorScheme colors) => <AppPaletteColor>[
       AppPaletteColor(0xFF8E24AA, '紫'),
     ];
 
+/// The editor the phone's timetable opens, screen for screen.
+///
+/// Its shape is that app's, deliberately: 课程名 (必填), 教室 (非必填), 备注（如老师）,
+/// 时段 with a count that adds and removes weekly meetings, 上课周数 picked as a
+/// set, and 课程背景色. Someone who has filled in a timetable on this phone
+/// before should be able to fill in this one without reading it.
 class CourseEditorSheet extends ConsumerStatefulWidget {
   const CourseEditorSheet({
     this.existing,
@@ -201,6 +207,70 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
     setState(() => _backgroundImage = recropped);
   }
 
+  /// Adds a weekly meeting, next to the last one.
+  ///
+  /// The count is how the phone asks for a second meeting, and it is a better
+  /// question than a form row: "this course also happens on Thursday" is one
+  /// fact, and the periods of a second meeting usually start near the first.
+  void _addSlot() {
+    final CourseSlot last = _slots.last;
+    setState(() {
+      _slots = <CourseSlot>[
+        ..._slots,
+        CourseSlot(
+          weekday: last.weekday == DateTime.sunday
+              ? DateTime.monday
+              : last.weekday + 1,
+          startPeriod: last.startPeriod,
+          endPeriod: last.endPeriod,
+        ),
+      ];
+    });
+  }
+
+  void _removeSlot() {
+    if (_slots.length <= 1) {
+      return;
+    }
+    setState(() => _slots = _slots.sublist(0, _slots.length - 1));
+  }
+
+  Future<void> _editSlot(int index) async {
+    final CourseSlot? slot = await _pickSlot(
+      context,
+      slot: _slots[index],
+      periodNumbers: <int>[
+        for (final period in ref.read(periodsProvider)) period.index,
+      ],
+    );
+    if (slot == null) {
+      return;
+    }
+    setState(() => _slots = <CourseSlot>[
+      for (int i = 0; i < _slots.length; i++) i == index ? slot : _slots[i],
+    ]);
+  }
+
+  Future<void> _editWeeks() async {
+    final Set<int>? weeks = await _pickWeeks(
+      context,
+      weeks: _weeks,
+      totalWeeks: _totalWeeks,
+    );
+    if (weeks == null) {
+      return;
+    }
+    setState(() => _weeks = weeks);
+  }
+
+  Future<void> _editColor() async {
+    final _ColorChoice? choice = await _pickColor(context, color: _color);
+    if (choice == null) {
+      return;
+    }
+    setState(() => _color = choice.argb);
+  }
+
   Future<void> _confirmDelete() async {
     final Course? existing = widget.existing;
     if (existing == null) {
@@ -236,9 +306,6 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
-    final List<int> periodNumbers = <int>[
-      for (final period in ref.watch(periodsProvider)) period.index,
-    ];
     final CourseClash? clash = _currentClash();
 
     return Padding(
@@ -257,7 +324,7 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
                     : AppStrings.courseEdit,
                 style: text.headlineSmall,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 6),
               TextFormField(
                 controller: _nameController,
                 autofocus: widget.existing == null,
@@ -265,92 +332,88 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
                 decoration: const InputDecoration(
                   labelText: AppStrings.courseNameLabel,
                   hintText: AppStrings.courseNameHint,
+                  helperText: AppStrings.courseRequired,
                 ),
                 validator: (String? value) =>
                     (value == null || value.trim().isEmpty)
                         ? AppStrings.courseNameRequired
                         : null,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
+              TextFormField(
+                controller: _roomController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: AppStrings.courseRoomLabel,
+                  hintText: AppStrings.courseRoomHint,
+                  helperText: AppStrings.courseOptional,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextFormField(
+                controller: _noteController,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: AppStrings.courseNoteLabel,
+                ),
+              ),
+
+              // --- 时段: how many weekly meetings, and when each one is --------
+              const SizedBox(height: 18),
               Row(
                 children: <Widget>[
-                  Expanded(
-                    child: TextFormField(
-                      controller: _roomController,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: AppStrings.courseRoomLabel,
-                        hintText: AppStrings.courseRoomHint,
-                      ),
-                    ),
+                  _Label(AppStrings.courseSlotsLabel),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: AppStrings.courseRemoveSlot,
+                    onPressed: _slots.length <= 1 ? null : _removeSlot,
+                    icon: const Icon(Icons.remove_circle_outline),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _noteController,
-                      textInputAction: TextInputAction.done,
-                      decoration: const InputDecoration(
-                        labelText: AppStrings.courseNoteLabel,
-                      ),
-                    ),
+                  Text('${_slots.length}', style: text.titleMedium),
+                  IconButton(
+                    tooltip: AppStrings.courseAddSlot,
+                    onPressed: _addSlot,
+                    icon: const Icon(Icons.add_circle_outline),
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
-              _Label(AppStrings.courseSlotsLabel),
-              const SizedBox(height: 6),
               for (int index = 0; index < _slots.length; index++)
-                _SlotRow(
-                  slot: _slots[index],
-                  periodNumbers: periodNumbers,
-                  canRemove: _slots.length > 1,
-                  onChanged: (CourseSlot slot) =>
-                      setState(() => _slots[index] = slot),
-                  onRemove: () => setState(() => _slots.removeAt(index)),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.schedule_outlined),
+                  title: Text(AppStrings.courseSlotCount(index + 1)),
+                  subtitle: Text(_slots[index].label),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => unawaited(_editSlot(index)),
                 ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => setState(() {
-                    _slots.add(
-                      CourseSlot(
-                        weekday: _slots.last.weekday,
-                        startPeriod: _slots.last.endPeriod + 1,
-                        endPeriod: _slots.last.endPeriod + 1,
-                      ),
-                    );
-                  }),
-                  icon: const Icon(Icons.add),
-                  label: const Text(AppStrings.courseAddSlot),
-                ),
-              ),
-              const SizedBox(height: 8),
-              _Label(AppStrings.courseWeeksLabel),
+
+              // --- 上课周数 ----------------------------------------------------
               const SizedBox(height: 6),
-              _WeekPicker(
-                weeks: _weeks,
-                totalWeeks: _totalWeeks,
-                onChanged: (Set<int> weeks) => setState(() => _weeks = weeks),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.date_range_outlined),
+                title: const Text(AppStrings.courseWeeksLabel),
+                subtitle: Text(
+                  _weeks.isEmpty
+                      ? AppStrings.courseWeeksRequired
+                      : _weeksLabel(),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => unawaited(_editWeeks()),
               ),
-              const SizedBox(height: 14),
-              _Label(AppStrings.courseColorLabel),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: <Widget>[
-                  for (final AppPaletteColor option in courseColors(colors))
-                    _ColorDot(
-                      argb: option.argb,
-                      label: option.label,
-                      selected: _color == option.argb,
-                      onTap: () => setState(() {
-                        _color = _color == option.argb ? null : option.argb;
-                      }),
-                    ),
-                ],
+
+              // --- 课程背景色 --------------------------------------------------
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: _ColorDotPreview(argb: _color),
+                title: const Text(AppStrings.courseColorLabel),
+                subtitle: Text(_colorLabel(colors)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => unawaited(_editColor()),
               ),
-              const SizedBox(height: 18),
+
+              // --- 课程背景 ----------------------------------------------------
+              const SizedBox(height: 6),
               _Label(AppStrings.courseBackgroundLabel),
               const SizedBox(height: 2),
               Text(
@@ -367,6 +430,7 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
                 onDimChanged: (double value) =>
                     setState(() => _backgroundDim = value),
               ),
+
               // Said before saving, not after: a clash is invisible on the grid
               // until the term has started, which is far too late to notice.
               if (clash != null) ...<Widget>[
@@ -407,11 +471,7 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
                   FilledButton.icon(
                     onPressed: _saving ? null : () => unawaited(_submit()),
                     icon: const Icon(Icons.check),
-                    label: Text(
-                      widget.existing == null
-                          ? AppStrings.create
-                          : AppStrings.save,
-                    ),
+                    label: const Text(AppStrings.done),
                   ),
                 ],
               ),
@@ -422,125 +482,311 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
     );
   }
 
+  /// `每周`, or the weeks it names.
+  String _weeksLabel() => _draftCourse().weeksLabel(_totalWeeks);
+
+  String _colorLabel(ColorScheme colors) {
+    final int? argb = _color;
+    if (argb == null) {
+      return AppStrings.courseColorNone;
+    }
+    for (final AppPaletteColor option in courseColors(colors)) {
+      if (option.argb == argb) {
+        return option.label;
+      }
+    }
+    return AppStrings.courseColorLabel;
+  }
+
+  /// The course as it currently reads, so the summary lines and the clash check
+  /// are about what is on screen rather than about what was loaded.
+  Course _draftCourse() {
+    final Course? existing = widget.existing;
+    return Course(
+      id: existing?.id ?? '__draft__',
+      name: _nameController.text.isEmpty ? '新课程' : _nameController.text,
+      slots: _slots,
+      weeks: _weeks,
+      createdAt: existing?.createdAt ?? DateTime(2000),
+    );
+  }
+
   /// The first collision this course would have as it is currently written.
   CourseClash? _currentClash() {
     final Timetable? timetable = _timetable;
     if (timetable == null || _weeks.isEmpty || _slots.isEmpty) {
       return null;
     }
-    final Course candidate = Course(
-      id: widget.existing?.id ?? '__draft__',
-      name: _nameController.text.isEmpty ? '新课程' : _nameController.text,
-      slots: _slots,
-      weeks: _weeks,
-      createdAt: DateTime(2000),
-    );
-    return timetable.clashWith(candidate);
+    return timetable.clashWith(_draftCourse());
   }
 }
 
-/// One weekly meeting: which day, and which periods.
-class _SlotRow extends StatelessWidget {
-  const _SlotRow({
-    required this.slot,
-    required this.periodNumbers,
-    required this.canRemove,
-    required this.onChanged,
-    required this.onRemove,
-  });
+/// Picks one weekly meeting: which day, and which periods.
+Future<CourseSlot?> _pickSlot(
+  BuildContext context, {
+  required CourseSlot slot,
+  required List<int> periodNumbers,
+}) {
+  return showModalBottomSheet<CourseSlot>(
+    context: context,
+    builder: (_) => _SlotSheet(slot: slot, periodNumbers: periodNumbers),
+  );
+}
+
+class _SlotSheet extends StatefulWidget {
+  const _SlotSheet({required this.slot, required this.periodNumbers});
 
   final CourseSlot slot;
   final List<int> periodNumbers;
-  final bool canRemove;
-  final ValueChanged<CourseSlot> onChanged;
-  final VoidCallback onRemove;
+
+  @override
+  State<_SlotSheet> createState() => _SlotSheetState();
+}
+
+class _SlotSheetState extends State<_SlotSheet> {
+  late int _weekday = widget.slot.weekday;
+  late int _start = widget.slot.startPeriod;
+  late int _end = widget.slot.endPeriod;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            flex: 3,
-            child: DropdownButtonFormField<int>(
-              isExpanded: true,
-              initialValue: slot.weekday,
-              decoration: const InputDecoration(
-                labelText: AppStrings.courseSlotWeekday,
-                isDense: true,
-              ),
-              items: <DropdownMenuItem<int>>[
+    final TextTheme text = Theme.of(context).textTheme;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(AppStrings.courseSlotsLabel, style: text.titleLarge),
+            const SizedBox(height: 14),
+            _Label(AppStrings.courseSlotWeekday),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
                 for (int weekday = 1; weekday <= 7; weekday++)
-                  DropdownMenuItem<int>(
-                    value: weekday,
-                    child: Text('周${kCourseWeekdayNames[weekday - 1]}'),
+                  ChoiceChip(
+                    label: Text('周${kCourseWeekdayNames[weekday - 1]}'),
+                    selected: _weekday == weekday,
+                    onSelected: (_) => setState(() => _weekday = weekday),
                   ),
               ],
-              onChanged: (int? value) =>
-                  value == null ? null : onChanged(slot.edited(weekday: value)),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
-            child: DropdownButtonFormField<int>(
-              isExpanded: true,
-              initialValue: slot.startPeriod,
-              decoration: const InputDecoration(
-                labelText: '从',
-                isDense: true,
-              ),
-              items: <DropdownMenuItem<int>>[
-                for (final int period in periodNumbers)
-                  DropdownMenuItem<int>(
-                    value: period,
-                    child: Text(AppStrings.periodLabel(period)),
+            const SizedBox(height: 18),
+            _Label(AppStrings.courseSlotPeriods),
+            const SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 34,
+                  child: Text(AppStrings.courseSlotFromLabel, style: text.bodyMedium),
+                ),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: <Widget>[
+                      for (final int period in widget.periodNumbers)
+                        ChoiceChip(
+                          label: Text('$period'),
+                          selected: _start == period,
+                          onSelected: (_) => setState(() {
+                            _start = period;
+                            // The end follows the start rather than being left
+                            // behind it: a range that ends before it begins is
+                            // not a range.
+                            if (_end < period) {
+                              _end = period;
+                            }
+                          }),
+                        ),
+                    ],
                   ),
+                ),
               ],
-              onChanged: (int? value) {
-                if (value == null) {
-                  return;
-                }
-                onChanged(
-                  slot.edited(
-                    startPeriod: value,
-                    // The end follows the start rather than being left behind
-                    // it: a range that ends before it begins is not a range.
-                    endPeriod: value > slot.endPeriod ? value : slot.endPeriod,
-                  ),
-                );
-              },
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
-            child: DropdownButtonFormField<int>(
-              isExpanded: true,
-              initialValue: slot.endPeriod,
-              decoration: const InputDecoration(
-                labelText: '到',
-                isDense: true,
-              ),
-              items: <DropdownMenuItem<int>>[
-                for (final int period in periodNumbers)
-                  if (period >= slot.startPeriod)
-                    DropdownMenuItem<int>(
-                      value: period,
-                      child: Text('第$period节'),
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 34,
+                  child: Text(AppStrings.courseSlotToLabel, style: text.bodyMedium),
+                ),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: <Widget>[
+                      for (final int period in widget.periodNumbers)
+                        if (period >= _start)
+                          ChoiceChip(
+                            label: Text('$period'),
+                            selected: _end == period,
+                            onSelected: (_) => setState(() => _end = period),
+                          ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: <Widget>[
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(AppStrings.cancel),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(
+                    CourseSlot(
+                      weekday: _weekday,
+                      startPeriod: _start,
+                      endPeriod: _end,
                     ),
+                  ),
+                  // 确定 rather than 完成, because the editor behind this sheet
+                  // has a 完成 of its own and one screen should not offer two.
+                  child: const Text(AppStrings.confirm),
+                ),
               ],
-              onChanged: (int? value) =>
-                  value == null ? null : onChanged(slot.edited(endPeriod: value)),
             ),
-          ),
-          IconButton(
-            onPressed: canRemove ? onRemove : null,
-            icon: const Icon(Icons.close),
-            tooltip: AppStrings.courseRemoveSlot,
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Picks the weeks a course runs, in the term's own numbering.
+Future<Set<int>?> _pickWeeks(
+  BuildContext context, {
+  required Set<int> weeks,
+  required int totalWeeks,
+}) {
+  return showModalBottomSheet<Set<int>>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => _WeekSheet(weeks: weeks, totalWeeks: totalWeeks),
+  );
+}
+
+class _WeekSheet extends StatefulWidget {
+  const _WeekSheet({required this.weeks, required this.totalWeeks});
+
+  final Set<int> weeks;
+  final int totalWeeks;
+
+  @override
+  State<_WeekSheet> createState() => _WeekSheetState();
+}
+
+class _WeekSheetState extends State<_WeekSheet> {
+  late Set<int> _weeks = Set<int>.of(widget.weeks);
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(AppStrings.courseWeeksLabel, style: text.titleLarge),
+            const SizedBox(height: 14),
+            _WeekPicker(
+              weeks: _weeks,
+              totalWeeks: widget.totalWeeks,
+              onChanged: (Set<int> weeks) => setState(() => _weeks = weeks),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: <Widget>[
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(AppStrings.cancel),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(_weeks),
+                  child: const Text(AppStrings.confirm),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The colour a course is drawn in, or `null` for the palette by name.
+class _ColorChoice {
+  const _ColorChoice(this.argb);
+
+  final int? argb;
+}
+
+/// Picks the colour, which the phone calls 课程背景色.
+Future<_ColorChoice?> _pickColor(BuildContext context, {required int? color}) {
+  return showModalBottomSheet<_ColorChoice>(
+    context: context,
+    builder: (_) => _ColorSheet(color: color),
+  );
+}
+
+class _ColorSheet extends StatelessWidget {
+  const _ColorSheet({required this.color});
+
+  final int? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(AppStrings.courseColorLabel, style: text.titleLarge),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: <Widget>[
+                for (final AppPaletteColor option in courseColors(colors))
+                  _ColorDot(
+                    argb: option.argb,
+                    label: option.label,
+                    selected: color == option.argb,
+                    onTap: () =>
+                        Navigator.of(context).pop(_ColorChoice(option.argb)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).pop(const _ColorChoice(null)),
+                icon: const Icon(Icons.format_color_reset_outlined),
+                label: const Text(AppStrings.courseColorNone),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -667,6 +913,30 @@ class _WeekPicker extends StatelessWidget {
   }
 }
 
+/// The colour as the row's leading dot, or an empty ring when none is set.
+class _ColorDotPreview extends StatelessWidget {
+  const _ColorDotPreview({required this.argb});
+
+  final int? argb;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: argb == null ? null : Color(argb!),
+        shape: BoxShape.circle,
+        border: Border.all(color: colors.outlineVariant, width: 2),
+      ),
+      child: argb == null
+          ? Icon(Icons.format_color_reset_outlined, size: 18, color: colors.outline)
+          : null,
+    );
+  }
+}
+
 class _ColorDot extends StatelessWidget {
   const _ColorDot({
     required this.argb,
@@ -724,4 +994,3 @@ class _Label extends StatelessWidget {
         style: Theme.of(context).textTheme.labelLarge,
       );
 }
-

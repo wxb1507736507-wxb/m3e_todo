@@ -77,6 +77,14 @@ dependencies {
     // FileProvider (sharing attachments with gallery/video apps) lives here;
     // the Flutter embedding does not guarantee androidx.core on its own.
     implementation("androidx.core:core-ktx:1.13.1")
+    // Reading a timetable out of a photo: Chinese text recognition, on the
+    // device. The Chinese model rather than the Latin one because a timetable
+    // is a grid of course names, and those are Chinese.
+    //
+    // Bundled rather than fetched by Play services on purpose: the download is
+    // the part that fails on the phones this app is for, and recognising a
+    // screenshot is exactly the moment when waiting for a network is worst.
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 }
 
 flutter {

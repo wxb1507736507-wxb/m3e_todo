@@ -39,6 +39,7 @@ Widget buildTestApp({
   HabitRepository? habitRepository,
   HabitPermissions? habitPermissions,
   TimetableRepository? timetableRepository,
+  TextRecognition? textRecognition,
   bool opensOnTimetable = false,
 }) {
   // Always redirected away from the real per-user directory. A test must never
@@ -74,6 +75,11 @@ Widget buildTestApp({
       // that waits for the disk is a widget test that fails on a slow machine.
       if (timetableRepository != null)
         timetableRepositoryProvider.overrideWithValue(timetableRepository),
+      // The recogniser is the one part of 识图导课 a test machine cannot do, so
+      // it is the one part a test must be able to hand over: with an answer in
+      // hand, the grid arithmetic, the review list and the import are all real.
+      if (textRecognition != null)
+        textRecognitionProvider.overrideWithValue(textRecognition),
     ],
     child: M3eTodoApp(opensOnTimetable: opensOnTimetable),
   );

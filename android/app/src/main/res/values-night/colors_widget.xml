@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Dark-mode counterparts of `values/colors_widget.xml`. Android picks this file
+  automatically when the system is in dark mode, so a tile keeps matching the
+  launcher and the app without the widget code asking.
+-->
+<resources>
+    <color name="widget_background">#F21C1720</color>
+    <color name="widget_text">#EDE6F0</color>
+    <color name="widget_subtle">#B9B0C0</color>
+    <color name="widget_accent">#CFBCFF</color>
+    <color name="widget_done">#8E8795</color>
+</resources>

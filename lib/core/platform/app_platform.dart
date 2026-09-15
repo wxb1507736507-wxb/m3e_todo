@@ -418,6 +418,39 @@ abstract final class AppPlatform {
   static Future<String?> takeHabitEditRequest() =>
       _invoke<String>('takeHabitEditRequest');
 
+  /// Hands the course widget today's classes.
+  ///
+  /// Returns whether that tile is on a home screen, the same answer the habit
+  /// tile gives, so the timetable can say 已添加 rather than offering to add one
+  /// that is already there.
+  static Future<bool> updateCourseWidget(Map<String, Object?> payload) async {
+    if (!isAndroid) {
+      return false;
+    }
+    return await _invoke<bool>('updateCourseWidget', payload) ?? false;
+  }
+
+  /// Asks the system to place a course widget.
+  ///
+  /// It has nothing to configure — it shows today — so this is the whole flow.
+  static Future<bool> requestCourseWidgetPin() async {
+    if (!isAndroid) {
+      return false;
+    }
+    return await _invoke<bool>('requestCourseWidgetPin') ?? false;
+  }
+
+  /// Takes the timetable request a course tile made, if any.
+  ///
+  /// A tap on a course row has to land on the timetable rather than on whatever
+  /// screen the app was last left on, and this is how the app finds out.
+  static Future<bool> takeCourseOpenRequest() async {
+    if (!isAndroid) {
+      return false;
+    }
+    return await _invoke<bool>('takeCourseOpenRequest') ?? false;
+  }
+
   /// Asks to be told when the home-screen widget is used.
   ///
   /// The other direction of the same channel, and the only thing the app ever

@@ -49,7 +49,7 @@
         <item name="android:layout_weight">1</item>
         <item name="android:ellipsize">end</item>
         <item name="android:maxLines">1</item>
-        <item name="android:textColor">@color/habit_widget_text</item>
+        <item name="android:textColor">@color/widget_text</item>
         <item name="android:textSize">14sp</item>
     </style>
 
@@ -59,7 +59,57 @@
         <item name="android:gravity">center</item>
         <item name="android:paddingTop">12dp</item>
         <item name="android:paddingBottom">12dp</item>
-        <item name="android:textColor">@color/habit_widget_subtle</item>
+        <item name="android:textColor">@color/widget_subtle</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <!-- The course tile's rows: the same geometry as a habit row, with the time
+         on the left and the room on the right, because a timetable row is read
+         from its two ends inwards. -->
+    <style name="CourseWidgetRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="CourseWidgetTime">
+        <item name="android:layout_width">58dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/widget_subtle</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="CourseWidgetName">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">6dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/widget_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="CourseWidgetRoom">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">6dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/widget_subtle</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="CourseWidgetMessage">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:textColor">@color/widget_subtle</item>
         <item name="android:textSize">12sp</item>
     </style>
 

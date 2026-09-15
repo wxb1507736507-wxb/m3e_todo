@@ -477,13 +477,14 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * The widget's ＋ button brings the app forward through `singleTop`, so this
-     * — not a resume — is what fires when the app was already open.
+     * The widgets bring the app forward through `singleTop`, so this — not a
+     * resume — is what fires when the app was already open.
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         rememberOpenRequest(intent)
+        rememberTimetableRequest(intent)
         notifyWidgetTapped()
     }
 
@@ -493,6 +494,7 @@ class MainActivity : FlutterActivity() {
         // intent, and Dart asks for it right after the first frame — so it has
         // to be stored before that, not when the activity resumes.
         rememberOpenRequest(intent)
+        rememberTimetableRequest(intent)
         notifyWidgetTapped()
     }
 
@@ -503,6 +505,21 @@ class MainActivity : FlutterActivity() {
         // Consumed: leaving it on the intent would re-open the same editor every
         // time the activity is resumed, including after the user closed it.
         intent.removeExtra(HabitWidgetProvider.EXTRA_OPEN_HABIT)
+    }
+
+    /**
+     * Remembers that a course tile asked for the timetable.
+     *
+     * The course widget opens the app on the timetable rather than on whatever
+     * screen it was last left on: a tap on a course row is a question about the
+     * timetable, and landing anywhere else answers a different one.
+     */
+    private fun rememberTimetableRequest(intent: Intent?) {
+        if (intent?.getBooleanExtra(CourseWidgetProvider.EXTRA_OPEN_TIMETABLE, false) != true) {
+            return
+        }
+        CourseWidgetStore.requestOpen(this)
+        intent.removeExtra(CourseWidgetProvider.EXTRA_OPEN_TIMETABLE)
     }
 
     /**
@@ -530,6 +547,20 @@ class MainActivity : FlutterActivity() {
             }
         }
         return runCatching { manager.requestPinAppWidget(provider, extras, null) }
+            .getOrDefault(false)
+    }
+
+    /** Asks the launcher to place a course widget; it needs nothing configured. */
+    private fun requestCourseWidgetPin(): Boolean {
+        if (Build.VERSION.SDK_INT < 26) {
+            return false
+        }
+        val manager = AppWidgetManager.getInstance(this)
+        if (!manager.isRequestPinAppWidgetSupported) {
+            return false
+        }
+        val provider = ComponentName(this, CourseWidgetProvider::class.java)
+        return runCatching { manager.requestPinAppWidget(provider, null, null) }
             .getOrDefault(false)
     }
 
@@ -767,6 +798,16 @@ class MainActivity : FlutterActivity() {
             // answers with the text that came out of it. See
             // HabitWidgetProvider.selfCheck for why this exists at all.
             "selfCheckHabitWidget" -> result.success(HabitWidgetProvider.selfCheck(this))
+            // --- The course widget ------------------------------------------
+            "updateCourseWidget" -> {
+                CourseWidgetStore.writeSnapshot(this, JSONObject(arguments as Map<*, *>))
+                CourseWidgetProvider.refresh(this)
+                result.success(CourseWidgetProvider.placed(this))
+            }
+            "requestCourseWidgetPin" -> result.success(requestCourseWidgetPin())
+            // A tap on the course tile asks for the timetable, which is a screen
+            // rather than a habit: Dart pushes the page when it hears about it.
+            "takeCourseOpenRequest" -> result.success(CourseWidgetStore.takeOpen(this))
             else -> result.notImplemented()
         }
     }
@@ -1164,6 +1205,7 @@ class HabitWidgetProvider : AppWidgetProvider() {
         /** The habit the widget's ＋ button asked the app to open. */
         const val EXTRA_OPEN_HABIT = "openHabitId"
 
+
         /** Which habits one widget instance shows, comma separated. */
         const val OPTION_HABIT_IDS = "habitIds"
 
@@ -1273,7 +1315,7 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 views.setTextColor(
                     itemNameId(index),
                     context.getColor(
-                        if (done) R.color.habit_widget_done else R.color.habit_widget_text,
+                        if (done) R.color.widget_done else R.color.widget_text,
                     ),
                 )
                 views.setViewVisibility(
@@ -2008,5 +2050,196 @@ class HabitWidgetConfigActivity : Activity() {
             Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId),
         )
         finish()
+    }
+}
+
+/**
+ * What the course widget draws itself from.
+ *
+ * The payload comes from the app the same way the habit tile's does — the widget
+ * runs in the launcher's process and cannot read the app's documents — but there
+ * is nothing to queue back: a course widget shows what is on and offers no
+ * action of its own beyond opening the app, so the only state here is the
+ * picture and the request to open the timetable.
+ */
+internal object CourseWidgetStore {
+    private const val PREFS = "course_widget"
+    private const val KEY_SNAPSHOT = "snapshot"
+    private const val KEY_OPEN = "openTimetable"
+
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    fun snapshot(context: Context): JSONObject? {
+        val raw = prefs(context).getString(KEY_SNAPSHOT, null) ?: return null
+        return runCatching { JSONObject(raw) }.getOrNull()
+    }
+
+    fun writeSnapshot(context: Context, snapshot: JSONObject) {
+        prefs(context).edit().putString(KEY_SNAPSHOT, snapshot.toString()).apply()
+    }
+
+    /** Remembers that tapping the tile should land on the timetable when it opens. */
+    fun requestOpen(context: Context) {
+        prefs(context).edit().putBoolean(KEY_OPEN, true).apply()
+    }
+
+    fun takeOpen(context: Context): Boolean {
+        if (!prefs(context).getBoolean(KEY_OPEN, false)) return false
+        prefs(context).edit().remove(KEY_OPEN).apply()
+        return true
+    }
+}
+
+/**
+ * The course widget: today's classes, one per row.
+ *
+ * Deliberately without buttons. A timetable is read, not ticked off — the habit
+ * tile has circles because checking a habit off is the point of it, and a course
+ * has no equivalent — so every tap here leads to the app, which is where a
+ * course is edited.
+ */
+class CourseWidgetProvider : AppWidgetProvider() {
+    companion object {
+        /** The course widget asking for the timetable itself. */
+        const val EXTRA_OPEN_TIMETABLE = "openTimetable"
+
+        /** How many courses the row list holds; the layout has this many rows. */
+        private const val MAX_ROWS = 4
+
+        private const val REQUEST_OPEN_TABLE = 5300
+
+        fun refresh(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            for (id in manager.getAppWidgetIds(component(context))) {
+                runCatching { render(context, manager, id) }
+                    .onFailure { Log.w(TAG, "Could not draw the course widget: ${it.message}") }
+            }
+        }
+
+        fun placed(context: Context): Boolean =
+            AppWidgetManager.getInstance(context).getAppWidgetIds(component(context)).isNotEmpty()
+
+        private fun component(context: Context) =
+            ComponentName(context, CourseWidgetProvider::class.java)
+
+        private fun render(context: Context, manager: AppWidgetManager, id: Int) {
+            val snapshot = CourseWidgetStore.snapshot(context)
+            manager.updateAppWidget(id, buildViews(context, snapshot))
+        }
+
+        /**
+         * Builds the tile's view tree, and binds [snapshot] into it.
+         *
+         * Separate from [render] so it can be drawn without a launcher, exactly
+         * as the habit tile's is: see `HabitWidgetProvider.selfCheck`.
+         */
+        private fun buildViews(context: Context, snapshot: JSONObject?): RemoteViews {
+            val views = RemoteViews(context.packageName, R.layout.course_widget)
+            // Every tap on this tile goes to the timetable: there is nothing to
+            // change here, and the timetable is what a row is *about*.
+            val open = openTimetable(context)
+            views.setOnClickPendingIntent(R.id.course_widget_root, open)
+
+            val rows = snapshot?.optJSONArray("rows") ?: JSONArray()
+            // A payload is a picture of one day. When that day is no longer today
+            // the rows are yesterday's classes — a different weekday entirely —
+            // and showing them as today's would be worse than saying nothing.
+            val stale = snapshot != null &&
+                snapshot.optInt("dayKey", 0).let { it != 0 && it != todayKey() }
+
+            if (snapshot == null || stale || rows.length() == 0) {
+                val message = when {
+                    snapshot == null -> context.getString(R.string.course_widget_no_data)
+                    stale -> snapshot.optString("staleText")
+                    else -> snapshot.optString("emptyText")
+                }
+                views.setViewVisibility(R.id.course_widget_message, android.view.View.VISIBLE)
+                views.setTextViewText(R.id.course_widget_message, message)
+                for (index in 0 until MAX_ROWS) {
+                    views.setViewVisibility(rowId(index), android.view.View.GONE)
+                }
+                return views
+            }
+
+            views.setViewVisibility(R.id.course_widget_message, android.view.View.GONE)
+            val shown = minOf(rows.length(), MAX_ROWS)
+            for (index in 0 until MAX_ROWS) {
+                val row = if (index < shown) rows.optJSONObject(index) else null
+                if (row == null) {
+                    views.setViewVisibility(rowId(index), android.view.View.GONE)
+                    continue
+                }
+                views.setViewVisibility(rowId(index), android.view.View.VISIBLE)
+                views.setTextViewText(timeId(index), row.optString("time"))
+                views.setTextViewText(nameId(index), row.optString("name"))
+                val room = if (row.isNull("room")) "" else row.optString("room")
+                views.setTextViewText(roomId(index), room)
+                views.setViewVisibility(
+                    roomId(index),
+                    if (room.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE,
+                )
+                // One intent for every row: whichever course the user aimed at,
+                // what they want is the timetable.
+                views.setOnClickPendingIntent(rowId(index), open)
+            }
+            return views
+        }
+
+        /** A tap anywhere on the tile opens the timetable itself. */
+        private fun openTimetable(context: Context): PendingIntent {
+            val intent = Intent(context, MainActivity::class.java)
+                .putExtra(EXTRA_OPEN_TIMETABLE, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            return PendingIntent.getActivity(
+                context,
+                REQUEST_OPEN_TABLE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
+
+        private fun rowId(index: Int) = when (index) {
+            0 -> R.id.course_item_0
+            1 -> R.id.course_item_1
+            2 -> R.id.course_item_2
+            else -> R.id.course_item_3
+        }
+
+        private fun timeId(index: Int) = when (index) {
+            0 -> R.id.course_item_0_time
+            1 -> R.id.course_item_1_time
+            2 -> R.id.course_item_2_time
+            else -> R.id.course_item_3_time
+        }
+
+        private fun nameId(index: Int) = when (index) {
+            0 -> R.id.course_item_0_name
+            1 -> R.id.course_item_1_name
+            2 -> R.id.course_item_2_name
+            else -> R.id.course_item_3_name
+        }
+
+        private fun roomId(index: Int) = when (index) {
+            0 -> R.id.course_item_0_room
+            1 -> R.id.course_item_1_room
+            2 -> R.id.course_item_2_room
+            else -> R.id.course_item_3_room
+        }
+
+        /** Today as `20260915`, the packing the app uses for a day. */
+        private fun todayKey(): Int {
+            val now = Calendar.getInstance()
+            return now.get(Calendar.YEAR) * 10000 +
+                (now.get(Calendar.MONTH) + 1) * 100 +
+                now.get(Calendar.DAY_OF_MONTH)
+        }
+    }
+
+    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        for (id in ids) {
+            runCatching { render(context, manager, id) }
+                .onFailure { Log.w(TAG, "Could not draw the course widget: ${it.message}") }
+        }
     }
 }

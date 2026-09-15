@@ -11,6 +11,8 @@ import '../../domain/entities/course.dart';
 import '../../domain/entities/period_time.dart';
 import '../../domain/entities/term.dart';
 import '../../domain/entities/timetable.dart';
+import '../../../../core/platform/app_platform.dart';
+import '../course_widget_sync.dart';
 import '../providers/timetable_providers.dart';
 import '../widgets/course_editor_sheet.dart';
 import '../widgets/course_list_page.dart';
@@ -32,9 +34,38 @@ class TimetablePage extends ConsumerWidget {
   /// Width of the period column on the left.
   static const double periodColumnWidth = 46;
 
+  /// Puts a course tile on the home screen.
+  ///
+  /// Whether one now exists is decided by the launcher, outside this app, and the
+  /// realme build used to develop this one both accepts and drops such a request
+  /// — so the answer is read back rather than assumed, and the user is told how
+  /// to add it by hand when the request went nowhere.
+  Future<void> _addWidget(BuildContext context, WidgetRef ref) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final bool requested = await AppPlatform.requestCourseWidgetPin();
+    if (!requested) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text(AppStrings.habitWidgetUnsupported)),
+      );
+      return;
+    }
+    await Future<void>.delayed(const Duration(seconds: 3));
+    await ref.read(courseWidgetSyncProvider).sync();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ref.read(courseWidgetPlacedProvider)
+              ? AppStrings.courseWidgetOnDesktop
+              : AppStrings.courseWidgetManualHint,
+        ),
+        duration: const Duration(seconds: 8),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<Timetable> asyncTimetable = ref.watch(timetableProvider);
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {    final AsyncValue<Timetable> asyncTimetable = ref.watch(timetableProvider);
     final DateTime now = ref.watch(clockProvider)();
 
     return Scaffold(
@@ -56,6 +87,15 @@ class TimetablePage extends ConsumerWidget {
             icon: const Icon(Icons.event_note_outlined),
             tooltip: AppStrings.timetableTermSettings,
             onPressed: () => unawaited(showTermSheet(context)),
+          ),
+          IconButton(
+            icon: Icon(
+              ref.watch(courseWidgetPlacedProvider)
+                  ? Icons.widgets
+                  : Icons.add_to_home_screen,
+            ),
+            tooltip: AppStrings.courseWidgetAdd,
+            onPressed: () => unawaited(_addWidget(context, ref)),
           ),
           const SizedBox(width: 4),
         ],
@@ -86,8 +126,7 @@ class _Body extends ConsumerWidget {
   final DateTime now;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final Term term = timetable.term;
+  Widget build(BuildContext context, WidgetRef ref) {    final Term term = timetable.term;
     final int week = ref.watch(shownWeekProvider);
     final int currentWeek = ref.watch(currentWeekProvider);
 
@@ -312,8 +351,7 @@ class _DayColumn extends ConsumerWidget {
   final bool isToday;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {    final ColorScheme colors = Theme.of(context).colorScheme;
     final int rows = term.periods.length;
     final Timetable? timetable = ref.watch(timetableProvider).value;
 

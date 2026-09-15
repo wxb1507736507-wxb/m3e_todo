@@ -13,7 +13,10 @@ import '../features/habits/domain/entities/habit.dart';
 import '../features/habits/domain/entities/habit_log.dart';
 import '../features/habits/domain/habit_planner.dart';
 import '../features/habits/presentation/habit_permissions.dart';
+import '../features/timetable/domain/entities/timetable.dart';
+import '../features/timetable/presentation/course_widget_sync.dart';
 import '../features/timetable/presentation/pages/timetable_page.dart';
+import '../features/timetable/presentation/providers/timetable_providers.dart';
 import '../features/habits/presentation/habit_widget_sync.dart';
 import '../features/habits/presentation/pages/habits_page.dart';
 import '../features/habits/presentation/providers/habit_providers.dart';
@@ -82,6 +85,7 @@ class _AppShellState extends ConsumerState<AppShell>
         return;
       }
       unawaited(ref.read(reminderCoordinatorProvider).sync());
+      unawaited(ref.read(courseWidgetSyncProvider).sync());
       unawaited(_drainWidget());
       // Ask for the notification permission up front on Android 13+: a
       // reminder that cannot show itself is worse than one more dialog at
@@ -131,6 +135,16 @@ class _AppShellState extends ConsumerState<AppShell>
     if (editId != null && ref.read(habitByIdProvider(editId)) != null) {
       setState(() => _selectedIndex = _habitsIndex);
       ref.read(pendingHabitEditProvider.notifier).request(editId);
+    }
+
+    // The course tile asks for the timetable rather than for a habit, so it
+    // opens the page itself instead of routing through a destination.
+    if (await AppPlatform.takeCourseOpenRequest() && mounted) {
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const TimetablePage()),
+        ),
+      );
     }
   }
 
@@ -206,7 +220,16 @@ class _AppShellState extends ConsumerState<AppShell>
         }
       },
     );
-    // The personal dates are reminders too: a birthday entered once has to
+    // The timetable's tile follows the timetable: a course added, moved or
+    // deleted changes what today looks like.
+    ref.listen<AsyncValue<Timetable>>(
+      timetableProvider,
+      (AsyncValue<Timetable>? previous, AsyncValue<Timetable> next) {
+        if (next.hasValue) {
+          unawaited(ref.read(courseWidgetSyncProvider).sync());
+        }
+      },
+    );    // The personal dates are reminders too: a birthday entered once has to
     // announce itself every year without being maintained.
     ref.listen<AsyncValue<List<SpecialDay>>>(
       specialDaysProvider,

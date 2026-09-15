@@ -337,6 +337,14 @@ abstract final class AppStrings {
   static const String timetableNoCourses = '还没有课程';
   static const String timetableNoCoursesBody = '点「新建课程」，把课表填起来';
   static const String timetableToday = '今天';
+  static const String courseWidgetSection = '桌面小组件';
+  static const String courseWidgetAdd = '添加到桌面';
+  static const String courseWidgetAddHint = '竖向列出今天的课程，点一下打开课程表';
+  static const String courseWidgetOnDesktop = '课程表小组件已添加到桌面';
+  static const String courseWidgetManualHint =
+      '若系统没有弹出确认，请到桌面的「小组件 / 卡片」入口手动添加「课程表小组件」';
+  static const String courseWidgetEmpty = '今天没有课';
+  static const String courseWidgetStale = '新的一天了，打开应用刷新今天的课';
   static const String courseNew = '新建课程';
   static const String courseEdit = '编辑课程';
   static const String courseNameLabel = '课程名';

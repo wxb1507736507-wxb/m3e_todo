@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The course widget: today's classes, in the same shape as the habit tile.
+
+  One course per row — when it starts, what it is, where it is — because that is
+  the question a timetable answers at a glance: what have I got next, and where
+  do I have to be. Nothing here can be *changed*, so nothing here is a button:
+  tapping a row opens the timetable, which is where a course is edited.
+
+  Four rows are laid out and the unused ones are hidden: a `RemoteViews` cannot
+  build a variable-length list without a collection service.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/course_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card_background"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:paddingStart="10dp"
+    android:paddingEnd="10dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp">
+
+    <LinearLayout
+        android:id="@+id/course_item_0"
+        style="@style/CourseWidgetRow">
+
+        <TextView
+            android:id="@+id/course_item_0_time"
+            style="@style/CourseWidgetTime" />
+
+        <TextView
+            android:id="@+id/course_item_0_name"
+            style="@style/CourseWidgetName" />
+
+        <TextView
+            android:id="@+id/course_item_0_room"
+            style="@style/CourseWidgetRoom" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/course_item_1"
+        style="@style/CourseWidgetRow">
+
+        <TextView
+            android:id="@+id/course_item_1_time"
+            style="@style/CourseWidgetTime" />
+
+        <TextView
+            android:id="@+id/course_item_1_name"
+            style="@style/CourseWidgetName" />
+
+        <TextView
+            android:id="@+id/course_item_1_room"
+            style="@style/CourseWidgetRoom" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/course_item_2"
+        style="@style/CourseWidgetRow">
+
+        <TextView
+            android:id="@+id/course_item_2_time"
+            style="@style/CourseWidgetTime" />
+
+        <TextView
+            android:id="@+id/course_item_2_name"
+            style="@style/CourseWidgetName" />
+
+        <TextView
+            android:id="@+id/course_item_2_room"
+            style="@style/CourseWidgetRoom" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/course_item_3"
+        style="@style/CourseWidgetRow">
+
+        <TextView
+            android:id="@+id/course_item_3_time"
+            style="@style/CourseWidgetTime" />
+
+        <TextView
+            android:id="@+id/course_item_3_name"
+            style="@style/CourseWidgetName" />
+
+        <TextView
+            android:id="@+id/course_item_3_room"
+            style="@style/CourseWidgetRoom" />
+    </LinearLayout>
+
+    <!-- Stands in for the list when there is nothing to draw: no classes today,
+         a day outside the term, or an app that has never synced. -->
+    <TextView
+        android:id="@+id/course_widget_message"
+        style="@style/CourseWidgetMessage"
+        android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the launcher needs to know before it shows the course widget.
+
+  Two cells wide and three tall, like the habit tile and for the same reason: a
+  list of names wants height. It has no configuration screen — it shows today,
+  and there is nothing to choose — so it is placed as soon as it is dropped,
+  which is also the one less thing that can fail on a launcher that is shy about
+  running configuration screens.
+
+  `updatePeriodMillis` is half an hour for the same reason as the habit tile's:
+  the widget shows *today*, and the day changes whether or not the app is opened.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/course_widget_description"
+    android:initialLayout="@layout/course_widget"
+    android:minHeight="170dp"
+    android:minWidth="110dp"
+    android:previewLayout="@layout/course_widget"
+    android:resizeMode="none"
+    android:targetCellHeight="3"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

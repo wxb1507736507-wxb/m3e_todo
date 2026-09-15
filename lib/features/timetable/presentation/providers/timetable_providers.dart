@@ -188,3 +188,21 @@ final Provider<List<PeriodTime>> periodsProvider = Provider<List<PeriodTime>>(
   (ref) => ref.watch(timetableProvider).value?.term.periods ?? kDefaultPeriods,
   name: 'timetablePeriods',
 );
+
+/// Whether the course widget is on one of the home screens.
+///
+/// Read from the platform after the first sync, because only Android knows; the
+/// timetable page shows the answer rather than guessing, so it never offers to
+/// add a tile that is already there.
+class CourseWidgetPlaced extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool placed) => state = placed;
+}
+
+final NotifierProvider<CourseWidgetPlaced, bool> courseWidgetPlacedProvider =
+    NotifierProvider<CourseWidgetPlaced, bool>(
+  CourseWidgetPlaced.new,
+  name: 'courseWidgetPlaced',
+);

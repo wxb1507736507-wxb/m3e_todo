@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The colours every home-screen tile shares: the surface it sits on, the two text
+  weights, the accent of a done state, and the pencil.
+
+  A launcher draws a widget into its own process, before (and often without) this
+  app running, so a tile cannot read the Flutter theme; these are the theme's
+  values written down, the same compromise `m3_surface` already makes for the
+  window behind the app.
+
+  Shared by the habit tile and the course tile on purpose: two widgets from one
+  app should look like two widgets from one app.
+-->
+<resources>
+    <!-- Slightly translucent, so a wallpaper still reads through the tile
+         instead of being covered by an opaque card. -->
+    <color name="widget_background">#F2FFF7FD</color>
+    <color name="widget_text">#1D1A21</color>
+    <color name="widget_subtle">#5A5560</color>
+    <color name="widget_accent">#6750A4</color>
+    <color name="widget_done">#7A757F</color>
+</resources>

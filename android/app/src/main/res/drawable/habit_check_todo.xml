@@ -10,7 +10,7 @@
     android:viewportHeight="24">
     <path
         android:fillColor="@android:color/transparent"
-        android:strokeColor="@color/habit_widget_subtle"
+        android:strokeColor="@color/widget_subtle"
         android:strokeWidth="1.8"
         android:pathData="M12,12m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0" />
 </vector>

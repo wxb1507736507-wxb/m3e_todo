@@ -23,6 +23,23 @@ class CourseWidgetSync {
   bool _running = false;
   bool _queued = false;
 
+  /// Whether the debug-only tile self-check has run in this process.
+  bool _selfChecked = false;
+
+  /// Draws the course tile without a launcher and prints what came out.
+  ///
+  /// Debug builds only, and once per process — the same exercise the habit tile
+  /// runs, for the same reason: this launcher may never host the widget, and what
+  /// it would draw still has to be knowable. See `CourseWidgetProvider.selfCheck`.
+  Future<void> _selfCheckOnce() async {
+    if (_selfChecked) {
+      return;
+    }
+    _selfChecked = true;
+    final Map<String, Object?> report = await AppPlatform.selfCheckCourseWidget();
+    debugPrint('course-widget-self-check: $report');
+  }
+
   Future<void> sync() async {
     if (_running) {
       _queued = true;
@@ -67,6 +84,10 @@ class CourseWidgetSync {
     // Only Android can answer this, and the timetable would otherwise offer to
     // add a tile that is already on the home screen.
     _ref.read(courseWidgetPlacedProvider.notifier).set(placed);
+
+    if (kDebugMode) {
+      await _selfCheckOnce();
+    }
   }
 }
 

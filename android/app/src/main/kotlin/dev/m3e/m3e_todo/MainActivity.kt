@@ -808,6 +808,9 @@ class MainActivity : FlutterActivity() {
             // A tap on the course tile asks for the timetable, which is a screen
             // rather than a habit: Dart pushes the page when it hears about it.
             "takeCourseOpenRequest" -> result.success(CourseWidgetStore.takeOpen(this))
+            // Debug-only: draws the course tile without a launcher. See
+            // CourseWidgetProvider.selfCheck.
+            "selfCheckCourseWidget" -> result.success(CourseWidgetSelfCheck.selfCheck(this))
             else -> result.notImplemented()
         }
     }
@@ -1432,11 +1435,16 @@ class HabitWidgetProvider : AppWidgetProvider() {
             return runCatching {
                 mapOf(
                     "ok" to true,
-                    // The row as the launcher would draw it.
+                    // The column as the launcher would draw it.
                     "row" to renderTexts(context, payload, emptyList(), 0),
                     // The same payload dated yesterday: what the widget finds
                     // after a day it was not opened during.
-                    "stale" to renderTexts(context, forcedDay(payload, -1), emptyList(), 0),
+                    "stale" to renderTexts(
+                        context,
+                        WidgetSelfCheck.forcedDay(payload, -1),
+                        emptyList(),
+                        0,
+                    ),
                     // One habit ticked on the tile, and the arrangement screen
                     // narrowed to it.
                     "chosen" to renderTexts(
@@ -1453,44 +1461,23 @@ class HabitWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        /** Draws one row and answers with the text that came out. */
+
+        /**
+         * Draws one column and answers with the text that came out.
+         *
+         * A thin wrapper over the shared self-check: what differs per widget is
+         * only which view tree to build.
+         */
         private fun renderTexts(
             context: Context,
             payload: JSONObject?,
             habitIds: List<String>,
             widgetId: Int,
-        ): List<String> {
-            val views = buildViews(context, payload, widgetId, habitIds)
-            val root = views.apply(context, FrameLayout(context))
-            val texts = ArrayList<String>()
-            collectText(root, texts)
-            return texts
-        }
-
-        /** A copy of [payload] dated [daysFromToday] days ago. */
-        private fun forcedDay(payload: JSONObject?, daysFromToday: Int): JSONObject? {
-            if (payload == null) return null
-            val calendar = Calendar.getInstance().apply {
-                add(Calendar.DAY_OF_YEAR, daysFromToday)
-            }
-            val dayKey = calendar.get(Calendar.YEAR) * 10000 +
-                (calendar.get(Calendar.MONTH) + 1) * 100 +
-                calendar.get(Calendar.DAY_OF_MONTH)
-            return JSONObject(payload.toString()).put("dayKey", dayKey)
-        }
-
-        /** The visible text in a view tree, in draw order. */
-        private fun collectText(view: View, into: MutableList<String>) {
-            if (view.visibility != View.VISIBLE) return
-            if (view is TextView) {
-                into.add(view.text?.toString().orEmpty())
-            }
-            if (view is ViewGroup) {
-                for (index in 0 until view.childCount) {
-                    collectText(view.getChildAt(index), into)
-                }
-            }
-        }
+        ): List<String> =
+            WidgetSelfCheck.renderTexts(
+                context,
+                buildViews(context, payload, widgetId, habitIds),
+            )
 
         /**
          * The line under the name: the state in words, plus whatever facts the
@@ -1805,6 +1792,53 @@ internal object HabitAlarmStore {
             if (candidate.timeInMillis > now.timeInMillis) return candidate.timeInMillis
         }
         return null
+    }
+}
+
+/**
+ * Draws a widget's view tree into a view nobody sees, and reports what came out.
+ *
+ * This exists because a widget's most failure-prone part — that every id in its
+ * layout is what the code assumes it is, and that the launcher's own inflation of
+ * that layout succeeds — cannot be reached by a Flutter test and, on a launcher
+ * that will not host the widget, not by a device either. Applying the tree here
+ * runs the same inflation and the same actions the launcher would run, and the
+ * text it returns is the proof that the binding happened.
+ *
+ * Only ever called from a debug build; see the two sync classes on the Dart side.
+ */
+internal object WidgetSelfCheck {
+    /** The visible text in a view tree, in draw order. */
+    fun collectText(view: View, into: MutableList<String>) {
+        if (view.visibility != View.VISIBLE) return
+        if (view is TextView) {
+            into.add(view.text?.toString().orEmpty())
+        }
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                collectText(view.getChildAt(index), into)
+            }
+        }
+    }
+
+    /** Draws one view tree and answers with the text that came out. */
+    fun renderTexts(context: Context, views: RemoteViews): List<String> {
+        val root = views.apply(context, FrameLayout(context))
+        val texts = ArrayList<String>()
+        collectText(root, texts)
+        return texts
+    }
+
+    /** A copy of [payload] dated [daysFromToday] days ago. */
+    fun forcedDay(payload: JSONObject?, daysFromToday: Int): JSONObject? {
+        if (payload == null) return null
+        val calendar = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, daysFromToday)
+        }
+        val dayKey = calendar.get(Calendar.YEAR) * 10000 +
+            (calendar.get(Calendar.MONTH) + 1) * 100 +
+            calendar.get(Calendar.DAY_OF_MONTH)
+        return JSONObject(payload.toString()).put("dayKey", dayKey)
     }
 }
 
@@ -2134,7 +2168,7 @@ class CourseWidgetProvider : AppWidgetProvider() {
          * Separate from [render] so it can be drawn without a launcher, exactly
          * as the habit tile's is: see `HabitWidgetProvider.selfCheck`.
          */
-        private fun buildViews(context: Context, snapshot: JSONObject?): RemoteViews {
+        internal fun buildViews(context: Context, snapshot: JSONObject?): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.course_widget)
             // Every tap on this tile goes to the timetable: there is nothing to
             // change here, and the timetable is what a row is *about*.
@@ -2240,6 +2274,49 @@ class CourseWidgetProvider : AppWidgetProvider() {
         for (id in ids) {
             runCatching { render(context, manager, id) }
                 .onFailure { Log.w(TAG, "Could not draw the course widget: ${it.message}") }
+        }
+    }
+}
+
+/**
+ * Draws the course tile for each state it can be in, and reports the text.
+ *
+ * The same exercise the habit tile runs, and for the same reason: this launcher
+ * may never host the widget, and the layout still has to be known to inflate and
+ * to take the values bound to it. An object of its own rather than a companion,
+ * because a class gets one companion and the provider's is already holding the
+ * drawing code.
+ */
+internal object CourseWidgetSelfCheck {
+    fun selfCheck(context: Context): Map<String, Any?> {
+        val payload = CourseWidgetStore.snapshot(context)
+        val noRows = payload?.let { JSONObject(it.toString()).put("rows", JSONArray()) }
+        return runCatching {
+            mapOf(
+                "ok" to true,
+                "today" to WidgetSelfCheck.renderTexts(
+                    context,
+                    CourseWidgetProvider.buildViews(context, payload),
+                ),
+                "stale" to WidgetSelfCheck.renderTexts(
+                    context,
+                    CourseWidgetProvider.buildViews(
+                        context,
+                        WidgetSelfCheck.forcedDay(payload, -1),
+                    ),
+                ),
+                "empty" to WidgetSelfCheck.renderTexts(
+                    context,
+                    CourseWidgetProvider.buildViews(context, noRows),
+                ),
+                "noData" to WidgetSelfCheck.renderTexts(
+                    context,
+                    CourseWidgetProvider.buildViews(context, null),
+                ),
+                "rows" to (payload?.optJSONArray("rows")?.length() ?: 0),
+            )
+        }.getOrElse { error ->
+            mapOf("ok" to false, "reason" to error.toString())
         }
     }
 }

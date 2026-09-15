@@ -486,6 +486,23 @@ abstract final class AppPlatform {
         entry.key.toString(): entry.value,
     };
   }
+
+  /// Draws the course tile without a launcher and reports what came out.
+  ///
+  /// The course tile's counterpart of [selfCheckHabitWidget], for the same
+  /// reason: on a launcher that will not host the widget, nobody would otherwise
+  /// ever see it run.
+  static Future<Map<String, Object?>> selfCheckCourseWidget() async {
+    final Map<Object?, Object?>? result =
+        await _invoke<Map<Object?, Object?>>('selfCheckCourseWidget');
+    if (result == null) {
+      return const <String, Object?>{};
+    }
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in result.entries)
+        entry.key.toString(): entry.value,
+    };
+  }
 }
 
 /// One habit reminder for the native scheduler.

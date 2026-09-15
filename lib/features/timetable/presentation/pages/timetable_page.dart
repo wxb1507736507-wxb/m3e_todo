@@ -75,17 +75,37 @@ class TimetablePage extends ConsumerWidget {
     final DateTime now = ref.watch(clockProvider)();
     final AppSettings settings = ref.watch(settingsProvider);
 
+    // A timetable is paper. Until the user puts a picture behind it, it is drawn
+    // on white rather than on the app's tinted surface — and because white paper
+    // needs dark ink, this page carries its own light colour scheme rather than
+    // inheriting one. That is deliberate and it is the one place in the app that
+    // does it: in the dark theme a grid of small text is read far better as ink
+    // on paper than as pale grey on black, and a timetable that turns dark with
+    // the system is a timetable nobody can glance at.
+    final ColorScheme paper = ColorScheme.fromSeed(
+      seedColor: Theme.of(context).colorScheme.primary,
+      brightness: Brightness.light,
+    ).copyWith(
+      surface: Colors.white,
+      onSurface: const Color(0xFF1B1B1F),
+      onSurfaceVariant: const Color(0xFF5A5560),
+    );
+
     // The timetable's own background, painted the way the app's is: this page is
     // pushed over the shell, so without this it would hide whatever the user
     // chose for the app behind an opaque surface of its own.
-    return AppBackground(
-      imagePath: settings.timetableBackgroundImage,
-      dim: settings.timetableBackgroundDim,
-      child: Scaffold(
-        backgroundColor: settings.timetableBackgroundImage == null
-            ? null
-            : Colors.transparent,
-        appBar: AppBar(
+    return Theme(
+      data: Theme.of(context).copyWith(colorScheme: paper),
+      child: AppBackground(
+        imagePath: settings.timetableBackgroundImage,
+        dim: settings.timetableBackgroundDim,
+        child: Scaffold(
+          // Transparent only when a picture is under it: the backdrop already
+          // paints the white, and painting it twice would hide the picture.
+          backgroundColor: settings.timetableBackgroundImage == null
+              ? null
+              : Colors.transparent,
+          appBar: AppBar(
         title: const Text(AppStrings.timetableTitle),
         actions: <Widget>[
           IconButton(
@@ -126,14 +146,15 @@ class TimetablePage extends ConsumerWidget {
           ),
           data: (Timetable timetable) => _Body(timetable: timetable, now: now),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          // The three ways in — one course, a picture of the whole term, or
-          // filling the grid by hand — are one decision, so they are asked as
-          // one. A tap on an empty cell still goes straight to the editor: the
-          // cell already answered "when".
-          onPressed: () => unawaited(showCourseNewMenu(context)),
-          icon: const Icon(Icons.add),
-          label: const Text(AppStrings.courseNew),
+          floatingActionButton: FloatingActionButton.extended(
+            // The three ways in — one course, a picture of the whole term, or
+            // filling the grid by hand — are one decision, so they are asked as
+            // one. A tap on an empty cell still goes straight to the editor: the
+            // cell already answered "when".
+            onPressed: () => unawaited(showCourseNewMenu(context)),
+            icon: const Icon(Icons.add),
+            label: const Text(AppStrings.courseNew),
+          ),
         ),
       ),
     );

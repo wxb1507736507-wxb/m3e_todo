@@ -873,6 +873,34 @@ void main() {
     expect(tester.getTopLeft(find.text('08:00')), settled);
   });
 
+  testWidgets('the grid is paper: white, with ink on it', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: FakeTimetableRepository(
+          Timetable(term: term(), courses: <Course>[course('c1')]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    // A timetable is read like a printed page, so until the user puts a picture
+    // behind it, it is white with dark text — and that holds whatever the rest of
+    // the app is doing, because the page carries its own colour scheme.
+    final BuildContext page = tester.element(find.text('08:00'));
+    expect(Theme.of(page).colorScheme.surface, Colors.white);
+    expect(Theme.of(page).colorScheme.brightness, Brightness.light);
+    expect(
+      Theme.of(page).colorScheme.onSurface.computeLuminance(),
+      lessThan(0.2),
+      reason: 'ink, not a pale colour that has to be squinted at on white',
+    );
+  });
+
   testWidgets('a course is renamed and then deleted from its own editor', (
     WidgetTester tester,
   ) async {

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import 'course_editor_sheet.dart';
-import 'course_import_sheet.dart';
 import 'term_sheet.dart';
 
 /// The three ways into a timetable, as the phone's own app offers them.
@@ -37,14 +36,12 @@ Future<void> showCourseNewMenu(
   switch (choice) {
     case _CourseNewChoice.single:
       await showCourseEditorSheet(context);
-    case _CourseNewChoice.photo:
-      await showCourseImportSheet(context);
     case _CourseNewChoice.manual:
       await showTermSheet(context);
   }
 }
 
-enum _CourseNewChoice { single, photo, manual }
+enum _CourseNewChoice { single, manual }
 
 class _CourseNewMenu extends StatelessWidget {
   const _CourseNewMenu();
@@ -71,12 +68,7 @@ class _CourseNewMenu extends StatelessWidget {
             subtitle: AppStrings.courseNewSingleHint,
             onTap: () => Navigator.of(context).pop(_CourseNewChoice.single),
           ),
-          _Option(
-            icon: Icons.document_scanner_outlined,
-            title: AppStrings.courseNewPhoto,
-            subtitle: AppStrings.courseNewPhotoHint,
-            onTap: () => Navigator.of(context).pop(_CourseNewChoice.photo),
-          ),
+
           _Option(
             icon: Icons.grid_on_outlined,
             title: AppStrings.courseNewManual,

@@ -227,59 +227,6 @@ abstract final class AppPlatform {
 
   // --- Pickers -----------------------------------------------------------------
 
-  /// Reads the text in a picture of a timetable, with where each line sat.
-  ///
-  /// Deliberately raw: a list of `{text, l, t, r, b}` maps, because what those
-  /// lines *mean* — which weekday column, which period row, which of them is a
-  /// course name — is a question for the timetable, not for the platform
-  /// layer. An empty list means the picture held no text at all.
-  static Future<List<Map<String, Object?>>> recognizeText(String path) async {
-    if (!isAndroid) {
-      return const <Map<String, Object?>>[];
-    }
-    final List<Object?>? lines =
-        await _invoke<List<Object?>>('recognizeTimetable', path);
-    return <Map<String, Object?>>[
-      for (final Object? line in lines ?? const <Object?>[])
-        if (line is Map)
-          <String, Object?>{
-            'text': line['text'],
-            'l': line['l'],
-            't': line['t'],
-            'r': line['r'],
-            'b': line['b'],
-          },
-    ];
-  }
-
-  /// Takes a photo with the device's camera, or `null` when the user backed out.
-  ///
-  /// Not a picker: the app hands the camera a file in its own private directory
-  /// to write into, so the picture arrives where it is wanted rather than being
-  /// copied there afterwards. A phone with no camera app is answered by the
-  /// picture picker on the native side, so a caller only has to handle "the
-  /// user changed their mind".
-  static Future<PickedAttachment?> takePhoto() async {
-    if (!isAndroid) {
-      return null;
-    }
-    final Map<Object?, Object?>? result = await _invoke<Map<Object?, Object?>>(
-      'takePhoto',
-    );
-    if (result == null) {
-      return null;
-    }
-    final Object? path = result['path'];
-    if (path is! String) {
-      return null;
-    }
-    return PickedAttachment(
-      path: path,
-      name: result['name'] as String? ?? path,
-      mime: result['mime'] as String?,
-    );
-  }
-
   /// Opens the system document picker filtered by [kind]
   /// (`image`/`video`/`audio`/anything else for documents).
   static Future<PickedAttachment?> pickAttachment(String kind) async {

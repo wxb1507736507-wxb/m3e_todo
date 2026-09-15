@@ -11,7 +11,6 @@ import '../../notifications/presentation/reminder_lead_picker.dart';
 import 'appearance_sheet.dart';
 import 'settings_controller.dart';
 import 'widgets/background_controls.dart';
-import 'widgets/vision_import_settings.dart';
 
 /// Opens the integrated settings sheet.
 Future<void> showSettingsSheet(BuildContext context) {
@@ -381,8 +380,6 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet>
               const Divider(),
               const SizedBox(height: 20),
 
-              // --- 识图导课: reading a timetable with a model over the network ---
-              VisionImportSettings(settings: settings),
 
               const SizedBox(height: 12),
               const Divider(),

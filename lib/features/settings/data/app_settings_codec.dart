@@ -13,11 +13,14 @@ abstract final class AppSettingsCodec {
   /// version-3 file still opens in an older build, where the extra fields are
   /// simply ignored.
   /// Version 5 adds the timetable's own `timetableBackgroundImage` and
-  /// `timetableBackgroundDim`, version 6 the home-screen tiles'
-  /// `widgetBackgroundImage` and `widgetBackgroundDim`, and version 7 the
-  /// network reader's `visionImportEnabled`, `visionBaseUrl`, `visionApiKey`
-  /// and `visionModel` — all optional on read: an older file loads with the
-  /// app's defaults, and a newer one still opens in an older build.
+  /// `timetableBackgroundDim`, and version 6 the home-screen tiles'
+  /// `widgetBackgroundImage` and `widgetBackgroundDim` — both optional on read:
+  /// an older file loads with the app's defaults, and a newer one still opens in
+  /// an older build.
+  ///
+  /// Version 7 held the photo-import reader's settings. That feature is gone,
+  /// and the fields with it: a file written by it still loads, because writing
+  /// extra keys is what a tolerant reader is for.
   static const int schemaVersion = 7;
 
   static Map<String, Object?> toJson(AppSettings settings) {
@@ -39,11 +42,6 @@ abstract final class AppSettingsCodec {
       if (settings.widgetBackgroundImage != null)
         'widgetBackgroundImage': settings.widgetBackgroundImage,
       'widgetBackgroundDim': settings.widgetBackgroundDim,
-      // Absent rather than null, like the rest: missing means "not set up".
-      if (settings.visionBaseUrl != null) 'visionBaseUrl': settings.visionBaseUrl,
-      if (settings.visionApiKey != null) 'visionApiKey': settings.visionApiKey,
-      if (settings.visionModel != null) 'visionModel': settings.visionModel,
-      'visionImportEnabled': settings.visionImportEnabled,
     };
   }
 
@@ -98,22 +96,7 @@ abstract final class AppSettingsCodec {
         json['widgetBackgroundDim'],
         AppSettings.defaultBackgroundDim,
       ),
-      visionImportEnabled: json['visionImportEnabled'] is bool
-          ? json['visionImportEnabled']! as bool
-          : false,
-      visionBaseUrl: _string(json['visionBaseUrl']),
-      visionApiKey: _string(json['visionApiKey']),
-      visionModel: _string(json['visionModel']),
     );
-  }
-
-  /// A trimmed, non-empty string, or `null`.
-  static String? _string(Object? raw) {
-    if (raw is! String) {
-      return null;
-    }
-    final String trimmed = raw.trim();
-    return trimmed.isEmpty ? null : trimmed;
   }
 
   /// Reads a `[0, 1]` fraction, clamping rather than rejecting.

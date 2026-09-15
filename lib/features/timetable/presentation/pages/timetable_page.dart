@@ -159,6 +159,11 @@ class _BodyState extends ConsumerState<_Body> {
   int? _armedWeekday;
   int? _armedPeriod;
 
+  /// Where the finger went down, when, and how far sideways it has been.
+  Offset? _dragFrom;
+  Duration? _dragStartedAt;
+  double _dragFurthest = 0;
+
   void _arm(int weekday, int period) {
     setState(() {
       if (_armedWeekday == weekday && _armedPeriod == period) {
@@ -215,13 +220,56 @@ class _BodyState extends ConsumerState<_Body> {
             ),
           ),
         Expanded(
-          child: GestureDetector(
-            // A tap that lands between the cells — on a rule, or on the padding
-            // around the grid — puts the plus away, which is how a thing that
-            // appeared is expected to disappear.
-            behavior: HitTestBehavior.deferToChild,
-            onTap: _disarm,
-            child: SingleChildScrollView(
+          // Two layers, and each earns its place. The `Listener` sees raw
+          // pointer movement rather than competing for it: the grid is full of
+          // things that want a tap (every cell, every course), and a drag
+          // recognizer in the same arena as all of them is a drag that sometimes
+          // loses to a tap the user never meant. Movement is not claimed here —
+          // it is only *watched* — so a scroll, a tap and this all still work.
+          child: Listener(
+            onPointerDown: (PointerDownEvent event) {
+              _dragFrom = event.position;
+              _dragStartedAt = event.timeStamp;
+              _dragFurthest = 0;
+            },
+            onPointerMove: (PointerMoveEvent event) {
+              final Offset from = _dragFrom ?? event.position;
+              final Offset delta = event.position - from;
+              // Mostly sideways, or it is a scroll being watched, not a swipe.
+              if (delta.dx.abs() > delta.dy.abs() * 1.5) {
+                _dragFurthest = delta.dx;
+              }
+            },
+            onPointerUp: (PointerUpEvent event) {
+              final double travelled = _dragFurthest;
+              final Duration elapsed =
+                  event.timeStamp - (_dragStartedAt ?? Duration.zero);
+              _dragFrom = null;
+              _dragStartedAt = null;
+              _dragFurthest = 0;
+
+              final bool dragged = travelled.abs() >= 48;
+              // A short, fast flick counts too: a thumb does not always travel
+              // half a screen to mean "next week".
+              final double speed = elapsed.inMicroseconds == 0
+                  ? 0
+                  : travelled / (elapsed.inMicroseconds / 1e6);
+              final bool flicked = travelled.abs() >= 20 && speed.abs() >= 320;
+              if (!dragged && !flicked) {
+                return;
+              }
+              _disarm();
+              ref
+                  .read(selectedWeekProvider.notifier)
+                  .step(travelled < 0 ? 1 : -1, currentWeek);
+            },
+            child: GestureDetector(
+              // A tap that lands between the cells — on a rule, or on the padding
+              // around the grid — puts the plus away, which is how a thing that
+              // appeared is expected to disappear.
+              behavior: HitTestBehavior.deferToChild,
+              onTap: _disarm,
+              child: SingleChildScrollView(
               padding: const EdgeInsets.only(bottom: 96),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,6 +317,7 @@ class _BodyState extends ConsumerState<_Body> {
             ),
           ),
         ),
+      ),
       ],
     );
   }

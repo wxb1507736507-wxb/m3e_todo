@@ -357,8 +357,6 @@ abstract final class AppStrings {
   // here to know what each one does.
   static const String courseNewSingle = '新建单个课程';
   static const String courseNewSingleHint = '一节一节地加，同一门课可以加多个上课时间';
-  static const String courseNewPhoto = '拍照导入课程表';
-  static const String courseNewPhotoHint = '选一张课表截图，自动认出课程，确认以后再导入';
   static const String courseNewManual = '手动创建课程表';
   static const String courseNewManualHint = '先填学期信息，再在课表上点格子把课填进去';
 
@@ -406,55 +404,6 @@ abstract final class AppStrings {
   /// One weekly meeting of a course, numbered the way the phone numbers them.
   static String courseSlotCount(int index) => '课程时间$index';
 
-  // --- 识图导课 (a timetable read out of a photo) ---------------------------
-
-  static const String courseImportTitle = '拍照导入课程表';
-  static const String courseImportIntro =
-      '选一张课程表截图或照片。识别在本机完成，图片不会上传；认出课程以后先给你看一遍，确认了才写进课程表。';
-  static const String courseImportPick = '选择课表图片';
-  static const String courseImportCamera = '拍照';
-  static const String courseImportCameraHint = '对着课表照一张，适合贴在墙上的课表';
-  static const String courseImportGallery = '从相册选择';
-  static const String courseImportGalleryHint = '选一张课表截图或者已经拍好的照片';
-  static const String courseImportWorking = '正在识别…';
-  static const String courseImportTakeLong = '图片大一点会慢一些，请稍等';
-  static const String courseImportEmpty =
-      '这张图里没认出课程。换一张更清楚的截图试试：把表头（周一…周日）和课程名都拍进去，别裁掉左边的节次。';
-  static const String courseImportFailed = '识别失败';
-  static const String courseImportReviewHint = '不想要的可以取消勾选；名字认错了点一下就改。';
-  static const String courseImportWeeksHint = '照片看不出单双周，导入的课都按整学期排';
-  static const String courseImportRename = '改课程名';
-  static String courseImportSkipped(int lines) => '另有 $lines 行文字没落在表格里，已跳过';
-  static String courseImportFound(int count) => '认出 $count 门课';
-
-  /// Which reader produced the list, said plainly: the user chose the network
-  /// reader for its accuracy, so whether it was used is part of the result.
-  static const String courseImportByNetwork = '识别方式：网络模型';
-  static const String courseImportOnDevice = '识别方式：本机（离线）';
-  static String courseImportFellBack(String reason) =>
-      '网络识别没成功，已改用本机识别：$reason';
-
-  // --- 识图导课 · 网络识别（设置） ------------------------------------------
-
-  static const String visionSectionTitle = '识图导课';
-  static const String visionEnabledLabel = '用网络模型识别';
-  static const String visionEnabledHint =
-      '课表照片会发给你选的服务商识别，比本机识别准得多；关掉就只用本机离线识别';
-  static const String visionProviderLabel = '服务商';
-  static const String visionBaseUrlLabel = '接口地址';
-  static const String visionBaseUrlHint = '例如 https://dashscope.aliyuncs.com/compatible-mode/v1';
-  static const String visionModelLabel = '模型';
-  static const String visionApiKeyLabel = 'API Key';
-  static const String visionApiKeyHint = '只保存在本机应用私有目录，不会外传';
-  static const String visionTest = '测试连接';
-  static const String visionTestRunning = '正在测试…';
-  static const String visionTestOk = '连接成功，可以用了';
-  static String visionTestFailed(String reason) => '测试失败：$reason';
-  static const String visionKeyMissing = '还没有填 API Key';
-  static String courseImportAction(int count) => '导入 $count 门课';
-  static String courseImportDone(int count) => '已导入 $count 门课';
-  static String courseImportDoneSome(int count, int alreadyThere) =>
-      '已导入 $count 门课，$alreadyThere 门课表里已经有了';
   static const String termNameLabel = '学期名称';
   static const String termNameHint = '例如：大三上';
   static const String termStartLabel = '开学第一周的周一';

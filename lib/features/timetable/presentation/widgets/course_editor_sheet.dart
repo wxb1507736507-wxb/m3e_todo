@@ -311,14 +311,27 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
+      // Capped, scrollable, and with its buttons *outside* the scrolling part.
+      //
+      // A course name pasted out of a school's system is a paragraph, and so are
+      // its room and note; a form whose 完成 button scrolls with that text is a
+      // form whose button ends up drawn over it. The row below never moves.
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
               Text(
                 widget.existing == null
                     ? AppStrings.courseNew
@@ -454,30 +467,19 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
                   ],
                 ),
               ],
-              const SizedBox(height: 16),
-              Row(
-                children: <Widget>[
-                  if (widget.existing != null)
-                    TextButton.icon(
-                      onPressed: _saving ? null : () => unawaited(_confirmDelete()),
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text(AppStrings.actionDelete),
-                    ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                    child: const Text(AppStrings.cancel),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : () => unawaited(_submit()),
-                    icon: const Icon(Icons.check),
-                    label: const Text(AppStrings.done),
-                  ),
-                ],
+                ),
               ),
-            ],
-          ),
+            ),
+            _EditorActions(
+              saving: _saving,
+              canDelete: widget.existing != null,
+              onDelete: () => unawaited(_confirmDelete()),
+              onCancel: () => Navigator.of(context).pop(),
+              onSubmit: () => unawaited(_submit()),
+            ),
+          ],
         ),
       ),
     );
@@ -519,6 +521,55 @@ class _CourseEditorSheetState extends ConsumerState<CourseEditorSheet> {
       return null;
     }
     return timetable.clashWith(_draftCourse());
+  }
+}
+
+/// The editor's buttons, pinned below the scrolling form.
+///
+/// Outside the scroll view on purpose: a course name pasted out of a school's
+/// system is a paragraph, and a 完成 button that scrolls with it is a button that
+/// ends up drawn over it.
+class _EditorActions extends StatelessWidget {
+  const _EditorActions({
+    required this.saving,
+    required this.canDelete,
+    required this.onDelete,
+    required this.onCancel,
+    required this.onSubmit,
+  });
+
+  final bool saving;
+  final bool canDelete;
+  final VoidCallback onDelete;
+  final VoidCallback onCancel;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      child: Row(
+        children: <Widget>[
+          if (canDelete)
+            TextButton.icon(
+              onPressed: saving ? null : onDelete,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text(AppStrings.actionDelete),
+            ),
+          const Spacer(),
+          TextButton(
+            onPressed: saving ? null : onCancel,
+            child: const Text(AppStrings.cancel),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: saving ? null : onSubmit,
+            icon: const Icon(Icons.check),
+            label: const Text(AppStrings.done),
+          ),
+        ],
+      ),
+    );
   }
 }
 

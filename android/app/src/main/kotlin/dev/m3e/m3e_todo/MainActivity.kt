@@ -29,9 +29,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import kotlin.math.roundToInt
 import android.view.View
 import android.view.ViewGroup
@@ -427,7 +424,6 @@ class MainActivity : FlutterActivity() {
 
         // Request codes for the startActivityForResult round-trips.
         const val REQUEST_ATTACHMENT = 41
-        const val REQUEST_PHOTO = 42
         const val REQUEST_RINGTONE = 42
         const val REQUEST_NOTIFICATION_PERMISSION = 43
         const val REQUEST_AUDIO_PERMISSION = 44
@@ -435,9 +431,6 @@ class MainActivity : FlutterActivity() {
 
     private var pendingAttachmentResult: MethodChannel.Result? = null
 
-    /// The camera round trip: the result, and the file it was told to write.
-    private var pendingPhotoResult: MethodChannel.Result? = null
-    private var pendingPhotoFile: File? = null
     private var pendingRingtoneResult: MethodChannel.Result? = null
     private var pendingNotificationPermission: MethodChannel.Result? = null
     private var pendingAudioPermission: MethodChannel.Result? = null
@@ -724,39 +717,6 @@ class MainActivity : FlutterActivity() {
                 @Suppress("DEPRECATION")
                 startActivityForResult(attachmentIntent(arguments as? String ?: "document"), REQUEST_ATTACHMENT)
             }
-            // A photo taken now, rather than one already on the phone. What a
-            // timetable 拍照导入课程表 is for: the timetable on a wall, or on the
-            // projector in the first lecture, rather than a screenshot of it.
-            "takePhoto" -> {
-                val target = File(attachmentsDir, "photo-${UUID.randomUUID()}.jpg")
-                val uri = FileProvider.getUriForFile(
-                    this,
-                    "$packageName.fileprovider",
-                    target,
-                )
-                val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
-                    putExtra(MediaStore.EXTRA_OUTPUT, uri)
-                    addFlags(
-                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                    )
-                }
-                if (intent.resolveActivity(packageManager) == null) {
-                    // No camera app at all: the picture picker answers instead,
-                    // so that a phone without one still has a working button —
-                    // and so that cancelling the *camera* is not answered with a
-                    // second screen the user did not ask for.
-                    target.delete()
-                    pendingAttachmentResult = result
-                    @Suppress("DEPRECATION")
-                    startActivityForResult(attachmentIntent("image"), REQUEST_ATTACHMENT)
-                } else {
-                    pendingPhotoResult = result
-                    pendingPhotoFile = target
-                    @Suppress("DEPRECATION")
-                    startActivityForResult(intent, REQUEST_PHOTO)
-                }
-            }
             "pickRingtone" -> {
                 pendingRingtoneResult = result
                 val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
@@ -866,10 +826,6 @@ class MainActivity : FlutterActivity() {
                 CourseWidgetProvider.refresh(this)
                 result.success(true)
             }
-            // --- 识图导课 ----------------------------------------------------
-            // A picture of a timetable in, its lines and boxes out. What those
-            // become is decided on the Dart side, where it can be tested.
-            "recognizeTimetable" -> recognizeTimetable(arguments as String, result)
             "requestCourseWidgetPin" -> result.success(requestCourseWidgetPin())
             // A tap on the course tile asks for the timetable, which is a screen
             // rather than a habit: Dart pushes the page when it hears about it.
@@ -897,56 +853,6 @@ class MainActivity : FlutterActivity() {
             (getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
 
     // --- 识图导课 ---------------------------------------------------------------
-
-    /**
-     * Reads the text in a picture of a timetable, with where each line sits in it.
-     *
-     * The boxes are most of the answer. What the lines *say* is a third of the
-     * problem — the rest is which weekday column and which period row each one
-     * fell into, and that is arithmetic about numbers the caller can only do if
-     * it is given them. So this hands back lines and rectangles, and nothing
-     * else: turning them into courses is the app's job, where the rules are
-     * ordinary Dart that can be tested against a made-up page.
-     *
-     * The recogniser is closed on both paths: it holds a native model, and a
-     * leak here is a leak of something large.
-     */
-    private fun recognizeTimetable(path: String, result: MethodChannel.Result) {
-        val recognizer = TextRecognition.getClient(
-            ChineseTextRecognizerOptions.Builder().build(),
-        )
-        val image = runCatching {
-            InputImage.fromFilePath(this, Uri.fromFile(File(path)))
-        }.getOrElse { error ->
-            recognizer.close()
-            result.error("recognize_failed", error.message, null)
-            return
-        }
-        recognizer.process(image)
-            .addOnSuccessListener { text ->
-                val lines = ArrayList<Map<String, Any?>>()
-                for (block in text.textBlocks) {
-                    for (line in block.lines) {
-                        val box = line.boundingBox ?: continue
-                        lines.add(
-                            mapOf(
-                                "text" to line.text,
-                                "l" to box.left,
-                                "t" to box.top,
-                                "r" to box.right,
-                                "b" to box.bottom,
-                            ),
-                        )
-                    }
-                }
-                recognizer.close()
-                result.success(lines)
-            }
-            .addOnFailureListener { error ->
-                recognizer.close()
-                result.error("recognize_failed", error.message, null)
-            }
-    }
 
     // --- Attachment picking -----------------------------------------------------
 
@@ -1026,34 +932,6 @@ class MainActivity : FlutterActivity() {
                     },
                 )
             }
-            REQUEST_PHOTO -> {
-                val result = pendingPhotoResult
-                val file = pendingPhotoFile
-                pendingPhotoResult = null
-                pendingPhotoFile = null
-                // A camera that reported success and wrote nothing — which
-                // happens, and which is why the file rather than [data] is what
-                // is trusted: the picture went straight into the app's own
-                // directory, so there is nothing to copy and nothing to lose.
-                if (resultCode != RESULT_OK ||
-                    file == null ||
-                    !file.exists() ||
-                    file.length() == 0L
-                ) {
-                    file?.delete()
-                    result?.success(null)
-                    return
-                }
-                result?.success(
-                    mapOf(
-                        "path" to file.absolutePath,
-                        "name" to file.name,
-                        "mime" to "image/jpeg",
-                    ),
-                )
-            }
-            REQUEST_RINGTONE -> {
-                val result = pendingRingtoneResult
                 pendingRingtoneResult = null
                 @Suppress("DEPRECATION")
                 val uri = data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)

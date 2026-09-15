@@ -1,19 +1,15 @@
-import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/app/app_background.dart';
 import 'package:m3e_todo/core/constants/app_strings.dart';
-import 'package:m3e_todo/features/settings/domain/app_settings.dart';
-import 'package:m3e_todo/features/timetable/data/vision_import_client.dart';
 import 'package:m3e_todo/features/timetable/domain/entities/course.dart';
 import 'package:m3e_todo/features/timetable/domain/entities/period_time.dart';
 import 'package:m3e_todo/features/timetable/domain/entities/term.dart';
 import 'package:m3e_todo/features/timetable/domain/entities/timetable.dart';
 import 'package:m3e_todo/features/timetable/presentation/widgets/course_detail_sheet.dart';
 import 'package:m3e_todo/features/timetable/presentation/widgets/course_editor_sheet.dart';
-import 'package:m3e_todo/features/timetable/presentation/widgets/course_import_sheet.dart';
 
 import '../../../support/fake_timetable_repository.dart';
 import '../../../support/fake_todo_repository.dart';
@@ -376,19 +372,6 @@ void main() {
   ///
   /// Not a fresh tree: the sheet needs the same container the app is running in,
   /// and a second tree would be a second app rather than the one under test.
-  Future<void> pushImportSheet(WidgetTester tester, String path) async {
-    final NavigatorState navigator =
-        tester.state<NavigatorState>(find.byType(Navigator).first);
-    unawaited(
-      navigator.push(
-        MaterialPageRoute<void>(
-          builder: (_) => Scaffold(body: CourseImportSheet(imagePath: path)),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-  }
-
   testWidgets('a course is created through the editor', (
     WidgetTester tester,
   ) async {
@@ -436,10 +419,9 @@ void main() {
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
 
-    // The phone's own timetable asks this question with exactly these three
-    // answers, so the words are its words.
+    // The phone's own timetable asks this question with these answers, so the
+    // words are its words — minus 拍照导入课程表, which this app no longer has.
     expect(find.text(AppStrings.courseNewSingle), findsOneWidget);
-    expect(find.text(AppStrings.courseNewPhoto), findsOneWidget);
     expect(find.text(AppStrings.courseNewManual), findsOneWidget);
 
     await tester.tap(find.text(AppStrings.courseNewSingle));
@@ -601,187 +583,6 @@ void main() {
     expect(repository.stored!.courses.single.backgroundImage, isNull);
   });
 
-  testWidgets('识图导课 reads a picture, shows it, and imports what is kept', (
-    WidgetTester tester,
-  ) async {
-    _useTallWindow(tester);
-    final FakeTimetableRepository repository = FakeTimetableRepository(
-      Timetable(term: term(), courses: const <Course>[]),
-    );
-    // What the recogniser would say about a small timetable: the weekday row,
-    // the period numbers, and two courses, one of them on two days.
-    const double left = 100;
-    const double column = 100;
-    const double rowHeight = 60;
-    const double top = 80;
-    Map<String, Object?> line(String text, double x, double y) =>
-        <String, Object?>{
-          'text': text,
-          'l': x,
-          't': y,
-          'r': x + 80,
-          'b': y + 16,
-        };
-    final List<Map<String, Object?>> page = <Map<String, Object?>>[
-      for (int weekday = 1; weekday <= 7; weekday++)
-        line('周${kCourseWeekdayNames[weekday - 1]}', left + (weekday - 1) * column + 20, 40),
-      for (int period = 1; period <= 9; period++)
-        line('$period', 30, top + (period - 1) * rowHeight + 20),
-      line('高等数学', left + column + 5, top + 6),
-      line('教三 201', left + column + 5, top + 24),
-      line('大学物理', left + column * 3 + 5, top + rowHeight * 2 + 6),
-      line('大学物理', left + column * 4 + 5, top + rowHeight * 4 + 6),
-    ];
-
-    await tester.pumpWidget(
-      buildTestApp(
-        repository: FakeTodoRepository(),
-        timetableRepository: repository,
-        textRecognition: (String path) async => page,
-      ),
-    );
-    await tester.pumpAndSettle();
-    await openTimetable(tester);
-
-    // Pushed onto the app's own navigator rather than pumped fresh: the sheet
-    // needs the same container the app is running in, and a second tree would
-    // be a second app rather than the one under test.
-    await pushImportSheet(tester, '/tmp/timetable.png');
-
-    expect(find.text(AppStrings.courseImportFound(2)), findsOneWidget);
-    // The room came along, and the two days became one course.
-    expect(find.text('高等数学'), findsOneWidget);
-    expect(find.textContaining('教三 201'), findsOneWidget);
-    expect(find.text('大学物理'), findsOneWidget);
-    expect(
-      find.textContaining('周四'),
-      findsOneWidget,
-      reason: 'the second meeting of 大学物理 is on Thursday',
-    );
-
-    await tester.tap(find.text(AppStrings.courseImportAction(2)));
-    await tester.pumpAndSettle();
-
-    final Timetable stored = repository.stored!;
-    expect(stored.courses, hasLength(2));
-    final Course maths = stored.courses.firstWhere((Course c) => c.name == '高等数学');
-    expect(maths.room, '教三 201');
-    expect(maths.slots.single.weekday, DateTime.tuesday);
-    // A picture cannot say which weeks a course runs, so the whole term is the
-    // honest answer and the sheet says so before importing.
-    expect(maths.weeks, hasLength(18));
-    final Course physics = stored.courses.firstWhere((Course c) => c.name == '大学物理');
-    expect(physics.slots, hasLength(2));
-  });
-
-  testWidgets('a picture that reads as no grid imports nothing and says so', (
-    WidgetTester tester,
-  ) async {
-    _useTallWindow(tester);
-    final FakeTimetableRepository repository = FakeTimetableRepository(
-      Timetable(term: term(), courses: const <Course>[]),
-    );
-    await tester.pumpWidget(
-      buildTestApp(
-        repository: FakeTodoRepository(),
-        timetableRepository: repository,
-        textRecognition: (String path) async => <Map<String, Object?>>[
-          <String, Object?>{'text': '这是别人的朋友圈', 'l': 10, 't': 10, 'r': 200, 'b': 30},
-        ],
-      ),
-    );
-    await tester.pumpAndSettle();
-    await openTimetable(tester);
-
-    final NavigatorState navigator = tester.state<NavigatorState>(
-      find.byType(Navigator).first,
-    );
-    unawaited(
-      navigator.push(
-        MaterialPageRoute<void>(
-          builder: (_) => const Scaffold(
-            body: CourseImportSheet(imagePath: '/tmp/not-a-timetable.png'),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    // Nothing is written, and the user is told what to do differently rather
-    // than being shown an empty list.
-    expect(find.text(AppStrings.courseImportEmpty), findsOneWidget);
-    expect(repository.stored!.courses, isEmpty);
-  });
-
-  testWidgets('importing the same picture twice does not double the timetable', (
-    WidgetTester tester,
-  ) async {
-    _useTallWindow(tester);
-    final FakeTimetableRepository repository = FakeTimetableRepository(
-      Timetable(term: term(), courses: const <Course>[]),
-    );
-    const double left = 100;
-    const double column = 100;
-    const double rowHeight = 60;
-    const double top = 80;
-    Map<String, Object?> line(String text, double x, double y) =>
-        <String, Object?>{'text': text, 'l': x, 't': y, 'r': x + 80, 'b': y + 16};
-    final List<Map<String, Object?>> page = <Map<String, Object?>>[
-      for (int weekday = 1; weekday <= 7; weekday++)
-        line('周${kCourseWeekdayNames[weekday - 1]}', left + (weekday - 1) * column + 20, 40),
-      for (int period = 1; period <= 9; period++)
-        line('$period', 30, top + (period - 1) * rowHeight + 20),
-      line('高等数学', left + column + 5, top + 6),
-    ];
-
-    await tester.pumpWidget(
-      buildTestApp(
-        repository: FakeTodoRepository(),
-        timetableRepository: repository,
-        textRecognition: (String path) async => page,
-      ),
-    );
-    await tester.pumpAndSettle();
-    await openTimetable(tester);
-
-    Future<void> importOnce({bool settle = true}) async {
-      final NavigatorState navigator =
-          tester.state<NavigatorState>(find.byType(Navigator).first);
-      unawaited(
-        navigator.push(
-          MaterialPageRoute<void>(
-            builder: (_) => const Scaffold(
-              body: CourseImportSheet(imagePath: '/tmp/timetable.png'),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(AppStrings.courseImportAction(1)));
-      if (settle) {
-        await tester.pumpAndSettle();
-      } else {
-        // Only as far as the sheet closing and the message arriving: settling
-        // would run the message's own four seconds and dismiss it again.
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 500));
-      }
-    }
-
-    await importOnce();
-    expect(repository.stored!.courses, hasLength(1));
-
-    // A second run of the same screenshot is what a user does after a crash, or
-    // when they cannot remember whether it worked. Doubling every class would be
-    // a worse answer than refusing quietly — and it says so, so that "nothing
-    // happened" is not the only thing the user is told.
-    await importOnce(settle: false);
-    // What matters is the timetable, and the timetable kept one course. That the
-    // user is told so is asserted where the counts come from, in the controller.
-    expect(repository.stored!.courses, hasLength(1));
-    expect(repository.stored!.courses.single.name, '高等数学');
-  });
-
   testWidgets('周末有课 off takes Saturday and Sunday off the grid', (
     WidgetTester tester,
   ) async {
@@ -905,106 +706,112 @@ void main() {
     expect(stored.showOtherWeeks, isFalse);
   });
 
-  testWidgets('the network reader answers, and the sheet says so', (
+  testWidgets('a course with a lot of text opens its sheet without a mess', (
     WidgetTester tester,
   ) async {
     _useTallWindow(tester);
     final FakeTimetableRepository repository = FakeTimetableRepository(
-      Timetable(term: term(), courses: const <Course>[]),
+      Timetable(
+        term: term(),
+        courses: <Course>[
+          Course.create(
+            id: 'long',
+            // Everything a real timetable has: a long official name, a long
+            // building name, a teacher, and several weekly meetings.
+            name: '单片机原理与应用（含实验）[卓越工程师班] 第 3 教学班',
+            slots: <CourseSlot>[
+              const CourseSlot(weekday: 1, startPeriod: 1, endPeriod: 2),
+              const CourseSlot(weekday: 3, startPeriod: 3, endPeriod: 4),
+              const CourseSlot(weekday: 5, startPeriod: 5, endPeriod: 6),
+            ],
+            weeks: <int>{1, 3, 5, 7, 9, 11, 13, 15},
+            room: '明义楼③304(物理与电子工程学院) 东区三号楼',
+            note: '焦杨、李国栋、王海燕（助教）',
+            createdAt: DateTime(2026, 3, 1),
+          ),
+        ],
+      ),
     );
-
     await tester.pumpWidget(
       buildTestApp(
         repository: FakeTodoRepository(),
         timetableRepository: repository,
-        settings: const AppSettings(
-          visionImportEnabled: true,
-          visionBaseUrl: 'https://example.test/v1',
-          visionApiKey: 'sk-test',
-          visionModel: 'a-vision-model',
-        ),
-        // The reply a model gives, wrapped the way models wrap them.
-        visionComplete: (VisionRequest request) async {
-          // The instruction is the app's and has to reach the provider: a call
-          // without it is a call asking a model to guess a shape.
-          expect(request.prompt, contains('只输出 JSON'));
-          expect(request.model, 'a-vision-model');
-          expect(request.apiKey, 'sk-test');
-          expect(request.imagePath, '/tmp/timetable.png');
-          return '```json\n{"courses":[{"name":"高等数学","room":"教三201",'
-              '"slots":[{"weekday":2,"start":1,"end":2}]},'
-              '{"name":"大学物理","slots":[{"weekday":4,"start":3,"end":4}]}]}\n```';
-        },
-        // The device reader would answer differently, so which one ran is not
-        // in question.
-        textRecognition: (String path) async => <Map<String, Object?>>[],
       ),
     );
     await tester.pumpAndSettle();
     await openTimetable(tester);
-    await pushImportSheet(tester, '/tmp/timetable.png');
 
-    expect(find.text(AppStrings.courseImportFound(2)), findsOneWidget);
-    expect(find.text('高等数学'), findsOneWidget);
-    expect(find.textContaining('教三201'), findsOneWidget);
-    expect(find.text(AppStrings.courseImportByNetwork), findsOneWidget);
-
-    await tester.tap(find.text(AppStrings.courseImportAction(2)));
+    await tester.tap(find.textContaining('单片机原理').first);
     await tester.pumpAndSettle();
-    final Timetable stored = repository.stored!;
-    expect(stored.courses, hasLength(2));
-    final Course maths = stored.courses.firstWhere((Course c) => c.name == '高等数学');
-    expect(maths.room, '教三201');
-    expect(maths.slots.single.weekday, DateTime.tuesday);
-    expect(maths.slots.single.endPeriod, 2);
+
+    // The sheet holds everything it was given, and the 编辑 button is a button:
+    // a long name used to push the content past the bottom of the sheet, so the
+    // action row was drawn over the text around it.
+    expect(find.byType(CourseDetailSheet), findsOneWidget);
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'a RenderFlex overflow is what this looked like on the phone',
+    );
+    expect(find.text(AppStrings.actionEdit), findsOneWidget);
+
+    // On screen, and inside the sheet — not pushed below it or drawn over the
+    // text. A name that is a paragraph must not be able to move the button.
+    final Rect button = tester.getRect(find.text(AppStrings.actionEdit));
+    final Size screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+    expect(button.bottom, lessThanOrEqualTo(screen.height));
+    expect(button.top, greaterThan(0));
+    expect(button.right, lessThanOrEqualTo(screen.width));
+
+    // And it still works with all that text in it.
+    await tester.tap(find.text(AppStrings.actionEdit));
+    await tester.pumpAndSettle();
+    expect(find.byType(CourseEditorSheet), findsOneWidget);
+    // The editor's own buttons are pinned the same way.
+    final Rect done = tester.getRect(find.text(AppStrings.done));
+    expect(done.bottom, lessThanOrEqualTo(screen.height));
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('when the network reader fails the device reader answers instead', (
+  testWidgets('a sideways flick on the grid changes the week', (
     WidgetTester tester,
   ) async {
-    _useTallWindow(tester);
-    final FakeTimetableRepository repository = FakeTimetableRepository(
-      Timetable(term: term(), courses: const <Course>[]),
-    );
-    const double left = 100;
-    const double column = 100;
-    const double rowHeight = 60;
-    const double top = 80;
-    Map<String, Object?> line(String text, double x, double y) =>
-        <String, Object?>{'text': text, 'l': x, 't': y, 'r': x + 80, 'b': y + 16};
-    final List<Map<String, Object?>> page = <Map<String, Object?>>[
-      for (int weekday = 1; weekday <= 7; weekday++)
-        line('周${kCourseWeekdayNames[weekday - 1]}', left + (weekday - 1) * column + 20, 40),
-      for (int period = 1; period <= 9; period++)
-        line('$period', 30, top + (period - 1) * rowHeight + 20),
-      line('高等数学', left + column + 5, top + 6),
-    ];
-
+    _usePhoneWindow(tester);
     await tester.pumpWidget(
       buildTestApp(
         repository: FakeTodoRepository(),
-        timetableRepository: repository,
-        settings: const AppSettings(
-          visionImportEnabled: true,
-          visionBaseUrl: 'https://example.test/v1',
-          visionApiKey: 'sk-bad',
-          visionModel: 'a-vision-model',
+        timetableRepository: FakeTimetableRepository(
+          Timetable(term: term(), courses: <Course>[course('c1')]),
         ),
-        visionComplete: (VisionRequest request) async =>
-            throw const VisionFailure('API Key 不对或没有权限'),
-        textRecognition: (String path) async => page,
       ),
     );
     await tester.pumpAndSettle();
     await openTimetable(tester);
-    await pushImportSheet(tester, '/tmp/timetable.png');
 
-    // The device reader's answer — and the reason the user is looking at it
-    // rather than at the network's, which is not something to leave unsaid.
-    expect(find.text('高等数学'), findsOneWidget);
-    expect(find.text(AppStrings.courseImportByNetwork), findsNothing);
-    expect(find.textContaining('网络识别没成功'), findsOneWidget);
-    expect(find.textContaining('API Key'), findsOneWidget);
+    // Week 1, which is where the clock is: 2026-03-10 is the Tuesday of it.
+    expect(find.text(AppStrings.timetableWeek(1)), findsOneWidget);
+
+    // A flick to the left is a flick to the next week — the direction a page
+    // moves when you push it away. Off the current week the label also carries
+    // the way back, so these are prefix matches.
+    await tester.fling(
+      find.text('高等数学'),
+      const Offset(-260, 0),
+      900,
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining(AppStrings.timetableWeek(2)), findsOneWidget);
+
+    // And back, to the previous one.
+    await tester.flingFrom(_firstCell(tester, column: 3), const Offset(260, 0), 900);
+    await tester.pumpAndSettle();
+    expect(find.textContaining(AppStrings.timetableWeek(1)), findsOneWidget);
+
+    // A drag that is barely a drag is not a week change: a scroll that starts
+    // with a small sideways wobble must not lose the user's place.
+    await tester.dragFrom(_firstCell(tester, column: 3), const Offset(-20, 0));
+    await tester.pumpAndSettle();
+    expect(find.textContaining(AppStrings.timetableWeek(1)), findsOneWidget);
   });
 
   testWidgets('a course is renamed and then deleted from its own editor', (

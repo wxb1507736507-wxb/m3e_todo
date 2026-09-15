@@ -174,28 +174,6 @@ class SettingsController extends Notifier<AppSettings> {
     _apply(state.copyWith(widgetBackgroundDim: clamped));
   }
 
-  /// Turns the network reader on or off, and points it at a provider.
-  ///
-  /// One call rather than four setters, because the four are one decision: a
-  /// provider preset fills in the address and the model, the user pastes a key,
-  /// and the switch is what makes any of it happen. Half-applied state here
-  /// would mean a recognition attempt against an address with no model.
-  void setVisionImport({
-    bool? enabled,
-    String? baseUrl,
-    String? apiKey,
-    String? model,
-  }) {
-    _apply(
-      state.copyWith(
-        visionImportEnabled: enabled,
-        visionBaseUrl: baseUrl,
-        visionApiKey: apiKey,
-        visionModel: model,
-      ),
-    );
-  }
-
   static Future<void> _deleteQuietly(String path) async {    try {
       await File(path).delete();
     } on Object {

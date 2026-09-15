@@ -15,7 +15,6 @@ import 'package:m3e_todo/features/habits/presentation/habit_permissions.dart';
 import 'package:m3e_todo/features/habits/presentation/providers/habit_providers.dart';
 import 'package:m3e_todo/features/settings/domain/app_settings.dart';
 import 'package:m3e_todo/features/settings/presentation/settings_controller.dart';
-import 'package:m3e_todo/features/timetable/data/vision_import_client.dart';
 import 'package:m3e_todo/features/timetable/domain/repositories/timetable_repository.dart';
 import 'package:m3e_todo/features/timetable/presentation/providers/timetable_providers.dart';
 import 'package:m3e_todo/features/todos/domain/repositories/todo_repository.dart';
@@ -40,8 +39,6 @@ Widget buildTestApp({
   HabitRepository? habitRepository,
   HabitPermissions? habitPermissions,
   TimetableRepository? timetableRepository,
-  TextRecognition? textRecognition,
-  VisionComplete? visionComplete,
   bool opensOnTimetable = false,
 }) {
   // Always redirected away from the real per-user directory. A test must never
@@ -77,16 +74,6 @@ Widget buildTestApp({
       // that waits for the disk is a widget test that fails on a slow machine.
       if (timetableRepository != null)
         timetableRepositoryProvider.overrideWithValue(timetableRepository),
-      // The recogniser is the one part of 识图导课 a test machine cannot do, so
-      // it is the one part a test must be able to hand over: with an answer in
-      // hand, the grid arithmetic, the review list and the import are all real.
-      if (textRecognition != null)
-        textRecognitionProvider.overrideWithValue(textRecognition),
-      // Same for the network reader: no test machine can call a provider, and
-      // everything around the call — the prompt, the parsing, the fallback —
-      // can be tested given a reply.
-      if (visionComplete != null)
-        visionCompleteProvider.overrideWithValue(visionComplete),
     ],
     child: M3eTodoApp(opensOnTimetable: opensOnTimetable),
   );

@@ -30,10 +30,6 @@ class AppSettings {
     this.timetableBackgroundDim = defaultBackgroundDim,
     this.widgetBackgroundImage,
     this.widgetBackgroundDim = defaultBackgroundDim,
-    this.visionImportEnabled = false,
-    this.visionBaseUrl,
-    this.visionApiKey,
-    this.visionModel,
   });
 
   /// Default strength of the scrim drawn over an application background.
@@ -85,34 +81,6 @@ class AppSettings {
   /// How strongly the surface is laid over [widgetBackgroundImage].
   final double widgetBackgroundDim;
 
-  /// Whether 识图导课 sends the picture to a model over the network.
-  ///
-  /// Off by default, and deliberately: it is the user's own key and the user's
-  /// own money, and a photo of a timetable leaving the phone is the kind of
-  /// thing that has to be asked for rather than assumed. Off, the reader that
-  /// runs on the device answers instead.
-  final bool visionImportEnabled;
-
-  /// The OpenAI-compatible endpoint recognition posts to, without the trailing
-  /// `/chat/completions`.
-  final String? visionBaseUrl;
-
-  /// The user's own key for that endpoint.
-  ///
-  /// Kept in this app's own settings file — private to the app, and never sent
-  /// anywhere except to the provider the user chose — and never written to a log.
-  final String? visionApiKey;
-
-  /// The model to ask, named the way the provider names it.
-  final String? visionModel;
-
-  /// Whether a network recognition can be attempted at all.
-  bool get visionImportReady =>
-      visionImportEnabled &&
-      (visionApiKey?.trim().isNotEmpty ?? false) &&
-      (visionBaseUrl?.trim().isNotEmpty ?? false) &&
-      (visionModel?.trim().isNotEmpty ?? false);
-
   bool get hasBackground => backgroundImage != null;
 
   AppSettings copyWith({
@@ -131,10 +99,6 @@ class AppSettings {
     String? widgetBackgroundImage,
     bool clearWidgetBackgroundImage = false,
     double? widgetBackgroundDim,
-    bool? visionImportEnabled,
-    String? visionBaseUrl,
-    String? visionApiKey,
-    String? visionModel,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -156,10 +120,6 @@ class AppSettings {
           ? null
           : (widgetBackgroundImage ?? this.widgetBackgroundImage),
       widgetBackgroundDim: widgetBackgroundDim ?? this.widgetBackgroundDim,
-      visionImportEnabled: visionImportEnabled ?? this.visionImportEnabled,
-      visionBaseUrl: visionBaseUrl ?? this.visionBaseUrl,
-      visionApiKey: visionApiKey ?? this.visionApiKey,
-      visionModel: visionModel ?? this.visionModel,
     );
   }
 
@@ -180,10 +140,7 @@ class AppSettings {
       other.timetableBackgroundDim == timetableBackgroundDim &&
       other.widgetBackgroundImage == widgetBackgroundImage &&
       other.widgetBackgroundDim == widgetBackgroundDim &&
-      other.visionImportEnabled == visionImportEnabled &&
-      other.visionBaseUrl == visionBaseUrl &&
-      other.visionApiKey == visionApiKey &&
-      other.visionModel == visionModel;
+      true;
   }
 
   @override
@@ -199,10 +156,6 @@ class AppSettings {
         timetableBackgroundDim,
         widgetBackgroundImage,
         widgetBackgroundDim,
-        visionImportEnabled,
-        visionBaseUrl,
-        visionApiKey,
-        visionModel,
       );
 
   @override

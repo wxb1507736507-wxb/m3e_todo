@@ -2,20 +2,32 @@
 <!--
   What the launcher needs to know before it shows the habit widget.
 
+  2×2 cells, and it says so: one widget is one habit, so a home screen with
+  three habits on it is three tiles rather than one list. That is why
+  `minWidth`/`minHeight` are the two-cell size and the resize mode is `none` —
+  a tile that can be stretched into a row would immediately be a list again.
+
   `updatePeriodMillis` is half an hour — the shortest Android allows — for one
-  reason only: the widget shows *today's* habits, and if the app is never opened
-  again the day still changes underneath it. The periodic call is what lets the
-  widget notice and stop showing yesterday's list as if it were today's. It is
-  the launcher's own alarm, so it costs the app nothing to keep.
+  reason only: the tile shows *today*, and if the app is never opened again the
+  day still changes underneath it. The periodic call is what lets the widget
+  notice. It is the launcher's own alarm, so it costs the app nothing to keep.
+
+  `configure` is what makes one widget per habit possible: the system runs it
+  when a widget is added, and does not place the widget until it answers with
+  the habit that was chosen. `reconfigurable` is the same screen again, reached
+  by long-pressing the tile — changing your mind about which habit a tile shows
+  should not mean deleting it and starting over.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="dev.m3e.m3e_todo.HabitWidgetConfigActivity"
     android:description="@string/habit_widget_description"
     android:initialLayout="@layout/habit_widget"
     android:minHeight="110dp"
-    android:minWidth="180dp"
+    android:minWidth="110dp"
     android:previewLayout="@layout/habit_widget"
-    android:resizeMode="horizontal|vertical"
+    android:resizeMode="none"
     android:targetCellHeight="2"
-    android:targetCellWidth="3"
+    android:targetCellWidth="2"
     android:updatePeriodMillis="1800000"
-    android:widgetCategory="home_screen" />
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable" />

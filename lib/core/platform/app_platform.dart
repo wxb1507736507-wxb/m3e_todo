@@ -346,15 +346,23 @@ abstract final class AppPlatform {
     return await _invoke<bool>('updateHabitWidget', snapshot) ?? false;
   }
 
-  /// Asks the system to place the habit widget on the home screen.
+  /// Asks the system to place a habit widget on the home screen.
+  ///
+  /// [habitId] is the habit that widget should show. One widget shows one habit,
+  /// so pinning from a habit's own menu answers the question before it is asked;
+  /// pinning from the habits page's card leaves it out, and the widget's
+  /// configuration screen asks instead.
   ///
   /// Android 8+ shows its own confirmation sheet, so a `true` here means the
   /// request was made, not that a widget now exists.
-  static Future<bool> requestHabitWidgetPin() async {
+  static Future<bool> requestHabitWidgetPin({String? habitId}) async {
     if (!isAndroid) {
       return false;
     }
-    return await _invoke<bool>('requestHabitWidgetPin') ?? false;
+    return await _invoke<bool>('requestHabitWidgetPin', <String, Object?>{
+      'habitId': habitId,
+    }) ??
+        false;
   }
 
   /// Takes the check-ins made on the widget since the last call.

@@ -201,6 +201,15 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
               title: const Text(AppStrings.habitHistory),
               onTap: () => Navigator.of(sheetContext).pop('history'),
             ),
+            // One widget shows one habit, so this is where a tile for *this*
+            // habit comes from — and the tile it makes skips the question of
+            // which habit it is for.
+            if (AppPlatform.isAndroid)
+              ListTile(
+                leading: const Icon(Icons.add_to_home_screen),
+                title: const Text(AppStrings.habitWidgetAdd),
+                onTap: () => Navigator.of(sheetContext).pop('widget'),
+              ),
           ],
         ),
       ),
@@ -215,10 +224,12 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
         await showHabitEditorSheet(context, existing: habit);
       case 'history':
         await showHabitHistorySheet(context, habit: habit);
+      case 'widget':
+        await _pinWidget(habit: habit);
     }
   }
 
-  /// The card that puts the habit widget on the home screen.
+  /// The card that explains the widget and puts one on the home screen.
   ///
   /// Hidden entirely where there is no widget support, rather than shown
   /// disabled: an offer that cannot be taken is worse than no offer.
@@ -246,7 +257,7 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
                   const SizedBox(height: 2),
                   Text(
                     placed
-                        ? AppStrings.habitWidgetOnDesktop
+                        ? AppStrings.habitWidgetWhereHint
                         : AppStrings.habitWidgetAddHint,
                     style: text.bodySmall?.copyWith(
                       color: colors.onSurfaceVariant,
@@ -267,9 +278,14 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
     );
   }
 
-  Future<void> _pinWidget() async {
+  /// Puts a widget on the home screen, for [habit] when one was named.
+  ///
+  /// Without a habit the system's own configuration screen asks which one; with
+  /// one, that question is already answered.
+  Future<void> _pinWidget({Habit? habit}) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final bool requested = await AppPlatform.requestHabitWidgetPin();
+    final bool requested =
+        await AppPlatform.requestHabitWidgetPin(habitId: habit?.id);
     if (!mounted) {
       return;
     }

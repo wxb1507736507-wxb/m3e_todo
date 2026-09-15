@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/platform/app_platform.dart';
-import '../../../core/utils/app_date_formatter.dart';
 import '../../notifications/domain/reminder.dart';
 import '../../settings/domain/app_settings.dart';
 import '../../settings/presentation/settings_controller.dart';
@@ -12,11 +11,6 @@ import '../domain/entities/habit_log.dart';
 import '../domain/habit_planner.dart';
 import 'providers/habit_providers.dart';
 
-/// Weekday names for the widget's header line, Monday first to match
-/// `DateTime.weekday`.
-const List<String> _weekdayNames = <String>[
-  '周一', '周二', '周三', '周四', '周五', '周六', '周日',
-];
 
 /// Keeps the home-screen widget and the habit reminders in step with the data.
 ///
@@ -60,20 +54,25 @@ class HabitWidgetSync {
   Future<void> _syncOnce() async {
     await _adoptWidgetCheckIns();
 
-    final List<HabitDayStatus> today = _ref.read(todaysHabitsProvider);
+    final List<Habit> habits =
+        _ref.read(habitsProvider).value ?? const <Habit>[];
+    final List<HabitLog> logs =
+        _ref.read(habitLogsProvider).value ?? const <HabitLog>[];
     final DateTime now = _ref.read(clockProvider)();
-    final int done = today.where((HabitDayStatus s) => s.done).length;
 
     final bool placed = await AppPlatform.updateHabitWidget(
-      habitWidgetSnapshot(
-        today: today,
+      habitWidgetPayload(
+        habits: habits,
+        logs: logs,
         now: now,
-        dateLabel:
-            '${AppDateFormatter.calendarDate(now, now)} ${_weekdayNames[now.weekday - 1]}',
-        countLabel: AppStrings.habitWidgetCount(done, today.length),
-        countSuffix: AppStrings.habitWidgetCountSuffix,
+        todoSub: AppStrings.habitWidgetTileTodo,
+        doneSub: AppStrings.habitWidgetTileDone,
+        offSub: AppStrings.habitWidgetTileOff,
         emptyTitle: AppStrings.habitWidgetEmptyTitle,
         emptyBody: AppStrings.habitWidgetEmptyBody,
+        staleText: AppStrings.habitWidgetStale,
+        unconfiguredText: AppStrings.habitWidgetTileUnconfigured,
+        missingText: AppStrings.habitWidgetTileMissing,
       ),
     );
     // Only Android can answer this, and the habits page would otherwise offer to

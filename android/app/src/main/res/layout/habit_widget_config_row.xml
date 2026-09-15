@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One habit in the configuration dialog: its emoji, its name, and a whole row to
+  press. The rows are built in code (see `HabitWidgetConfigActivity`) because the
+  list is as long as the user's habits are, and a `RemoteViews`-free Activity can
+  simply add them.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/habit_config_row"
+    style="@style/HabitWidgetConfigRow">
+
+    <TextView
+        android:id="@+id/habit_config_row_emoji"
+        style="@style/HabitWidgetConfigEmoji" />
+
+    <TextView
+        android:id="@+id/habit_config_row_name"
+        style="@style/HabitWidgetConfigName" />
+</LinearLayout>

@@ -12,10 +12,10 @@ import 'entities/habit_log.dart';
 
 /// How many habits the home-screen widget can show at once.
 ///
-/// The widget's layout has this many fixed rows: a `RemoteViews` cannot inflate
-/// a variable-length list without a collection service, and four is what fits a
-/// 4×2 cell without scrolling. Anything beyond it is reported as a count rather
-/// than silently dropped.
+/// One widget shows one habit: a 2×2 tile is big enough for a name, a state
+/// and one large target to hit, and small enough that a handful of habits can
+/// sit on a home screen without any of them being a list. Several habits
+/// therefore mean several widgets, each configured to its own habit.
 const int kHabitWidgetRows = 4;
 
 /// One habit as it stands on a particular day.
@@ -192,53 +192,78 @@ DateTime? nextHabitTrigger({
   return null;
 }
 
-/// The payload the home-screen widget draws itself from.
+/// The payload the home-screen widgets draw themselves from.
 ///
 /// A plain map because it crosses the method channel into a Kotlin
 /// `RemoteViews`; the shape is fixed and mirrored in `HabitWidgetProvider`, so
 /// both sides must be changed together.
-Map<String, Object?> habitWidgetSnapshot({
-  required List<HabitDayStatus> today,
+///
+/// Every habit travels, not only today's: each widget is configured to *one*
+/// habit, and a habit that is not due today still owns its tile — it has to be
+/// able to say "今天不用打卡" rather than looking like a habit that was deleted.
+/// The words are resolved here as well, so the widget never has to know how to
+/// phrase anything; it draws `sub` and `state` and nothing else.
+Map<String, Object?> habitWidgetPayload({
+  required List<Habit> habits,
+  required List<HabitLog> logs,
   required DateTime now,
-  required String dateLabel,
-  required String countLabel,
-  required String countSuffix,
+  required String todoSub,
+  required String doneSub,
+  required String offSub,
   required String emptyTitle,
   required String emptyBody,
+  required String staleText,
+  required String unconfiguredText,
+  required String missingText,
 }) {
-  final List<HabitDayStatus> rows = today.take(kHabitWidgetRows).toList();
-  final int done = today.where((HabitDayStatus status) => status.done).length;
+  final DateTime today = startOfDay(now);
+  final Map<String, Set<int>> doneByHabit = <String, Set<int>>{};
+  for (final HabitLog log in logs) {
+    (doneByHabit[log.habitId] ??= <int>{}).add(log.dayKey);
+  }
+  final int todayKey = habitDayKey(today);
+  final Map<String, HabitLog> todayLogs = <String, HabitLog>{
+    for (final HabitLog log in logs)
+      if (log.dayKey == todayKey) log.habitId: log,
+  };
+
+  final Map<String, Object?> tiles = <String, Object?>{};
+  for (final Habit habit in habits) {
+    final Set<int> doneDays = doneByHabit[habit.id] ?? const <int>{};
+    final bool due = habit.isDueOn(today);
+    final bool done = todayLogs.containsKey(habit.id);
+    final int streak = habitStreak(habit: habit, doneDays: doneDays, today: today);
+    final String? time = habit.reminderLabel;
+
+    tiles[habit.id] = <String, Object?>{
+      'emoji': habit.emoji,
+      'name': habit.name,
+      'due': due,
+      'done': done,
+      // The facts, not the sentence: the widget has to be able to re-word the
+      // line when a tap changes `done` with the app closed, and it can only do
+      // that if the words and the facts arrive separately.
+      'details': <String>[
+        ?time,
+        if (streak > 0) '$streak 天',
+      ].join(' · '),
+      // Only habits that accept a note get the widget's ＋: an offer to write
+      // something the habit does not keep would be a lie.
+      'note': habit.allowNote,
+    };
+  }
 
   return <String, Object?>{
-    'dateLabel': dateLabel,
-    'countLabel': countLabel,
-    // The numbers and the words are sent apart as well as together: the widget
-    // recounts on its own when a row is ticked with the app closed, and it can
-    // only rebuild the line if it knows which part of it is a number.
-    'countSuffix': countSuffix,
-    'done': done,
-    'total': today.length,
-    'empty': today.isEmpty,
+    'dayKey': todayKey,
+    'empty': habits.isEmpty,
+    'tiles': tiles,
+    'subTodo': todoSub,
+    'subDone': doneSub,
+    'subOff': offSub,
     'emptyTitle': emptyTitle,
     'emptyBody': emptyBody,
-    'overflow': today.length - rows.length,
-    'rows': <Object?>[
-      for (final HabitDayStatus status in rows)
-        <String, Object?>{
-          'id': status.habit.id,
-          'emoji': status.habit.emoji,
-          'name': status.habit.name,
-          'done': status.done,
-          // Only habits that allow a note get the widget's ＋ affordance: an
-          // offer to write something the habit does not accept is worse than no
-          // offer at all.
-          'note': status.habit.allowNote,
-          'time': status.habit.reminderLabel,
-        },
-    ],
-    // Sent along because the widget can log a check-in without the app ever
-    // running: it needs the day it is counting for, not the day it happens to be
-    // rendering at midnight.
-    'dayKey': habitDayKey(now),
+    'staleText': staleText,
+    'unconfiguredText': unconfiguredText,
+    'missingText': missingText,
   };
 }

@@ -1,6 +1,7 @@
 package dev.m3e.m3e_todo
 
 import android.Manifest
+import android.app.Activity
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -27,6 +28,7 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.RemoteViews
 import android.widget.TextView
 import io.flutter.embedding.android.FlutterActivity
@@ -502,8 +504,15 @@ class MainActivity : FlutterActivity() {
         intent.removeExtra(HabitWidgetProvider.EXTRA_OPEN_HABIT)
     }
 
-    /** Asks the launcher to place the habit widget; Android shows its own sheet. */
-    private fun requestHabitWidgetPin(): Boolean {
+    /**
+     * Asks the launcher to place a habit widget; Android shows its own sheet.
+     *
+     * [habitId] travels with the request as an extra, and Android hands that
+     * extra to the configuration activity — so pinning from a habit's own menu
+     * skips the question of which habit the tile is for, and the question is
+     * only asked when the widget is added from the launcher instead.
+     */
+    private fun requestHabitWidgetPin(habitId: String?): Boolean {
         if (Build.VERSION.SDK_INT < 26) {
             return false
         }
@@ -512,7 +521,12 @@ class MainActivity : FlutterActivity() {
             return false
         }
         val provider = ComponentName(this, HabitWidgetProvider::class.java)
-        return runCatching { manager.requestPinAppWidget(provider, null, null) }
+        val extras = if (habitId.isNullOrEmpty()) {
+            null
+        } else {
+            Bundle().apply { putString(HabitWidgetProvider.EXTRA_PIN_HABIT, habitId) }
+        }
+        return runCatching { manager.requestPinAppWidget(provider, extras, null) }
             .getOrDefault(false)
     }
 
@@ -716,7 +730,9 @@ class MainActivity : FlutterActivity() {
                 HabitWidgetProvider.refresh(this)
                 result.success(HabitWidgetProvider.placed(this))
             }
-            "requestHabitWidgetPin" -> result.success(requestHabitWidgetPin())
+                        "requestHabitWidgetPin" -> result.success(
+                requestHabitWidgetPin((arguments as? Map<*, *>)?.get("habitId") as? String),
+            )
             // What the widget did while this process was dead. Draining clears
             // the queue, so the Dart side owns turning these into check-ins.
             "drainHabitCheckIns" -> {
@@ -1045,34 +1061,28 @@ internal object HabitWidgetStore {
     }
 
     /**
-     * Flips one row in the stored snapshot and recounts the header.
+     * Flips one habit's tick in the stored payload.
      *
-     * Only the row that was tapped is touched: rebuilding the snapshot here
-     * would mean re-implementing the Dart side's idea of which habits are due,
-     * and two implementations of that would eventually disagree.
+     * Only that habit's own flag is touched: rebuilding the payload here would
+     * mean re-implementing the app's idea of which habits are due, and two
+     * implementations of that would eventually disagree. The line under the name
+     * is composed from the words the app sent (see `subFor`), so a tick and a
+     * sentence can never contradict each other in the seconds before the app
+     * runs again.
      */
     fun markLocally(context: Context, habitId: String, done: Boolean) {
-        val snapshot = snapshot(context) ?: return
-        val rows = snapshot.optJSONArray("rows") ?: return
-        var doneCount = 0
-        for (index in 0 until rows.length()) {
-            val row = rows.optJSONObject(index) ?: continue
-            if (row.optString("id") == habitId) {
-                row.put("done", done)
-            }
-            if (row.optBoolean("done")) {
-                doneCount++
-            }
-        }
-        snapshot.put("done", doneCount)
-        // The header is rebuilt from its parts for the same reason: leaving it
-        // reading "0/3" above a row that now shows a tick would be a summary
-        // that contradicts itself. The words come from Dart (`countSuffix`);
-        // only the numbers are counted here.
-        val total = snapshot.optInt("total", rows.length())
-        val suffix = snapshot.optString("countSuffix")
-        snapshot.put("countLabel", "$doneCount/$total $suffix".trim())
-        writeSnapshot(context, snapshot)
+        val payload = snapshot(context) ?: return
+        val tile = payload.optJSONObject("tiles")?.optJSONObject(habitId) ?: return
+        tile.put("done", done)
+        writeSnapshot(context, payload)
+    }
+
+    /** Every habit the payload knows about, for the configuration dialog. */
+    fun configuredHabits(context: Context): List<Pair<String, JSONObject>> {
+        val tiles = snapshot(context)?.optJSONObject("tiles") ?: return emptyList()
+        return tiles.keys().asSequence().mapNotNull { id ->
+            tiles.optJSONObject(id)?.let { id to it }
+        }.toList()
     }
 
     /** Queues a tap for the app to pick up. */
@@ -1131,12 +1141,11 @@ class HabitWidgetProvider : AppWidgetProvider() {
         /** The habit the widget's ＋ button asked the app to open. */
         const val EXTRA_OPEN_HABIT = "openHabitId"
 
-        /** Maximum rows in `habit_widget.xml`. */
-        private const val MAX_ROWS = 4
+        /** Which habit one widget instance shows. Stored in its options. */
+        const val OPTION_HABIT_ID = "habitId"
 
-        /** Row height and header height in dp; kept in step with the styles. */
-        private const val ROW_HEIGHT_DP = 38
-        private const val HEADER_DP = 34
+        /** The habit a pinned widget should show, sent along with the request. */
+        const val EXTRA_PIN_HABIT = "habitId"
 
         private const val REQUEST_OPEN = 5000
         private const val REQUEST_TOGGLE_BASE = 5100
@@ -1164,7 +1173,7 @@ class HabitWidgetProvider : AppWidgetProvider() {
 
         private fun render(context: Context, manager: AppWidgetManager, id: Int) {
             val snapshot = HabitWidgetStore.snapshot(context)
-            manager.updateAppWidget(id, buildViews(context, snapshot, rowsThatFit(manager, id)))
+            manager.updateAppWidget(id, buildViews(context, snapshot, habitIdOf(manager, id)))
         }
 
         /**
@@ -1178,146 +1187,111 @@ class HabitWidgetProvider : AppWidgetProvider() {
         private fun buildViews(
             context: Context,
             snapshot: JSONObject?,
-            rowsToShow: Int,
+            habitId: String?,
         ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.habit_widget)
 
-            // Tapping anywhere the buttons are not brings the app forward: the
-            // widget is a summary, and the way to change what it summarises is
-            // the app.
+            // Tapping the tile anywhere the two buttons are not brings the app
+            // forward: the tile is a shortcut for one thing, and everything else
+            // about the habit lives in the app.
             views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
 
             if (snapshot == null) {
-                views.setViewVisibility(R.id.habit_widget_title, android.view.View.GONE)
-                views.setViewVisibility(R.id.habit_widget_count, android.view.View.GONE)
-                for (index in 0 until MAX_ROWS) {
-                    views.setViewVisibility(rowId(index), android.view.View.GONE)
-                }
-                views.setTextViewText(
-                    R.id.habit_widget_empty_title,
+                return messageTile(
+                    context,
+                    views,
                     context.getString(R.string.habit_widget_no_data),
                 )
-                views.setTextViewText(R.id.habit_widget_empty_body, "")
-                return views
+            }
+            // A payload is a picture of one day, and the day it was taken for is
+            // in it. When that day is no longer today the app has not been opened
+            // since, and drawing yesterday's state as today's would both lie and
+            // file a check-in against the wrong date.
+            val payloadDay = snapshot.optInt("dayKey", 0)
+            if (payloadDay != 0 && payloadDay != todayKey()) {
+                return messageTile(context, views, snapshot.optString("staleText"))
+            }
+            if (snapshot.optBoolean("empty", false)) {
+                return messageTile(context, views, snapshot.optString("emptyTitle"))
+            }
+            if (habitId.isNullOrEmpty()) {
+                // Added from the launcher's own list, where nothing chose a
+                // habit: the tile says so and the system's configuration screen
+                // is what fixes it (adding it from the app's menu preselects).
+                return messageTile(context, views, snapshot.optString("unconfiguredText"))
+            }
+            val tiles = snapshot.optJSONObject("tiles")
+            val tile = tiles?.optJSONObject(habitId)
+            if (tile == null) {
+                // The habit this tile was pointed at has been deleted.
+                return messageTile(context, views, snapshot.optString("missingText"))
             }
 
-            val rows = snapshot.optJSONArray("rows") ?: JSONArray()
-            val shown = minOf(rowsToShow, rows.length())
-            val hidden = rows.length() - shown
-            val overflow = hidden + snapshot.optInt("overflow", 0)
-            val empty = snapshot.optBoolean("empty", false) || rows.length() == 0
-
-            // A snapshot is a picture of one day, and the day it was taken for
-            // is in it. When that day is no longer today — the app has not been
-            // opened since — the rows are yesterday's habits, and offering them
-            // as today's would both lie and file a check-in against the wrong
-            // date. So the widget says what it needs instead of guessing.
-            val snapshotDay = snapshot.optInt("dayKey", 0)
-            if (snapshotDay != 0 && snapshotDay != todayKey()) {
-                views.setViewVisibility(R.id.habit_widget_title, android.view.View.GONE)
-                views.setViewVisibility(R.id.habit_widget_count, android.view.View.GONE)
-                for (index in 0 until MAX_ROWS) {
-                    views.setViewVisibility(rowId(index), android.view.View.GONE)
-                }
-                views.setViewVisibility(R.id.habit_widget_empty_title, android.view.View.VISIBLE)
-                views.setViewVisibility(R.id.habit_widget_empty_body, android.view.View.GONE)
-                views.setViewVisibility(R.id.habit_widget_more, android.view.View.GONE)
-                views.setTextViewText(
-                    R.id.habit_widget_empty_title,
-                    context.getString(R.string.habit_widget_stale),
-                )
-                return views
-            }
-
-            views.setViewVisibility(
-                R.id.habit_widget_title,
-                if (empty) android.view.View.GONE else android.view.View.VISIBLE,
-            )
-            views.setViewVisibility(
-                R.id.habit_widget_count,
-                if (empty) android.view.View.GONE else android.view.View.VISIBLE,
-            )
-            views.setTextViewText(R.id.habit_widget_title, snapshot.optString("dateLabel"))
-            views.setTextViewText(R.id.habit_widget_count, snapshot.optString("countLabel"))
-            views.setViewVisibility(
-                R.id.habit_widget_empty_title,
-                if (empty) android.view.View.VISIBLE else android.view.View.GONE,
-            )
-            views.setViewVisibility(
-                R.id.habit_widget_empty_body,
-                if (empty) android.view.View.VISIBLE else android.view.View.GONE,
-            )
-            views.setTextViewText(
-                R.id.habit_widget_empty_title,
-                snapshot.optString("emptyTitle"),
-            )
-            views.setTextViewText(
-                R.id.habit_widget_empty_body,
-                snapshot.optString("emptyBody"),
-            )
-
+            val done = tile.optBoolean("done")
             val dayKey = snapshot.optInt("dayKey", 0)
-            for (index in 0 until MAX_ROWS) {
-                val row = if (index < shown) rows.optJSONObject(index) else null
-                if (row == null) {
-                    views.setViewVisibility(rowId(index), android.view.View.GONE)
-                    continue
-                }
-                val habitId = row.optString("id")
-                val done = row.optBoolean("done")
-                views.setViewVisibility(rowId(index), android.view.View.VISIBLE)
-                views.setTextViewText(emojiId(index), row.optString("emoji"))
-                views.setTextViewText(nameId(index), row.optString("name"))
-                views.setTextColor(
-                    nameId(index),
-                    context.getColor(
-                        if (done) R.color.habit_widget_done else R.color.habit_widget_text,
-                    ),
-                )
-                // `optString` on a JSON null answers the four-letter string
-                // "null", which is why the check is `isNull` and not a length
-                // test: a habit with no reminder would otherwise show the word
-                // "null" under its name on the home screen.
-                val time = if (row.isNull("time")) "" else row.optString("time")
-                views.setTextViewText(timeId(index), time)
-                views.setViewVisibility(
-                    timeId(index),
-                    if (time.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE,
-                )
-                views.setImageViewResource(
-                    checkId(index),
-                    if (done) R.drawable.habit_check_done else R.drawable.habit_check_todo,
-                )
-                views.setOnClickPendingIntent(
-                    checkId(index),
-                    toggleIntent(context, index, habitId, dayKey, !done),
-                )
-                // Only habits that accept a note get the ＋: offering to write
-                // something the habit does not keep would be a lie.
-                val allowsNote = row.optBoolean("note")
-                views.setViewVisibility(
-                    noteId(index),
-                    if (allowsNote) android.view.View.VISIBLE else android.view.View.GONE,
-                )
-                if (allowsNote) {
-                    views.setOnClickPendingIntent(
-                        noteId(index),
-                        noteIntent(context, index, habitId, dayKey),
-                    )
-                }
-            }
 
-            views.setViewVisibility(
-                R.id.habit_widget_more,
-                if (overflow > 0) android.view.View.VISIBLE else android.view.View.GONE,
+            views.setViewVisibility(R.id.habit_widget_message, android.view.View.GONE)
+            views.setViewVisibility(R.id.habit_widget_check, android.view.View.VISIBLE)
+            views.setViewVisibility(R.id.habit_widget_name, android.view.View.VISIBLE)
+            views.setViewVisibility(R.id.habit_widget_sub, android.view.View.VISIBLE)
+            views.setViewVisibility(R.id.habit_widget_emoji, android.view.View.VISIBLE)
+
+            views.setTextViewText(R.id.habit_widget_emoji, tile.optString("emoji"))
+            views.setTextViewText(R.id.habit_widget_name, tile.optString("name"))
+            views.setTextViewText(R.id.habit_widget_sub, subFor(snapshot, tile))
+            views.setTextColor(
+                R.id.habit_widget_name,
+                context.getColor(
+                    if (done) R.color.habit_widget_done else R.color.habit_widget_text,
+                ),
             )
-            if (overflow > 0) {
-                views.setTextViewText(
-                    R.id.habit_widget_more,
-                    context.getString(R.string.habit_widget_more, overflow),
+            views.setImageViewResource(
+                R.id.habit_widget_check,
+                if (done) R.drawable.habit_check_done else R.drawable.habit_check_todo,
+            )
+            views.setOnClickPendingIntent(
+                R.id.habit_widget_check,
+                toggleIntent(context, habitId, dayKey, !done),
+            )
+
+            // Only habits that accept a note get the ＋: offering to write
+            // something the habit does not keep would be a lie.
+            val allowsNote = tile.optBoolean("note")
+            views.setViewVisibility(
+                R.id.habit_widget_note,
+                if (allowsNote) android.view.View.VISIBLE else android.view.View.GONE,
+            )
+            if (allowsNote) {
+                views.setOnClickPendingIntent(
+                    R.id.habit_widget_note,
+                    noteIntent(context, habitId, dayKey),
                 )
             }
             return views
+        }
+
+        /**
+         * The tile with nothing to draw in it: one line of text and no target
+         * that could check in against the wrong habit or the wrong day.
+         */
+        private fun messageTile(
+            context: Context,
+            views: RemoteViews,
+            message: String,
+        ): RemoteViews {
+            views.setViewVisibility(R.id.habit_widget_top, android.view.View.GONE)
+            views.setViewVisibility(R.id.habit_widget_check, android.view.View.GONE)
+            views.setViewVisibility(R.id.habit_widget_name, android.view.View.GONE)
+            views.setViewVisibility(R.id.habit_widget_sub, android.view.View.GONE)
+            views.setViewVisibility(R.id.habit_widget_message, android.view.View.VISIBLE)
+            views.setTextViewText(R.id.habit_widget_message, message)
+            return views
+        }
+
+        /** The habit a widget instance is pointed at, or `null` if none. */
+        fun habitIdOf(manager: AppWidgetManager, id: Int): String? {
+            val stored = manager.getAppWidgetOptions(id).getString(OPTION_HABIT_ID)
+            return if (stored.isNullOrEmpty()) null else stored
         }
 
         /**
@@ -1334,26 +1308,39 @@ class HabitWidgetProvider : AppWidgetProvider() {
          * Only ever called from a debug build; see `HabitWidgetSync`.
          */
         fun selfCheck(context: Context): Map<String, Any?> {
-            val snapshot = HabitWidgetStore.snapshot(context)
+            val payload = HabitWidgetStore.snapshot(context)
+            val tiles = payload?.optJSONObject("tiles")
             return runCatching {
                 mapOf(
                     "ok" to true,
-                    "current" to renderTexts(context, snapshot),
-                    // The same payload with yesterday's date on it: this is what
-                    // the widget finds after a day it was not opened during, and
-                    // it has to reach for the app rather than show it.
-                    "stale" to renderTexts(context, forcedDay(snapshot, -1)),
-                    "empty" to renderTexts(context, null),
-                    "rows" to (snapshot?.optJSONArray("rows")?.length() ?: 0),
+                    // One tile, as the launcher would draw it for the first
+                    // habit the payload has.
+                    "current" to renderTexts(context, payload, tiles?.keys()?.asSequence()?.firstOrNull()),
+                    // The same payload dated yesterday: what the widget finds
+                    // after a day it was not opened during.
+                    "stale" to renderTexts(
+                        context,
+                        forcedDay(payload, -1),
+                        tiles?.keys()?.asSequence()?.firstOrNull(),
+                    ),
+                    // A widget added from the launcher's list, where nothing has
+                    // chosen a habit yet.
+                    "unconfigured" to renderTexts(context, payload, null),
+                    "empty" to renderTexts(context, null, null),
+                    "habits" to (tiles?.length() ?: 0),
                 )
             }.getOrElse { error ->
                 mapOf("ok" to false, "reason" to error.toString())
             }
         }
 
-        /** Draws one payload and answers with the text that came out. */
-        private fun renderTexts(context: Context, snapshot: JSONObject?): List<String> {
-            val views = buildViews(context, snapshot, MAX_ROWS)
+        /** Draws one tile and answers with the text that came out. */
+        private fun renderTexts(
+            context: Context,
+            payload: JSONObject?,
+            habitId: String?,
+        ): List<String> {
+            val views = buildViews(context, payload, habitId)
             val root = views.apply(context, FrameLayout(context))
             val texts = ArrayList<String>()
             collectText(root, texts)
@@ -1394,17 +1381,24 @@ class HabitWidgetProvider : AppWidgetProvider() {
         }
 
         /**
-         * How many rows the widget has room for.
+         * The line under the name: the state in words, plus whatever facts the
+         * habit has to add.
          *
-         * `OPTION_APPWIDGET_MIN_HEIGHT` is what the launcher reports for the
-         * space it has given this instance, in dp, and it changes as the user
-         * resizes — which is the whole point of reading it on every render.
+         * Composed here rather than sent ready-made because a tap can change the
+         * state with the app closed — the tick flips locally at once, and the
+         * line has to flip with it instead of contradicting the tick until the
+         * app next runs.
          */
-        private fun rowsThatFit(manager: AppWidgetManager, id: Int): Int {
-            val options = manager.getAppWidgetOptions(id)
-            val heightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
-            val available = heightDp - HEADER_DP - 12
-            return (available / ROW_HEIGHT_DP).coerceIn(1, MAX_ROWS)
+        private fun subFor(payload: JSONObject, tile: JSONObject): String {
+            val details = if (tile.isNull("details")) "" else tile.optString("details")
+            if (tile.optBoolean("done")) {
+                val done = payload.optString("subDone")
+                return if (details.isEmpty()) done else "$done · $details"
+            }
+            if (!tile.optBoolean("due")) {
+                return payload.optString("subOff")
+            }
+            return if (details.isEmpty()) payload.optString("subTodo") else details
         }
 
         private fun openApp(context: Context): PendingIntent {
@@ -1421,11 +1415,14 @@ class HabitWidgetProvider : AppWidgetProvider() {
 
         private fun toggleIntent(
             context: Context,
-            index: Int,
             habitId: String,
             dayKey: Int,
             done: Boolean,
         ): PendingIntent {
+            // One request code per habit: a PendingIntent is identified by its
+            // request code and its intent's data, not by its extras, so sharing
+            // one code between habits would make every tile check off whichever
+            // habit happened to be drawn last.
             val intent = Intent(context, HabitWidgetProvider::class.java)
                 .setAction(ACTION_TOGGLE)
                 .putExtra(EXTRA_HABIT_ID, habitId)
@@ -1433,7 +1430,7 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 .putExtra("done", done)
             return PendingIntent.getBroadcast(
                 context,
-                REQUEST_TOGGLE_BASE + index,
+                REQUEST_TOGGLE_BASE + habitId.hashCode(),
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -1441,7 +1438,6 @@ class HabitWidgetProvider : AppWidgetProvider() {
 
         private fun noteIntent(
             context: Context,
-            index: Int,
             habitId: String,
             dayKey: Int,
         ): PendingIntent {
@@ -1455,53 +1451,12 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             return PendingIntent.getActivity(
                 context,
-                REQUEST_NOTE_BASE + index,
+                REQUEST_NOTE_BASE + habitId.hashCode(),
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         }
 
-        private fun rowId(index: Int) = when (index) {
-            0 -> R.id.habit_row_0
-            1 -> R.id.habit_row_1
-            2 -> R.id.habit_row_2
-            else -> R.id.habit_row_3
-        }
-
-        private fun emojiId(index: Int) = when (index) {
-            0 -> R.id.habit_row_0_emoji
-            1 -> R.id.habit_row_1_emoji
-            2 -> R.id.habit_row_2_emoji
-            else -> R.id.habit_row_3_emoji
-        }
-
-        private fun nameId(index: Int) = when (index) {
-            0 -> R.id.habit_row_0_name
-            1 -> R.id.habit_row_1_name
-            2 -> R.id.habit_row_2_name
-            else -> R.id.habit_row_3_name
-        }
-
-        private fun timeId(index: Int) = when (index) {
-            0 -> R.id.habit_row_0_time
-            1 -> R.id.habit_row_1_time
-            2 -> R.id.habit_row_2_time
-            else -> R.id.habit_row_3_time
-        }
-
-        private fun noteId(index: Int) = when (index) {
-            0 -> R.id.habit_row_0_note
-            1 -> R.id.habit_row_1_note
-            2 -> R.id.habit_row_2_note
-            else -> R.id.habit_row_3_note
-        }
-
-        private fun checkId(index: Int) = when (index) {
-            0 -> R.id.habit_row_0_check
-            1 -> R.id.habit_row_1_check
-            2 -> R.id.habit_row_2_check
-            else -> R.id.habit_row_3_check
-        }
     }
 
     override fun onUpdate(
@@ -1869,5 +1824,94 @@ class HabitAlarmReceiver : BroadcastReceiver() {
         return now.get(Calendar.YEAR) * 10000 +
             (now.get(Calendar.MONTH) + 1) * 100 +
             now.get(Calendar.DAY_OF_MONTH)
+    }
+}
+
+/**
+ * Asks which habit a new widget should show.
+ *
+ * The system launches this when a widget is added, and refuses to place the
+ * widget until it answers — which is what makes "one widget, one habit"
+ * possible at all: a home screen with three habits on it is three tiles, each
+ * pointed at its own habit through its own options.
+ *
+ * Two ways in, and they behave differently on purpose:
+ *
+ *  * from a habit's menu in the app, the habit arrives as an extra and the tile
+ *    is confirmed straight away — the user has already answered the question;
+ *  * from the launcher's own widget list, nothing has been chosen, so the list
+ *    is shown.
+ *
+ * Native rather than Flutter: it has to answer the system in a moment, and the
+ * app already publishes every habit's emoji and name for the widgets to draw, so
+ * the list costs nothing but the loop that builds it.
+ */
+class HabitWidgetConfigActivity : Activity() {
+    private var widgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    private var chosen: String? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setResult(RESULT_CANCELED)
+
+        widgetId = intent?.extras?.getInt(
+            AppWidgetManager.EXTRA_APPWIDGET_ID,
+            AppWidgetManager.INVALID_APPWIDGET_ID,
+        ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
+        if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+            // Not launched by the system for a real widget: nothing to configure.
+            finish()
+            return
+        }
+
+        setContentView(R.layout.habit_widget_config)
+        chosen = intent?.getStringExtra(HabitWidgetProvider.EXTRA_PIN_HABIT)
+
+        val habits = HabitWidgetStore.configuredHabits(this)
+        if (habits.isEmpty()) {
+            findViewById<View>(R.id.habit_config_empty).visibility = View.VISIBLE
+        } else {
+            val list = findViewById<LinearLayout>(R.id.habit_config_list)
+            for ((id, tile) in habits) {
+                list.addView(configRow(id, tile))
+            }
+        }
+        findViewById<View>(R.id.habit_config_cancel).setOnClickListener { finish() }
+
+        // Pinned from the app: the habit is already chosen, so say so and be
+        // done rather than asking a question that has an answer.
+        if (!chosen.isNullOrEmpty() && habits.any { it.first == chosen }) {
+            confirm(chosen!!)
+        }
+    }
+
+    private fun configRow(id: String, tile: JSONObject): View {
+        val row = layoutInflater.inflate(R.layout.habit_widget_config_row, null)
+        row.findViewById<TextView>(R.id.habit_config_row_emoji).text = tile.optString("emoji")
+        row.findViewById<TextView>(R.id.habit_config_row_name).text = tile.optString("name")
+        row.setOnClickListener { confirm(id) }
+        return row
+    }
+
+    /** Points the widget at [habitId] and tells the system it may place it. */
+    private fun confirm(habitId: String) {
+        val manager = AppWidgetManager.getInstance(this)
+        // The options bundle also carries the size the launcher reported, so it
+        // is edited in place rather than replaced.
+        // A widget that was removed while this dialog was open leaves an id that
+        // no longer resolves; answering the system is the part that matters, so a
+        // stale id must not be allowed to throw its way out of here.
+        runCatching {
+            val manager = AppWidgetManager.getInstance(this)
+            val options = manager.getAppWidgetOptions(widgetId)
+            options.putString(HabitWidgetProvider.OPTION_HABIT_ID, habitId)
+            manager.updateAppWidgetOptions(widgetId, options)
+            HabitWidgetProvider.refresh(this)
+        }.onFailure { Log.w(TAG, "Could not configure widget $widgetId: ${it.message}") }
+        setResult(
+            RESULT_OK,
+            Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId),
+        )
+        finish()
     }
 }

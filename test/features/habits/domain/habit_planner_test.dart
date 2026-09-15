@@ -10,6 +10,7 @@ void main() {
     String name = '吃药',
     int days = kHabitEveryDay,
     int? reminderMinutes,
+    bool allowNote = true,
   }) {
     return Habit.create(
       id: id,
@@ -18,6 +19,7 @@ void main() {
       days: days,
       createdAt: DateTime(2026, 9, 1),
       reminderMinutes: reminderMinutes,
+      allowNote: allowNote,
     );
   }
 
@@ -270,73 +272,96 @@ void main() {
     });
   });
 
-  group('widget snapshot', () {
-    test("carries today's habits, counts and the day it is counting for", () {
+  group('widget payload', () {
+    Map<String, Object?> payload({
+      required List<Habit> habits,
+      List<HabitLog> logs = const <HabitLog>[],
+      DateTime? now,
+    }) {
+      return habitWidgetPayload(
+        habits: habits,
+        logs: logs,
+        now: now ?? DateTime(2026, 9, 16, 7),
+        todoSub: '今天还没打卡',
+        doneSub: '已完成',
+        offSub: '今天不用打卡',
+        emptyTitle: '还没有打卡项',
+        emptyBody: '在应用里添加打卡项',
+        staleText: '新的一天了，打开应用刷新',
+        unconfiguredText: '还没选择打卡项',
+        missingText: '这个打卡项已删除',
+      );
+    }
+
+    Map<String, Object?> tile(Map<String, Object?> payload, String id) =>
+        (payload['tiles']! as Map<String, Object?>)[id]! as Map<String, Object?>;
+
+    test('carries every habit, not only the ones due today', () {
+      // Each widget is configured to one habit, so a habit that is not due today
+      // still has to be able to say so rather than looking deleted.
+      final Map<String, Object?> result = payload(
+        habits: <Habit>[
+          habit('a', reminderMinutes: 480),
+          habit('b', name: '周一瑜伽', days: habitDayBit(DateTime.monday)),
+        ],
+      );
+
+      expect(result['dayKey'], habitDayKey(DateTime(2026, 9, 16)));
+      expect(result['empty'], isFalse);
+      expect((result['tiles']! as Map<String, Object?>).keys, containsAll(<String>['a', 'b']));
+      expect(tile(result, 'a')['due'], isTrue);
+      expect(tile(result, 'b')['due'], isFalse);
+      // The words travel once per payload, the facts once per habit: the widget
+      // re-words the line itself when a tap flips done with the app closed.
+      expect(result['subOff'], '今天不用打卡');
+      expect(tile(result, 'b')['details'], '');
+    });
+
+    test('a ticked habit reads as done, with its time and streak', () {
       final DateTime now = DateTime(2026, 9, 16, 7);
-      final List<HabitDayStatus> today = <HabitDayStatus>[
-        HabitDayStatus(habit: habit('a', reminderMinutes: 480)),
-        HabitDayStatus(
-          habit: habit('b', name: '健身'),
-          log: log('b', now, note: '练了 40 分钟'),
-        ),
-      ];
-      final Map<String, Object?> snapshot = habitWidgetSnapshot(
-        today: today,
+      final Map<String, Object?> result = payload(
+        habits: <Habit>[habit('a', reminderMinutes: 480)],
+        logs: <HabitLog>[log('a', now, note: '早上吃的')],
         now: now,
-        dateLabel: '9月16日 周三',
-        countLabel: '1/2 已完成',
-        countSuffix: '已完成',
-        emptyTitle: '今天没有要打卡的项目',
-        emptyBody: '在应用里添加打卡项',
       );
-
-      expect(snapshot['done'], 1);
-      expect(snapshot['total'], 2);
-      expect(snapshot['empty'], false);
-      expect(snapshot['dayKey'], habitDayKey(now));
-      expect(snapshot['dateLabel'], '9月16日 周三');
-      // The words travel apart from the numbers, because the widget recounts on
-      // its own when a row is ticked with the app closed.
-      expect(snapshot['countSuffix'], '已完成');
-      final List<Object?> rows = snapshot['rows']! as List<Object?>;
-      expect(rows, hasLength(2));
-      final Map<String, Object?> first = rows.first! as Map<String, Object?>;
-      expect(first['id'], 'a');
-      expect(first['time'], '08:00');
-      expect(first['note'], isTrue);
+      final Map<String, Object?> first = tile(result, 'a');
+      expect(first['done'], isTrue);
+      expect(first['details'], '08:00 · 1 天');
+      expect(first['emoji'], '💊');
+      expect(first['name'], '吃药');
+      expect(result['subDone'], '已完成');
     });
 
-    test('shows at most the rows the widget has, and counts the rest', () {
-      final List<HabitDayStatus> today = <HabitDayStatus>[
-        for (int i = 0; i < kHabitWidgetRows + 2; i++)
-          HabitDayStatus(habit: habit('h$i')),
-      ];
-      final Map<String, Object?> snapshot = habitWidgetSnapshot(
-        today: today,
-        now: DateTime(2026, 9, 16),
-        dateLabel: '9月16日 周三',
-        countLabel: '0/6 已完成',
-        countSuffix: '已完成',
-        emptyTitle: 't',
-        emptyBody: 'b',
+    test('an un-ticked habit with a reminder shows the time', () {
+      final Map<String, Object?> result = payload(
+        habits: <Habit>[habit('a', reminderMinutes: 480)],
       );
-      expect((snapshot['rows']! as List<Object?>), hasLength(kHabitWidgetRows));
-      // Dropped rows are reported, never silently lost.
-      expect(snapshot['overflow'], 2);
+      expect(tile(result, 'a')['details'], '08:00');
+      expect(tile(result, 'a')['done'], isFalse);
     });
 
-    test('an empty day says so instead of showing nothing', () {
-      final Map<String, Object?> snapshot = habitWidgetSnapshot(
-        today: const <HabitDayStatus>[],
-        now: DateTime(2026, 9, 16),
-        dateLabel: '9月16日 周三',
-        countLabel: '0/0 已完成',
-        countSuffix: '已完成',
-        emptyTitle: '今天没有要打卡的项目',
-        emptyBody: '在应用里添加打卡项',
+    test('a habit with nothing to say has no details to show', () {
+      final Map<String, Object?> result = payload(habits: <Habit>[habit('a')]);
+      expect(tile(result, 'a')['details'], '');
+      expect(result['subTodo'], '今天还没打卡');
+    });
+
+    test('the ＋ is only offered where a note would be kept', () {
+      final Map<String, Object?> result = payload(
+        habits: <Habit>[
+          habit('a'),
+          habit('b', name: '健身', allowNote: false),
+        ],
       );
-      expect(snapshot['empty'], isTrue);
-      expect(snapshot['emptyTitle'], '今天没有要打卡的项目');
+      expect(tile(result, 'a')['note'], isTrue);
+      expect(tile(result, 'b')['note'], isFalse);
+    });
+
+    test('no habits at all says so instead of drawing an empty tile', () {
+      final Map<String, Object?> result = payload(habits: const <Habit>[]);
+      expect(result['empty'], isTrue);
+      expect(result['emptyTitle'], '还没有打卡项');
+      expect(result['tiles'], isEmpty);
     });
   });
 }

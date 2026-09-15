@@ -371,7 +371,8 @@ abstract final class AppStrings {
   static const String habitSaved = '已保存';
   static const String habitWidgetSection = '桌面小组件';
   static const String habitWidgetAdd = '添加到桌面';
-  static const String habitWidgetAddHint = '在桌面一键打卡，不用打开应用';
+  static const String habitWidgetAddHint = '每个小组件显示一个打卡项，2×2 大小，点一下就能打卡';
+  static const String habitWidgetWhereHint = '在某个打卡项的 ⋮ 菜单里选「添加到桌面」';
   static const String habitWidgetAdded = '小组件已添加到桌面';
   static const String habitWidgetPinRequested = '请在系统弹窗里确认添加';
   static const String habitWidgetManualHint =
@@ -379,6 +380,14 @@ abstract final class AppStrings {
   static const String habitWidgetUnsupported = '当前设备不支持桌面小组件';
   static const String habitWidgetOnDesktop = '已添加到桌面';
   static const String habitWidgetAddMore = '再加一个';
+  static const String habitWidgetTileTodo = '今天还没打卡';
+  static const String habitWidgetTileDone = '已完成';
+  static const String habitWidgetTileOff = '今天不用打卡';
+  static const String habitWidgetTileMissing = '这个打卡项已删除';
+  static const String habitWidgetTileUnconfigured = '还没选择打卡项，长按小组件重新选择';
+  static const String habitWidgetStale = '新的一天了，打开应用刷新';
+  static const String habitWidgetConfigTitle = '选择要显示的打卡项';
+  static const String habitWidgetConfigEmpty = '还没有打卡项，先到应用里添加一个';
   static const String habitReminderBody = '今天还没打卡';
   static const String habitNotificationAction = '打卡';
   static const String habitNotificationPermissionHint =

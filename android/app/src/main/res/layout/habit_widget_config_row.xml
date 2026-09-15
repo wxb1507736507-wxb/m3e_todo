@@ -1,13 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  One habit in the configuration dialog: its emoji, its name, and a whole row to
-  press. The rows are built in code (see `HabitWidgetConfigActivity`) because the
-  list is as long as the user's habits are, and a `RemoteViews`-free Activity can
-  simply add them.
+  One habit in the arrangement screen: a tick box that adds it to the tile, the
+  habit itself, and a pencil that opens it in the app.
+
+  The tick box is the row's whole left edge and the pencil its right edge, so the
+  two things a row can do are the two ends of it.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/habit_config_row"
     style="@style/HabitWidgetConfigRow">
+
+    <CheckBox
+        android:id="@+id/habit_config_row_check"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:clickable="false"
+        android:focusable="false" />
 
     <TextView
         android:id="@+id/habit_config_row_emoji"
@@ -16,4 +24,13 @@
     <TextView
         android:id="@+id/habit_config_row_name"
         style="@style/HabitWidgetConfigName" />
+
+    <ImageButton
+        android:id="@+id/habit_config_row_edit"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/habit_widget_config_edit"
+        android:padding="12dp"
+        android:src="@drawable/habit_edit" />
 </LinearLayout>

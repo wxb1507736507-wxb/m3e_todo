@@ -348,19 +348,19 @@ abstract final class AppPlatform {
 
   /// Asks the system to place a habit widget on the home screen.
   ///
-  /// [habitId] is the habit that widget should show. One widget shows one habit,
-  /// so pinning from a habit's own menu answers the question before it is asked;
-  /// pinning from the habits page's card leaves it out, and the widget's
-  /// configuration screen asks instead.
+  /// [habitIds] are the habits that widget should show. One widget shows a row
+  /// of them, so pinning from a habit's own menu starts the tile with that habit
+  /// ticked; pinning from the habits page's card leaves it out, and the
+  /// arrangement screen ticks everything instead.
   ///
   /// Android 8+ shows its own confirmation sheet, so a `true` here means the
   /// request was made, not that a widget now exists.
-  static Future<bool> requestHabitWidgetPin({String? habitId}) async {
+  static Future<bool> requestHabitWidgetPin({List<String> habitIds = const <String>[]}) async {
     if (!isAndroid) {
       return false;
     }
     return await _invoke<bool>('requestHabitWidgetPin', <String, Object?>{
-      'habitId': habitId,
+      'habitIds': habitIds,
     }) ??
         false;
   }
@@ -409,6 +409,14 @@ abstract final class AppPlatform {
   /// opens that habit's check-in editor.
   static Future<String?> takeHabitOpenRequest() =>
       _invoke<String>('takeHabitOpenRequest');
+
+  /// Takes the habit the arrangement screen asked to edit, if any.
+  ///
+  /// The pencil beside a habit on that screen opens the app rather than an editor
+  /// of its own: what a habit *is* — its name, icon, days and reminder — is the
+  /// app's to edit, and a second editor would be a second thing to keep in step.
+  static Future<String?> takeHabitEditRequest() =>
+      _invoke<String>('takeHabitEditRequest');
 
   /// Asks to be told when the home-screen widget is used.
   ///

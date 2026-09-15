@@ -257,6 +257,10 @@ Map<String, Object?> habitWidgetPayload({
     'dayKey': todayKey,
     'empty': habits.isEmpty,
     'tiles': tiles,
+    // The habits in the order the app lists them. `tiles` is a map, and a map
+    // has no order a widget could rely on — a tile that draws "everything, in
+    // order" needs the order written down.
+    'order': <Object?>[for (final Habit habit in habits) habit.id],
     'subTodo': todoSub,
     'subDone': doneSub,
     'subOff': offSub,

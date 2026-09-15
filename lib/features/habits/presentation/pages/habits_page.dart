@@ -30,6 +30,9 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
   /// The open request already acted on, so one request opens one sheet.
   String? _openedFor;
 
+  /// The edit request already acted on, for the same reason.
+  String? _editedFor;
+
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
@@ -55,6 +58,23 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
         ref.read(pendingHabitOpenProvider.notifier).clear();
         if (habit != null) {
           unawaited(showHabitCheckInSheet(context, habit: habit));
+        }
+      });
+    }
+
+    // The arrangement screen's pencil asks for the same page, but for the
+    // editor: it is the habit the user wants to change, not tick off.
+    final String? editRequest = ref.watch(pendingHabitEditProvider);
+    if (editRequest != null && editRequest != _editedFor) {
+      _editedFor = editRequest;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        final Habit? habit = ref.read(habitByIdProvider(editRequest));
+        ref.read(pendingHabitEditProvider.notifier).clear();
+        if (habit != null) {
+          unawaited(showHabitEditorSheet(context, existing: habit));
         }
       });
     }
@@ -278,14 +298,16 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
     );
   }
 
-  /// Puts a widget on the home screen, for [habit] when one was named.
+  /// Puts a widget on the home screen, with [habit] ticked when one was named.
   ///
-  /// Without a habit the system's own configuration screen asks which one; with
-  /// one, that question is already answered.
+  /// A widget shows a row of habits, so this only decides what it *starts* with:
+  /// the arrangement screen is where the row is changed, and it is one tap away
+  /// on the tile itself.
   Future<void> _pinWidget({Habit? habit}) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final bool requested =
-        await AppPlatform.requestHabitWidgetPin(habitId: habit?.id);
+    final bool requested = await AppPlatform.requestHabitWidgetPin(
+      habitIds: habit == null ? const <String>[] : <String>[habit.id],
+    );
     if (!mounted) {
       return;
     }

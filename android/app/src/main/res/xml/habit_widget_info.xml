@@ -2,31 +2,32 @@
 <!--
   What the launcher needs to know before it shows the habit widget.
 
-  2×2 cells, and it says so: one widget is one habit, so a home screen with
-  three habits on it is three tiles rather than one list. That is why
-  `minWidth`/`minHeight` are the two-cell size and the resize mode is `none` —
-  a tile that can be stretched into a row would immediately be a list again.
+  Two cells wide and three tall, and it says so: the habits stack in a column,
+  one per row, so the tile wants height rather than width. The resize mode is
+  `none` because the row count is fixed at what fits — stretching it would only
+  add empty space, and the rows are hidden rather than stretched when there are
+  fewer habits than that.
 
   `updatePeriodMillis` is half an hour — the shortest Android allows — for one
   reason only: the tile shows *today*, and if the app is never opened again the
   day still changes underneath it. The periodic call is what lets the widget
   notice. It is the launcher's own alarm, so it costs the app nothing to keep.
 
-  `configure` is what makes one widget per habit possible: the system runs it
-  when a widget is added, and does not place the widget until it answers with
-  the habit that was chosen. `reconfigurable` is the same screen again, reached
-  by long-pressing the tile — changing your mind about which habit a tile shows
-  should not mean deleting it and starting over.
+  `configure` is the arrangement screen: the system runs it when a widget is
+  added and does not place the widget until it answers with the habits that were
+  ticked. `reconfigurable` is the same screen again, reached by long-pressing the
+  tile — changing what a tile shows should not mean deleting it and starting
+  over.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:configure="dev.m3e.m3e_todo.HabitWidgetConfigActivity"
     android:description="@string/habit_widget_description"
     android:initialLayout="@layout/habit_widget"
-    android:minHeight="110dp"
+    android:minHeight="170dp"
     android:minWidth="110dp"
     android:previewLayout="@layout/habit_widget"
     android:resizeMode="none"
-    android:targetCellHeight="2"
+    android:targetCellHeight="3"
     android:targetCellWidth="2"
     android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen"

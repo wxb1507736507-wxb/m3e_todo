@@ -1,80 +1,70 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The sizes and colours of the habit widget's one tile.
+  The sizes and colours of the habit widget's columns, and of the arrangement
+  screen's rows.
 
-  They live here rather than inline so the tile can be read as a whole — it is
-  four things stacked in a 2×2 square, and the numbers that matter are the ones
-  that add up to less than the space a launcher gives it.
-
-  The config screen's theme is here too: it is a dialog over whatever the user
-  was doing, not a page of the app.
+  They live here rather than inline so the four identical columns cannot drift
+  apart, and because the numbers are the design: a column is a circle you can hit
+  with a thumb, an emoji, and one line of name, stacked and centred, four to a
+  row.
 -->
 <resources>
 
     <style name="HabitWidgetConfigTheme" parent="@android:style/Theme.DeviceDefault.Light.Dialog">
-        <item name="android:windowMinWidthMajor">80%</item>
-        <item name="android:windowMinWidthMinor">90%</item>
+        <item name="android:windowMinWidthMajor">85%</item>
+        <item name="android:windowMinWidthMinor">92%</item>
+    </style>
+
+    <!-- One habit: a row across the tile, with the circle at its left edge where
+         a thumb finds it without aiming. -->
+    <style name="HabitWidgetRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <!-- The only thing a tap can change: as large as the row allows, with the
+         glyph kept small inside it so the pressable area is not the drawing. -->
+    <style name="HabitWidgetCheck">
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:padding">7dp</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:src">@drawable/habit_check_todo</item>
     </style>
 
     <style name="HabitWidgetEmoji">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">6dp</item>
         <item name="android:maxLines">1</item>
-        <item name="android:textSize">20sp</item>
-    </style>
-
-    <!-- 40dp of touch target for a 24dp glyph: the tile is used one-handed,
-         with a thumb, so the pressable area is what matters. -->
-    <style name="HabitWidgetNote">
-        <item name="android:layout_width">36dp</item>
-        <item name="android:layout_height">36dp</item>
-        <item name="android:padding">8dp</item>
-        <item name="android:scaleType">fitCenter</item>
-        <item name="android:src">@drawable/habit_note_add</item>
-    </style>
-
-    <!-- The tap that replaces opening the app: as large as the square allows. -->
-    <style name="HabitWidgetCheck">
-        <item name="android:layout_width">60dp</item>
-        <item name="android:layout_height">60dp</item>
-        <item name="android:layout_marginTop">2dp</item>
-        <item name="android:padding">4dp</item>
-        <item name="android:scaleType">fitCenter</item>
-        <item name="android:src">@drawable/habit_check_todo</item>
+        <item name="android:textSize">17sp</item>
     </style>
 
     <style name="HabitWidgetName">
-        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:layout_weight">1</item>
         <item name="android:ellipsize">end</item>
-        <item name="android:gravity">center</item>
         <item name="android:maxLines">1</item>
         <item name="android:textColor">@color/habit_widget_text</item>
         <item name="android:textSize">14sp</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <style name="HabitWidgetSub">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:ellipsize">end</item>
-        <item name="android:gravity">center</item>
-        <item name="android:maxLines">1</item>
-        <item name="android:textColor">@color/habit_widget_subtle</item>
-        <item name="android:textSize">11sp</item>
     </style>
 
     <style name="HabitWidgetMessage">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">0dp</item>
-        <item name="android:layout_weight">1</item>
+        <item name="android:layout_height">wrap_content</item>
         <item name="android:gravity">center</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
         <item name="android:textColor">@color/habit_widget_subtle</item>
         <item name="android:textSize">12sp</item>
     </style>
 
-    <!-- The config dialog's list row: an emoji, a name, and that is all. -->
+    <!-- The arrangement screen's rows -->
+
     <style name="HabitWidgetConfigRow">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -83,7 +73,7 @@
         <item name="android:minHeight">56dp</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:paddingStart">20dp</item>
-        <item name="android:paddingEnd">20dp</item>
+        <item name="android:paddingEnd">4dp</item>
     </style>
 
     <style name="HabitWidgetConfigEmoji">

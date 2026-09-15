@@ -27,6 +27,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.RemoteViews
@@ -507,12 +508,12 @@ class MainActivity : FlutterActivity() {
     /**
      * Asks the launcher to place a habit widget; Android shows its own sheet.
      *
-     * [habitId] travels with the request as an extra, and Android hands that
-     * extra to the configuration activity — so pinning from a habit's own menu
-     * skips the question of which habit the tile is for, and the question is
-     * only asked when the widget is added from the launcher instead.
+     * [habitIds] travels with the request as an extra, and Android hands that
+     * extra to the arrangement screen — so pinning from a habit menu starts that
+     * tile with the habit already ticked, while a widget added from the launcher
+     * opens with everything ticked.
      */
-    private fun requestHabitWidgetPin(habitId: String?): Boolean {
+    private fun requestHabitWidgetPin(habitIds: List<String>): Boolean {
         if (Build.VERSION.SDK_INT < 26) {
             return false
         }
@@ -521,10 +522,12 @@ class MainActivity : FlutterActivity() {
             return false
         }
         val provider = ComponentName(this, HabitWidgetProvider::class.java)
-        val extras = if (habitId.isNullOrEmpty()) {
+        val extras = if (habitIds.isEmpty()) {
             null
         } else {
-            Bundle().apply { putString(HabitWidgetProvider.EXTRA_PIN_HABIT, habitId) }
+            Bundle().apply {
+                putString(HabitWidgetProvider.EXTRA_PIN_HABITS, habitIds.joinToString(","))
+            }
         }
         return runCatching { manager.requestPinAppWidget(provider, extras, null) }
             .getOrDefault(false)
@@ -730,8 +733,12 @@ class MainActivity : FlutterActivity() {
                 HabitWidgetProvider.refresh(this)
                 result.success(HabitWidgetProvider.placed(this))
             }
-                        "requestHabitWidgetPin" -> result.success(
-                requestHabitWidgetPin((arguments as? Map<*, *>)?.get("habitId") as? String),
+            "requestHabitWidgetPin" -> result.success(
+                requestHabitWidgetPin(
+                    ((arguments as? Map<*, *>)?.get("habitIds") as? List<*>)
+                        ?.mapNotNull { it as? String }
+                        ?: emptyList(),
+                ),
             )
             // What the widget did while this process was dead. Draining clears
             // the queue, so the Dart side owns turning these into check-ins.
@@ -752,6 +759,10 @@ class MainActivity : FlutterActivity() {
                 result.success(actions)
             }
             "takeHabitOpenRequest" -> result.success(HabitWidgetStore.takeOpen(this))
+            // The arrangement screen's pencil: the app opens that habit's editor
+            // rather than its check-in sheet, because what the user asked to do
+            // was change the habit, not tick it.
+            "takeHabitEditRequest" -> result.success(HabitWidgetStore.takeEdit(this))
             // Debug-only: draws the widget's view tree without a launcher and
             // answers with the text that came out of it. See
             // HabitWidgetProvider.selfCheck for why this exists at all.
@@ -1047,6 +1058,7 @@ internal object HabitWidgetStore {
     private const val KEY_SNAPSHOT = "snapshot"
     private const val KEY_PENDING = "pending"
     private const val KEY_OPEN = "openHabit"
+    private const val KEY_EDIT = "editHabit"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -1111,6 +1123,17 @@ internal object HabitWidgetStore {
     }
 
     /** Remembers that one habit's editor should open when the app comes up. */
+    /** Remembers that one habit should be edited when the app comes up. */
+    fun requestEdit(context: Context, habitId: String) {
+        prefs(context).edit().putString(KEY_EDIT, habitId).apply()
+    }
+
+    fun takeEdit(context: Context): String? {
+        val habitId = prefs(context).getString(KEY_EDIT, null) ?: return null
+        prefs(context).edit().remove(KEY_EDIT).apply()
+        return habitId
+    }
+
     fun requestOpen(context: Context, habitId: String) {
         prefs(context).edit().putString(KEY_OPEN, habitId).apply()
     }
@@ -1141,13 +1164,20 @@ class HabitWidgetProvider : AppWidgetProvider() {
         /** The habit the widget's ＋ button asked the app to open. */
         const val EXTRA_OPEN_HABIT = "openHabitId"
 
-        /** Which habit one widget instance shows. Stored in its options. */
-        const val OPTION_HABIT_ID = "habitId"
+        /** Which habits one widget instance shows, comma separated. */
+        const val OPTION_HABIT_IDS = "habitIds"
 
-        /** The habit a pinned widget should show, sent along with the request. */
-        const val EXTRA_PIN_HABIT = "habitId"
+        /** The habits a pinned widget should show, comma separated. */
+        const val EXTRA_PIN_HABITS = "habitIds"
+
+        /** The habit the arrangement screen asked the app to edit. */
+        const val EXTRA_EDIT_HABIT = "editHabitId"
+
+        /** How many habits the row holds; the layout has this many columns. */
+        private const val MAX_ITEMS = 4
 
         private const val REQUEST_OPEN = 5000
+        private const val REQUEST_ARRANGE = 5050
         private const val REQUEST_TOGGLE_BASE = 5100
         private const val REQUEST_NOTE_BASE = 5200
 
@@ -1173,7 +1203,10 @@ class HabitWidgetProvider : AppWidgetProvider() {
 
         private fun render(context: Context, manager: AppWidgetManager, id: Int) {
             val snapshot = HabitWidgetStore.snapshot(context)
-            manager.updateAppWidget(id, buildViews(context, snapshot, habitIdOf(manager, id)))
+            manager.updateAppWidget(
+                id,
+                buildViews(context, snapshot, id, habitIdsOf(manager, id)),
+            )
         }
 
         /**
@@ -1186,197 +1219,105 @@ class HabitWidgetProvider : AppWidgetProvider() {
          */
         private fun buildViews(
             context: Context,
-            snapshot: JSONObject?,
-            habitId: String?,
+            payload: JSONObject?,
+            widgetId: Int,
+            habitIds: List<String>,
         ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.habit_widget)
 
-            if (snapshot == null) {
-                // Nothing to draw yet: the tap is the way to the app that will
-                // fill it in.
+            if (payload == null) {
                 views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
-                return messageTile(
-                    context,
-                    views,
-                    context.getString(R.string.habit_widget_no_data),
-                )
-            }
-            if (snapshot.optBoolean("empty", false)) {
-                views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
-                return messageTile(context, views, snapshot.optString("emptyTitle"))
+                return messageTile(context, views, context.getString(R.string.habit_widget_no_data))
             }
 
-            val tiles = snapshot.optJSONObject("tiles")
-            // A tile nobody chose a habit for still gets one: the first the app
-            // sent. Demanding a choice before it does anything leaves a widget on
-            // the home screen that can only open the app — which is what a widget
-            // is for *not* doing — and several launchers never run the
-            // configuration screen at all.
-            val drawnId = habitId?.takeIf { tiles?.optJSONObject(it) != null }
-                ?: tiles?.keys()?.asSequence()?.firstOrNull()
-            val tile = drawnId?.let { tiles?.optJSONObject(it) }
-            if (drawnId == null || tile == null) {
+            val tiles = payload.optJSONObject("tiles")
+            // The habits this tile shows: its own choice when it has one, and
+            // everything the app sent when it has not. A tile that shows nothing
+            // until it is configured is a tile that does nothing, and several
+            // launchers never run the configuration screen at all.
+            val chosen = habitIds.filter { tiles?.optJSONObject(it) != null }
+            val order = payload.optJSONArray("order")
+            val all = ArrayList<String>()
+            for (index in 0 until (order?.length() ?: 0)) {
+                val id = order?.optString(index) ?: continue
+                if (tiles?.optJSONObject(id) != null) all.add(id)
+            }
+            val shown = (if (chosen.isEmpty()) all else chosen).take(MAX_ITEMS)
+
+            if (shown.isEmpty()) {
                 views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
-                return messageTile(context, views, snapshot.optString("unconfiguredText"))
+                return messageTile(context, views, payload.optString("emptyTitle"))
             }
 
             // A payload is a picture of one day, and the day it was taken for is
             // in it. When that day is no longer today the app has not been opened
-            // since, so the *state* is yesterday's — but the habit is still the
-            // habit, and a tile that blanks out on the first morning the app is
-            // not opened is worse than one that says what it needs: the name and
-            // the emoji stay, the state is replaced by that sentence, and there is
-            // no target to check in against the wrong day.
-            val stale = snapshot.optInt("dayKey", 0).let { it != 0 && it != todayKey() }
-            val done = !stale && tile.optBoolean("done")
-            val dayKey = snapshot.optInt("dayKey", 0)
+            // since, so the ticks would be yesterday's: the habits stay visible —
+            // a tile that blanks out tells the user nothing — but the circles go,
+            // because a tap on one would file a check-in against the wrong day.
+            val stale = payload.optInt("dayKey", 0).let { it != 0 && it != todayKey() }
+            val dayKey = payload.optInt("dayKey", 0)
 
             views.setViewVisibility(R.id.habit_widget_message, android.view.View.GONE)
-            views.setViewVisibility(R.id.habit_widget_name, android.view.View.VISIBLE)
-            views.setViewVisibility(R.id.habit_widget_sub, android.view.View.VISIBLE)
-            views.setViewVisibility(R.id.habit_widget_emoji, android.view.View.VISIBLE)
-            views.setViewVisibility(
-                R.id.habit_widget_check,
-                if (stale) android.view.View.GONE else android.view.View.VISIBLE,
-            )
+            for (index in 0 until MAX_ITEMS) {
+                val habitId = shown.getOrNull(index)
+                val tile = habitId?.let { tiles?.optJSONObject(it) }
+                if (habitId == null || tile == null) {
+                    views.setViewVisibility(itemId(index), android.view.View.GONE)
+                    continue
+                }
+                val done = !stale && tile.optBoolean("done")
 
-            views.setTextViewText(R.id.habit_widget_emoji, tile.optString("emoji"))
-            views.setTextViewText(R.id.habit_widget_name, tile.optString("name"))
-            views.setTextViewText(
-                R.id.habit_widget_sub,
-                if (stale) snapshot.optString("staleText") else subFor(snapshot, tile),
-            )
-            views.setTextColor(
-                R.id.habit_widget_name,
-                context.getColor(
-                    if (done) R.color.habit_widget_done else R.color.habit_widget_text,
-                ),
-            )
-            if (stale) {
-                // No target on a stale day: the tap would file a check-in against
-                // yesterday. The tile still leads to the app, which is what fixes
-                // it — that is the one thing it is good for until it is refreshed.
-                views.setOnClickPendingIntent(R.id.habit_widget_root, openApp(context))
-            } else {
-                // The whole tile checks the habit off, not just the circle: a
-                // 2×2 square is small, and a tap that lands a few millimetres off
-                // the ring and lands on "open the app" instead is a tap that did
-                // the opposite of what it looked like it would do.
-                val toggle = toggleIntent(context, drawnId, dayKey, !done)
-                views.setOnClickPendingIntent(R.id.habit_widget_root, toggle)
-                views.setImageViewResource(
-                    R.id.habit_widget_check,
-                    if (done) R.drawable.habit_check_done else R.drawable.habit_check_todo,
+                views.setViewVisibility(itemId(index), android.view.View.VISIBLE)
+                views.setTextViewText(itemEmojiId(index), tile.optString("emoji"))
+                views.setTextViewText(itemNameId(index), tile.optString("name"))
+                views.setTextColor(
+                    itemNameId(index),
+                    context.getColor(
+                        if (done) R.color.habit_widget_done else R.color.habit_widget_text,
+                    ),
                 )
-                // The same intent as the root's, so pressing either is one action
-                // and not two ways to do two different things.
-                views.setOnClickPendingIntent(R.id.habit_widget_check, toggle)
-            }
-
-            // Only habits that accept a note get the ＋: offering to write
-            // something the habit does not keep would be a lie. Not on a stale day
-            // either — the note would be filed against yesterday.
-            val allowsNote = !stale && tile.optBoolean("note")
-            views.setViewVisibility(
-                R.id.habit_widget_note,
-                if (allowsNote) android.view.View.VISIBLE else android.view.View.GONE,
-            )
-            if (allowsNote) {
+                views.setViewVisibility(
+                    itemCheckId(index),
+                    if (stale) android.view.View.GONE else android.view.View.VISIBLE,
+                )
+                // The column is the way into the arrangement screen, and the
+                // circle inside it is the only thing that checks anything off: a
+                // tap that lands a millimetre off the ring does not change the
+                // day's record by accident, it opens the screen that says what
+                // this tile is showing.
                 views.setOnClickPendingIntent(
-                    R.id.habit_widget_note,
-                    noteIntent(context, drawnId, dayKey),
+                    itemId(index),
+                    if (stale) openApp(context) else arrangeIntent(context, widgetId),
                 )
+                if (!stale) {
+                    views.setImageViewResource(
+                        itemCheckId(index),
+                        if (done) R.drawable.habit_check_done else R.drawable.habit_check_todo,
+                    )
+                    views.setOnClickPendingIntent(
+                        itemCheckId(index),
+                        toggleIntent(context, habitId, dayKey, !done),
+                    )
+                }
             }
             return views
         }
 
         /**
-         * The tile with nothing to draw in it: one line of text and no target
-         * that could check in against the wrong habit or the wrong day.
+         * The tile with nothing to draw in it: one line of text and the app
+         * behind it.
          */
         private fun messageTile(
             context: Context,
             views: RemoteViews,
             message: String,
         ): RemoteViews {
-            views.setViewVisibility(R.id.habit_widget_top, android.view.View.GONE)
-            views.setViewVisibility(R.id.habit_widget_check, android.view.View.GONE)
-            views.setViewVisibility(R.id.habit_widget_name, android.view.View.GONE)
-            views.setViewVisibility(R.id.habit_widget_sub, android.view.View.GONE)
             views.setViewVisibility(R.id.habit_widget_message, android.view.View.VISIBLE)
             views.setTextViewText(R.id.habit_widget_message, message)
+            for (index in 0 until MAX_ITEMS) {
+                views.setViewVisibility(itemId(index), android.view.View.GONE)
+            }
             return views
-        }
-
-        /** The habit a widget instance is pointed at, or `null` if none. */
-        fun habitIdOf(manager: AppWidgetManager, id: Int): String? {
-            val stored = manager.getAppWidgetOptions(id).getString(OPTION_HABIT_ID)
-            return if (stored.isNullOrEmpty()) null else stored
-        }
-
-        /**
-         * Draws the widget into a view nobody sees, and reports what came out.
-         *
-         * This exists because the widget's most failure-prone part — that every
-         * id in `habit_widget.xml` is what the code assumes it is, and that the
-         * launcher's own inflation of the layout succeeds — cannot be reached by
-         * a Flutter test and is not reachable at all on a launcher that will not
-         * host the widget. Applying the tree here runs the same inflation and the
-         * same actions the launcher would run, and the texts it returns are the
-         * proof that the binding happened.
-         *
-         * Only ever called from a debug build; see `HabitWidgetSync`.
-         */
-        fun selfCheck(context: Context): Map<String, Any?> {
-            val payload = HabitWidgetStore.snapshot(context)
-            val tiles = payload?.optJSONObject("tiles")
-            return runCatching {
-                mapOf(
-                    "ok" to true,
-                    // One tile, as the launcher would draw it for the first
-                    // habit the payload has.
-                    "current" to renderTexts(context, payload, tiles?.keys()?.asSequence()?.firstOrNull()),
-                    // The same payload dated yesterday: what the widget finds
-                    // after a day it was not opened during.
-                    "stale" to renderTexts(
-                        context,
-                        forcedDay(payload, -1),
-                        tiles?.keys()?.asSequence()?.firstOrNull(),
-                    ),
-                    // A tile nobody chose a habit for: it falls back to the first
-                    // habit the app sent rather than being a dead square.
-                    "unchosen" to renderTexts(context, payload, null),
-                    "empty" to renderTexts(context, null, null),
-                    "habits" to (tiles?.length() ?: 0),
-                )
-            }.getOrElse { error ->
-                mapOf("ok" to false, "reason" to error.toString())
-            }
-        }
-
-        /** Draws one tile and answers with the text that came out. */
-        private fun renderTexts(
-            context: Context,
-            payload: JSONObject?,
-            habitId: String?,
-        ): List<String> {
-            val views = buildViews(context, payload, habitId)
-            val root = views.apply(context, FrameLayout(context))
-            val texts = ArrayList<String>()
-            collectText(root, texts)
-            return texts
-        }
-
-        /** A copy of [snapshot] dated [daysFromToday] days ago. */
-        private fun forcedDay(snapshot: JSONObject?, daysFromToday: Int): JSONObject? {
-            if (snapshot == null) return null
-            val calendar = Calendar.getInstance().apply {
-                add(Calendar.DAY_OF_YEAR, daysFromToday)
-            }
-            val dayKey = calendar.get(Calendar.YEAR) * 10000 +
-                (calendar.get(Calendar.MONTH) + 1) * 100 +
-                calendar.get(Calendar.DAY_OF_MONTH)
-            return JSONObject(snapshot.toString()).put("dayKey", dayKey)
         }
 
         /** Today as `20260915`, the packing the app uses for a day. */
@@ -1385,6 +1326,115 @@ class HabitWidgetProvider : AppWidgetProvider() {
             return now.get(Calendar.YEAR) * 10000 +
                 (now.get(Calendar.MONTH) + 1) * 100 +
                 now.get(Calendar.DAY_OF_MONTH)
+        }
+        /** The habit ids a widget instance shows; empty means "all of them". */
+        fun habitIdsOf(manager: AppWidgetManager, id: Int): List<String> {
+            val stored = manager.getAppWidgetOptions(id).getString(OPTION_HABIT_IDS)
+            if (stored.isNullOrEmpty()) return emptyList()
+            return stored.split(',').filter { it.isNotEmpty() }
+        }
+
+        /** Writes the habits a widget instance shows. */
+        fun setHabitIds(context: Context, manager: AppWidgetManager, id: Int, ids: List<String>) {
+            val options = manager.getAppWidgetOptions(id)
+            options.putString(OPTION_HABIT_IDS, ids.joinToString(","))
+            manager.updateAppWidgetOptions(id, options)
+            refresh(context)
+        }
+
+        private fun itemId(index: Int) = when (index) {
+            0 -> R.id.habit_item_0
+            1 -> R.id.habit_item_1
+            2 -> R.id.habit_item_2
+            else -> R.id.habit_item_3
+        }
+
+        private fun itemCheckId(index: Int) = when (index) {
+            0 -> R.id.habit_item_0_check
+            1 -> R.id.habit_item_1_check
+            2 -> R.id.habit_item_2_check
+            else -> R.id.habit_item_3_check
+        }
+
+        private fun itemEmojiId(index: Int) = when (index) {
+            0 -> R.id.habit_item_0_emoji
+            1 -> R.id.habit_item_1_emoji
+            2 -> R.id.habit_item_2_emoji
+            else -> R.id.habit_item_3_emoji
+        }
+
+        private fun itemNameId(index: Int) = when (index) {
+            0 -> R.id.habit_item_0_name
+            1 -> R.id.habit_item_1_name
+            2 -> R.id.habit_item_2_name
+            else -> R.id.habit_item_3_name
+        }
+
+        /**
+         * Draws the widget into a view nobody sees, and reports what came out.
+         *
+         * This exists because the widget's most failure-prone part — that every
+         * id in `habit_widget.xml` is what the code assumes it is, and that the
+         * launcher's own inflation of the layout succeeds — cannot be reached by
+         * a Flutter test and, on a launcher that will not host the widget, not by
+         * a device either. Applying the tree here runs the same inflation and the
+         * same actions the launcher would run, and the text it returns is the
+         * proof that the binding happened.
+         *
+         * Only ever called from a debug build; see `HabitWidgetSync`.
+         */
+        fun selfCheck(context: Context): Map<String, Any?> {
+            val payload = HabitWidgetStore.snapshot(context)
+            val ids = payload?.optJSONArray("order")
+            val first = if (ids != null && ids.length() > 0) ids.optString(0) else null
+            return runCatching {
+                mapOf(
+                    "ok" to true,
+                    // The row as the launcher would draw it.
+                    "row" to renderTexts(context, payload, emptyList(), 0),
+                    // The same payload dated yesterday: what the widget finds
+                    // after a day it was not opened during.
+                    "stale" to renderTexts(context, forcedDay(payload, -1), emptyList(), 0),
+                    // One habit ticked on the tile, and the arrangement screen
+                    // narrowed to it.
+                    "chosen" to renderTexts(
+                        context,
+                        payload,
+                        first?.let { listOf(it) } ?: emptyList(),
+                        0,
+                    ),
+                    "empty" to renderTexts(context, null, emptyList(), 0),
+                    "habits" to (ids?.length() ?: 0),
+                )
+            }.getOrElse { error ->
+                mapOf("ok" to false, "reason" to error.toString())
+            }
+        }
+
+        /** Draws one row and answers with the text that came out. */
+        private fun renderTexts(
+            context: Context,
+            payload: JSONObject?,
+            habitIds: List<String>,
+            widgetId: Int,
+        ): List<String> {
+            val views = buildViews(context, payload, widgetId, habitIds)
+            val root = views.apply(context, FrameLayout(context))
+            val texts = ArrayList<String>()
+            collectText(root, texts)
+            return texts
+        }
+
+        /** A copy of [payload] dated [daysFromToday] days ago. */
+        private fun forcedDay(payload: JSONObject?, daysFromToday: Int): JSONObject? {
+            if (payload == null) return null
+            val calendar = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, daysFromToday)
+            }
+            val dayKey = calendar.get(Calendar.YEAR) * 10000 +
+                (calendar.get(Calendar.MONTH) + 1) * 100 +
+                calendar.get(Calendar.DAY_OF_MONTH)
+            return JSONObject(payload.toString()).put("dayKey", dayKey)
         }
 
         /** The visible text in a view tree, in draw order. */
@@ -1419,6 +1469,27 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 return payload.optString("subOff")
             }
             return if (details.isEmpty()) payload.optString("subTodo") else details
+        }
+
+        /**
+         * Opens the arrangement screen for one widget instance.
+         *
+         * An activity intent rather than a broadcast: it is the screen that says
+         * which habits this tile shows and offers to edit them, and it is
+         * reachable from the tile itself because a tap that is not on a circle
+         * has to do *something* useful, and opening the app would be the one
+         * thing it must not do.
+         */
+        private fun arrangeIntent(context: Context, widgetId: Int): PendingIntent {
+            val intent = Intent(context, HabitWidgetConfigActivity::class.java)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            return PendingIntent.getActivity(
+                context,
+                REQUEST_ARRANGE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
         }
 
         private fun openApp(context: Context): PendingIntent {
@@ -1837,27 +1908,24 @@ class HabitAlarmReceiver : BroadcastReceiver() {
 }
 
 /**
- * Asks which habit a new widget should show.
+ * The arrangement screen: which habits one tile shows, and how to change them.
  *
- * The system launches this when a widget is added, and refuses to place the
- * widget until it answers — which is what makes "one widget, one habit"
- * possible at all: a home screen with three habits on it is three tiles, each
- * pointed at its own habit through its own options.
+ * The system runs this when a widget is added — and refuses to place the widget
+ * until it answers — and the tile opens it again on any tap that is not on a
+ * circle. That is why it does two jobs: choosing what goes on the tile, and
+ * getting out of the way of the habits themselves, which are edited in the app
+ * (this screen only says *which*, never *what*).
  *
- * Two ways in, and they behave differently on purpose:
- *
- *  * from a habit's menu in the app, the habit arrives as an extra and the tile
- *    is confirmed straight away — the user has already answered the question;
- *  * from the launcher's own widget list, nothing has been chosen, so the list
- *    is shown.
- *
- * Native rather than Flutter: it has to answer the system in a moment, and the
- * app already publishes every habit's emoji and name for the widgets to draw, so
- * the list costs nothing but the loop that builds it.
+ * Native rather than Flutter because it has to answer the system in a moment and
+ * has to be reachable from a widget tap; the list it draws comes from the same
+ * payload the widgets draw from, so nothing here reads `habits.json` a second
+ * time.
  */
 class HabitWidgetConfigActivity : Activity() {
     private var widgetId = AppWidgetManager.INVALID_APPWIDGET_ID
-    private var chosen: String? = null
+
+    /** The habits ticked so far, in the order they will appear on the tile. */
+    private val selected = LinkedHashSet<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1868,15 +1936,28 @@ class HabitWidgetConfigActivity : Activity() {
             AppWidgetManager.INVALID_APPWIDGET_ID,
         ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
         if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
-            // Not launched by the system for a real widget: nothing to configure.
+            // Not about a real widget: nothing to arrange.
             finish()
             return
         }
 
         setContentView(R.layout.habit_widget_config)
-        chosen = intent?.getStringExtra(HabitWidgetProvider.EXTRA_PIN_HABIT)
-
+        val manager = AppWidgetManager.getInstance(this)
         val habits = HabitWidgetStore.configuredHabits(this)
+
+        // What the tile shows now, or — on the first run — whatever the pin
+        // request suggested, or everything, because a tile that shows nothing by
+        // default is a tile that does nothing.
+        val existing = HabitWidgetProvider.habitIdsOf(manager, widgetId)
+        selected.addAll(
+            existing.ifEmpty {
+                intent?.getStringExtra(HabitWidgetProvider.EXTRA_PIN_HABITS)
+                    ?.split(',')
+                    ?.filter { it.isNotEmpty() }
+                    ?: habits.map { it.first }
+            },
+        )
+
         if (habits.isEmpty()) {
             findViewById<View>(R.id.habit_config_empty).visibility = View.VISIBLE
         } else {
@@ -1885,38 +1966,43 @@ class HabitWidgetConfigActivity : Activity() {
                 list.addView(configRow(id, tile))
             }
         }
-        findViewById<View>(R.id.habit_config_cancel).setOnClickListener { finish() }
 
-        // Pinned from the app: the habit is already chosen, so say so and be
-        // done rather than asking a question that has an answer.
-        if (!chosen.isNullOrEmpty() && habits.any { it.first == chosen }) {
-            confirm(chosen!!)
-        }
+        findViewById<View>(R.id.habit_config_cancel).setOnClickListener { finish() }
+        findViewById<View>(R.id.habit_config_done).setOnClickListener { save() }
     }
 
     private fun configRow(id: String, tile: JSONObject): View {
         val row = layoutInflater.inflate(R.layout.habit_widget_config_row, null)
         row.findViewById<TextView>(R.id.habit_config_row_emoji).text = tile.optString("emoji")
         row.findViewById<TextView>(R.id.habit_config_row_name).text = tile.optString("name")
-        row.setOnClickListener { confirm(id) }
+        val check = row.findViewById<CheckBox>(R.id.habit_config_row_check)
+        check.isChecked = id in selected
+
+        // The row adds or removes the habit; the pencil edits it in the app.
+        row.setOnClickListener {
+            if (id in selected) selected.remove(id) else selected.add(id)
+            check.isChecked = id in selected
+        }
+        row.findViewById<View>(R.id.habit_config_row_edit).setOnClickListener {
+            editInApp(id)
+        }
         return row
     }
 
-    /** Points the widget at [habitId] and tells the system it may place it. */
-    private fun confirm(habitId: String) {
-        val manager = AppWidgetManager.getInstance(this)
-        // The options bundle also carries the size the launcher reported, so it
-        // is edited in place rather than replaced.
-        // A widget that was removed while this dialog was open leaves an id that
-        // no longer resolves; answering the system is the part that matters, so a
-        // stale id must not be allowed to throw its way out of here.
+    /** Hands one habit to the app, which opens its editor. */
+    private fun editInApp(habitId: String) {
+        HabitWidgetStore.requestEdit(this, habitId)
+        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        runCatching { startActivity(launch) }
+    }
+
+    /** Records the chosen habits and tells the system the widget may be placed. */
+    private fun save() {
         runCatching {
             val manager = AppWidgetManager.getInstance(this)
-            val options = manager.getAppWidgetOptions(widgetId)
-            options.putString(HabitWidgetProvider.OPTION_HABIT_ID, habitId)
-            manager.updateAppWidgetOptions(widgetId, options)
-            HabitWidgetProvider.refresh(this)
-        }.onFailure { Log.w(TAG, "Could not configure widget $widgetId: ${it.message}") }
+            HabitWidgetProvider.setHabitIds(this, manager, widgetId, selected.toList())
+        }.onFailure { Log.w(TAG, "Could not arrange widget $widgetId: ${it.message}") }
         setResult(
             RESULT_OK,
             Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId),

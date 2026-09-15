@@ -103,7 +103,8 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   /// Turns whatever happened on the home-screen widget into app state: check-ins
-  /// into stored records, and the ＋ button into an open editor.
+  /// into stored records, and whatever the widget asked to open into an open
+  /// sheet.
   Future<void> _drainWidget() async {
     if (!mounted) {
       return;
@@ -112,19 +113,24 @@ class _AppShellState extends ConsumerState<AppShell>
     // The user may have just come back from a settings screen, so what the app
     // is allowed to do is re-read rather than remembered.
     ref.invalidate(habitPermissionStatusProvider);
+
+    // Two requests can be waiting, and they are different screens: the widget's
+    // ＋ asks to tick a habit off, the arrangement screen's pencil asks to edit
+    // one. The habits page owns both, because it is the one place that knows how
+    // to show either.
     final String? habitId = await AppPlatform.takeHabitOpenRequest();
-    if (habitId == null || !mounted) {
+    final String? editId = await AppPlatform.takeHabitEditRequest();
+    if (!mounted) {
       return;
     }
-    final Habit? habit = ref.read(habitByIdProvider(habitId));
-    if (habit == null) {
-      return;
+    if (habitId != null && ref.read(habitByIdProvider(habitId)) != null) {
+      setState(() => _selectedIndex = _habitsIndex);
+      ref.read(pendingHabitOpenProvider.notifier).request(habitId);
     }
-    // The habits page owns the sheet: it is the one place that knows how to show
-    // one, and routing there first means the app is never left on the todo list
-    // after the user asked to write something.
-    setState(() => _selectedIndex = _habitsIndex);
-    ref.read(pendingHabitOpenProvider.notifier).request(habitId);
+    if (editId != null && ref.read(habitByIdProvider(editId)) != null) {
+      setState(() => _selectedIndex = _habitsIndex);
+      ref.read(pendingHabitEditProvider.notifier).request(editId);
+    }
   }
 
   Future<void> _ensureNotificationPermission() async {

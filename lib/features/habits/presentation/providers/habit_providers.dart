@@ -318,6 +318,27 @@ final NotifierProvider<PendingHabitOpen, String?> pendingHabitOpenProvider =
   name: 'pendingHabitOpen',
 );
 
+/// The habit the widget's arrangement screen asked to edit.
+///
+/// Its pencil opens the app rather than an editor of its own: what a habit *is*
+/// — its name, icon, days and reminder — belongs to the app's editor, and a
+/// second one would be a second thing to keep in step. Cleared by the habits
+/// page once it has opened that editor.
+class PendingHabitEdit extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void request(String habitId) => state = habitId;
+
+  void clear() => state = null;
+}
+
+final NotifierProvider<PendingHabitEdit, String?> pendingHabitEditProvider =
+    NotifierProvider<PendingHabitEdit, String?>(
+  PendingHabitEdit.new,
+  name: 'pendingHabitEdit',
+);
+
 /// Whether the habit widget is currently on one of the home screens.
 ///
 /// Read from the platform after the first sync, because only Android knows. The

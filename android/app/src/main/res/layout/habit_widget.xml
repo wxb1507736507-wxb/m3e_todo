@@ -1,73 +1,104 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The habit widget: one habit, 2×2 cells.
+  The habit widget: today's habits stacked in a column.
 
-  A tile rather than a list. A list of habits on a home screen is a summary
-  nobody reads at a glance, and the one thing a widget is for is the tap that
-  does not need the app: a big circle in the middle of a square is that tap,
-  where a row of four names with four small circles is a menu.
+  One habit per row — its circle, its emoji, its name — because a row is where a
+  name and a state fit on one line, and a column of rows is what a list of
+  things to do looks like. Only the circle checks a habit off; the rest of the
+  row opens the arrangement screen, which is where the habits this tile shows are
+  chosen and edited. That split is the whole design: the tap that changes
+  something is exactly the circle, and no other tap can change anything by
+  accident.
 
-  Which habit this instance shows is decided per instance, in its options (see
-  `HabitWidgetProvider.OPTION_HABIT_ID`), so a home screen can hold 吃药 and
-  健身 side by side and each of them is one press.
-
-  Everything the tile says comes from the app as text (`name`, `sub`); the
-  layout only decides where it goes.
+  Four rows are laid out and the unused ones are hidden: a `RemoteViews` cannot
+  build a variable-length list without a collection service.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/habit_widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/habit_widget_background"
-    android:gravity="center_horizontal"
+    android:gravity="center_vertical"
     android:orientation="vertical"
-    android:paddingStart="12dp"
-    android:paddingEnd="12dp"
-    android:paddingTop="10dp"
-    android:paddingBottom="10dp">
+    android:paddingStart="10dp"
+    android:paddingEnd="10dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp">
 
     <LinearLayout
-        android:id="@+id/habit_widget_top"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:baselineAligned="false"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <!-- The emoji takes the left half rather than a `Space` taking the
-             middle: a `RemoteViews` inflates through a factory that only allows
-             the classic view classes, and `Space` is not one of them — it
-             throws at inflation, on the launcher's side, where nothing can be
-             done about it. -->
-        <TextView
-            android:id="@+id/habit_widget_emoji"
-            style="@style/HabitWidgetEmoji"
-            android:layout_width="0dp"
-            android:layout_weight="1" />
+        android:id="@+id/habit_item_0"
+        style="@style/HabitWidgetRow">
 
         <ImageView
-            android:id="@+id/habit_widget_note"
-            style="@style/HabitWidgetNote"
-            android:contentDescription="@string/habit_widget_note" />
+            android:id="@+id/habit_item_0_check"
+            style="@style/HabitWidgetCheck"
+            android:contentDescription="@string/habit_widget_check" />
+
+        <TextView
+            android:id="@+id/habit_item_0_emoji"
+            style="@style/HabitWidgetEmoji" />
+
+        <TextView
+            android:id="@+id/habit_item_0_name"
+            style="@style/HabitWidgetName" />
     </LinearLayout>
 
-    <!-- The one thing this widget is for. -->
-    <ImageView
-        android:id="@+id/habit_widget_check"
-        style="@style/HabitWidgetCheck"
-        android:contentDescription="@string/habit_widget_check" />
+    <LinearLayout
+        android:id="@+id/habit_item_1"
+        style="@style/HabitWidgetRow">
 
-    <TextView
-        android:id="@+id/habit_widget_name"
-        style="@style/HabitWidgetName" />
+        <ImageView
+            android:id="@+id/habit_item_1_check"
+            style="@style/HabitWidgetCheck"
+            android:contentDescription="@string/habit_widget_check" />
 
-    <TextView
-        android:id="@+id/habit_widget_sub"
-        style="@style/HabitWidgetSub" />
+        <TextView
+            android:id="@+id/habit_item_1_emoji"
+            style="@style/HabitWidgetEmoji" />
 
-    <!-- Replaces the tile's contents when there is nothing to draw: no habits
-         at all, a habit that was deleted, a day the app has not caught up
-         with, or a widget that has not been pointed at a habit yet. -->
+        <TextView
+            android:id="@+id/habit_item_1_name"
+            style="@style/HabitWidgetName" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/habit_item_2"
+        style="@style/HabitWidgetRow">
+
+        <ImageView
+            android:id="@+id/habit_item_2_check"
+            style="@style/HabitWidgetCheck"
+            android:contentDescription="@string/habit_widget_check" />
+
+        <TextView
+            android:id="@+id/habit_item_2_emoji"
+            style="@style/HabitWidgetEmoji" />
+
+        <TextView
+            android:id="@+id/habit_item_2_name"
+            style="@style/HabitWidgetName" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/habit_item_3"
+        style="@style/HabitWidgetRow">
+
+        <ImageView
+            android:id="@+id/habit_item_3_check"
+            style="@style/HabitWidgetCheck"
+            android:contentDescription="@string/habit_widget_check" />
+
+        <TextView
+            android:id="@+id/habit_item_3_emoji"
+            style="@style/HabitWidgetEmoji" />
+
+        <TextView
+            android:id="@+id/habit_item_3_name"
+            style="@style/HabitWidgetName" />
+    </LinearLayout>
+
+    <!-- Stands in for the column when there is nothing to draw: no habits at
+         all, or an app that has never synced. -->
     <TextView
         android:id="@+id/habit_widget_message"
         style="@style/HabitWidgetMessage"

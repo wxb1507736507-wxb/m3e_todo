@@ -52,18 +52,30 @@ class HabitWidgetSync {
   }
 
   Future<void> _syncOnce() async {
-    await _adoptWidgetCheckIns();
+    // Awaited rather than read: on a cold start these providers are still
+    // loading, and a payload computed from "still loading" says there are no
+    // habits at all — which erases the tick of a check-in the user has just made
+    // on the home screen, and shows the wrong thing until the next publish a
+    // moment later.
+    final List<Habit> habits;
+    final List<HabitLog> logs;
+    try {
+      habits = await _ref.read(habitsProvider.future);
+      logs = await _ref.read(habitLogsProvider.future);
+    } on Object catch (error) {
+      // Nothing readable: leave the widget showing what it last knew rather than
+      // replacing it with an empty picture.
+      debugPrint('habit widget sync skipped: $error');
+      return;
+    }
 
-    final List<Habit> habits =
-        _ref.read(habitsProvider).value ?? const <Habit>[];
-    final List<HabitLog> logs =
-        _ref.read(habitLogsProvider).value ?? const <HabitLog>[];
+    final List<HabitLog> afterAdopting = await _adoptWidgetCheckIns(habits, logs);
     final DateTime now = _ref.read(clockProvider)();
 
     final bool placed = await AppPlatform.updateHabitWidget(
       habitWidgetPayload(
         habits: habits,
-        logs: logs,
+        logs: afterAdopting,
         now: now,
         todoSub: AppStrings.habitWidgetTileTodo,
         doneSub: AppStrings.habitWidgetTileDone,
@@ -79,7 +91,7 @@ class HabitWidgetSync {
     // add a widget that is already on the home screen.
     _ref.read(habitWidgetPlacedProvider.notifier).set(placed);
 
-    await AppPlatform.syncHabitAlarms(_desiredAlarms());
+    await AppPlatform.syncHabitAlarms(_desiredAlarms(habits, now));
 
     // Last, so it draws the payload this run just published rather than the
     // empty store a fresh install starts from.
@@ -107,25 +119,33 @@ class HabitWidgetSync {
     debugPrint('habit-widget-self-check: $report');
   }
 
-  /// Turns the taps the widget queued into stored check-ins.
+  /// Turns the taps the widget queued into stored check-ins, and answers with the
+  /// log as it stands afterwards.
+  ///
+  /// [habits] is passed in rather than re-read because that is the whole point:
+  /// a habit the *loaded* list does not contain really has been deleted, while a
+  /// habit missing from a list that has not loaded yet would mean a tap the user
+  /// made being thrown away — and the tick they saw on the tile going with it.
   ///
   /// A check-in that already exists is left alone rather than overwritten: the
   /// note the app may have added lives on that record, and the widget has no way
   /// to know about it.
-  Future<void> _adoptWidgetCheckIns() async {
+  Future<List<HabitLog>> _adoptWidgetCheckIns(
+    List<Habit> habits,
+    List<HabitLog> logs,
+  ) async {
     final List<HabitWidgetAction> actions =
         await AppPlatform.drainHabitCheckIns();
     if (actions.isEmpty) {
-      return;
+      return logs;
     }
-    final List<HabitLog> logs =
-        _ref.read(habitLogsProvider).value ?? const <HabitLog>[];
+    final Set<String> known = <String>{for (final Habit habit in habits) habit.id};
     final HabitLogsController controller = _ref.read(habitLogsProvider.notifier);
 
     for (final HabitWidgetAction action in actions) {
       // A habit deleted while the widget still showed it: the tap is dropped
       // rather than resurrecting a habit the user removed.
-      if (_ref.read(habitByIdProvider(action.habitId)) == null) {
+      if (!known.contains(action.habitId)) {
         continue;
       }
       final bool exists = logs.any(
@@ -142,18 +162,16 @@ class HabitWidgetSync {
         await controller.undo(action.habitId, action.dayKey);
       }
     }
+    return _ref.read(habitLogsProvider).value ?? logs;
   }
 
   /// The habit reminders that should exist right now.
   ///
   /// A habit with no reminder time contributes nothing — that is the whole of
   /// "也可选择不提醒": there is no alarm to skip, and no default to fall back on.
-  List<HabitAlarm> _desiredAlarms() {
-    final List<Habit> habits =
-        _ref.read(habitsProvider).value ?? const <Habit>[];
+  List<HabitAlarm> _desiredAlarms(List<Habit> habits, DateTime now) {
     final Map<String, Set<int>> doneDays = _ref.read(habitDoneDaysProvider);
     final AppSettings settings = _ref.read(settingsProvider);
-    final DateTime now = _ref.read(clockProvider)();
     final int todayKey = habitDayKey(now);
     final bool ring = settings.reminderMode == ReminderMode.ring;
 

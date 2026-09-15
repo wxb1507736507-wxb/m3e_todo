@@ -1203,14 +1203,6 @@ class HabitWidgetProvider : AppWidgetProvider() {
                     context.getString(R.string.habit_widget_no_data),
                 )
             }
-            // A payload is a picture of one day, and the day it was taken for is
-            // in it. When that day is no longer today the app has not been opened
-            // since, and drawing yesterday's state as today's would both lie and
-            // file a check-in against the wrong date.
-            val payloadDay = snapshot.optInt("dayKey", 0)
-            if (payloadDay != 0 && payloadDay != todayKey()) {
-                return messageTile(context, views, snapshot.optString("staleText"))
-            }
             if (snapshot.optBoolean("empty", false)) {
                 return messageTile(context, views, snapshot.optString("emptyTitle"))
             }
@@ -1227,36 +1219,53 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 return messageTile(context, views, snapshot.optString("missingText"))
             }
 
-            val done = tile.optBoolean("done")
+            // A payload is a picture of one day, and the day it was taken for is
+            // in it. When that day is no longer today the app has not been opened
+            // since, so the *state* is yesterday's — but the habit is still the
+            // habit, and a tile that blanks out on the first morning the app is
+            // not opened is worse than one that says what it needs: the name and
+            // the emoji stay, the state is replaced by that sentence, and there is
+            // no target to check in against the wrong day.
+            val stale = snapshot.optInt("dayKey", 0).let { it != 0 && it != todayKey() }
+            val done = !stale && tile.optBoolean("done")
             val dayKey = snapshot.optInt("dayKey", 0)
 
             views.setViewVisibility(R.id.habit_widget_message, android.view.View.GONE)
-            views.setViewVisibility(R.id.habit_widget_check, android.view.View.VISIBLE)
             views.setViewVisibility(R.id.habit_widget_name, android.view.View.VISIBLE)
             views.setViewVisibility(R.id.habit_widget_sub, android.view.View.VISIBLE)
             views.setViewVisibility(R.id.habit_widget_emoji, android.view.View.VISIBLE)
+            views.setViewVisibility(
+                R.id.habit_widget_check,
+                if (stale) android.view.View.GONE else android.view.View.VISIBLE,
+            )
 
             views.setTextViewText(R.id.habit_widget_emoji, tile.optString("emoji"))
             views.setTextViewText(R.id.habit_widget_name, tile.optString("name"))
-            views.setTextViewText(R.id.habit_widget_sub, subFor(snapshot, tile))
+            views.setTextViewText(
+                R.id.habit_widget_sub,
+                if (stale) snapshot.optString("staleText") else subFor(snapshot, tile),
+            )
             views.setTextColor(
                 R.id.habit_widget_name,
                 context.getColor(
                     if (done) R.color.habit_widget_done else R.color.habit_widget_text,
                 ),
             )
-            views.setImageViewResource(
-                R.id.habit_widget_check,
-                if (done) R.drawable.habit_check_done else R.drawable.habit_check_todo,
-            )
-            views.setOnClickPendingIntent(
-                R.id.habit_widget_check,
-                toggleIntent(context, habitId, dayKey, !done),
-            )
+            if (!stale) {
+                views.setImageViewResource(
+                    R.id.habit_widget_check,
+                    if (done) R.drawable.habit_check_done else R.drawable.habit_check_todo,
+                )
+                views.setOnClickPendingIntent(
+                    R.id.habit_widget_check,
+                    toggleIntent(context, habitId, dayKey, !done),
+                )
+            }
 
             // Only habits that accept a note get the ＋: offering to write
-            // something the habit does not keep would be a lie.
-            val allowsNote = tile.optBoolean("note")
+            // something the habit does not keep would be a lie. Not on a stale day
+            // either — the note would be filed against yesterday.
+            val allowsNote = !stale && tile.optBoolean("note")
             views.setViewVisibility(
                 R.id.habit_widget_note,
                 if (allowsNote) android.view.View.VISIBLE else android.view.View.GONE,

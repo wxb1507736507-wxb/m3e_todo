@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_todo/app/app_background.dart';
@@ -8,6 +9,7 @@ import 'package:m3e_todo/features/timetable/domain/entities/course.dart';
 import 'package:m3e_todo/features/timetable/domain/entities/period_time.dart';
 import 'package:m3e_todo/features/timetable/domain/entities/term.dart';
 import 'package:m3e_todo/features/timetable/domain/entities/timetable.dart';
+import 'package:m3e_todo/features/timetable/presentation/widgets/course_detail_sheet.dart';
 import 'package:m3e_todo/features/timetable/presentation/widgets/course_editor_sheet.dart';
 import 'package:m3e_todo/features/timetable/presentation/widgets/course_import_sheet.dart';
 
@@ -240,7 +242,7 @@ void main() {
     expect(find.text('高等数学'), findsOneWidget);
   });
 
-  testWidgets('tapping an empty cell opens the editor filled in for it', (
+  testWidgets('tapping an empty cell offers a plus, and the plus opens the editor', (
     WidgetTester tester,
   ) async {
     _useTallWindow(tester);
@@ -259,9 +261,18 @@ void main() {
     // The first period of the first column — Monday, period 1.
     await tester.tapAt(_firstCell(tester));
     await tester.pumpAndSettle();
+    // A tap on an empty cell asks *where* before it asks what: the phone's own
+    // timetable answers with a plus on that cell, and the form is one tap
+    // further on. A grid where every stray tap opens a form is a grid nobody
+    // can touch just to look at.
+    expect(find.byType(CourseEditorSheet), findsNothing);
+    expect(find.byTooltip(AppStrings.courseAddHere), findsOneWidget);
+
+    await tester.tap(find.byTooltip(AppStrings.courseAddHere));
+    await tester.pumpAndSettle();
     expect(find.byType(CourseEditorSheet), findsOneWidget);
     // The weekday and the period are already answered, and the row reads them
-    // back: 周一 第1节 is what a tap on that cell means.
+    // back: 周一 第1节 is what the plus on that cell means.
     expect(find.text('周一 第1节'), findsOneWidget);
 
     await tester.enterText(find.byType(TextFormField).first, '线性代数');
@@ -273,6 +284,82 @@ void main() {
     expect(stored.slots.single.startPeriod, 1);
     expect(find.text('线性代数'), findsOneWidget);
   });
+
+  testWidgets('tapping an empty cell again puts the plus away', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: FakeTimetableRepository(
+          Timetable(term: term(), courses: const <Course>[]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    await tester.tapAt(_firstCell(tester));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip(AppStrings.courseAddHere), findsOneWidget);
+
+    await tester.tapAt(_firstCell(tester));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip(AppStrings.courseAddHere), findsNothing);
+  });
+
+  testWidgets('tapping a course shows 课程详情, and 编辑 opens the editor', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(
+        term: term(),
+        courses: <Course>[course('c1', room: '教三 201')],
+      ),
+    );
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    await tester.tap(find.text('高等数学').first);
+    await tester.pumpAndSettle();
+
+    // The sheet the phone opens on a course: what it is, where, when, and which
+    // weeks — with the form one button away rather than instead of the answer.
+    expect(find.byType(CourseDetailSheet), findsOneWidget);
+    expect(find.text(AppStrings.courseDetailTitle), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(CourseDetailSheet),
+        matching: find.text('高等数学'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('${AppStrings.courseDetailRoomPrefix}教三 201'), findsOneWidget);
+    // The line carries the clock times those periods run at.
+    expect(find.textContaining('周二 第1-2节（08:00 - 09:35）'), findsOneWidget);
+    expect(find.byType(CourseEditorSheet), findsNothing);
+
+    await tester.tap(find.text(AppStrings.actionEdit));
+    await tester.pumpAndSettle();
+    expect(find.byType(CourseEditorSheet), findsOneWidget);
+  });
+
+  /// Opens a course's editor the way a user does: the course, then 课程详情, then
+  /// 编辑. A tap on a course is a question first and a form second.
+  Future<void> openCourseEditor(WidgetTester tester, String name) async {
+    await tester.tap(find.text(name).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AppStrings.actionEdit));
+    await tester.pumpAndSettle();
+  }
 
   /// Opens the single-course editor the way a user does: 新建课程, then the
   /// first of its three answers.
@@ -473,8 +560,7 @@ void main() {
     await tester.pumpAndSettle();
     await openTimetable(tester);
 
-    await tester.tap(find.text('高等数学'));
-    await tester.pumpAndSettle();
+    await openCourseEditor(tester, '高等数学');
 
     // The same controls the app's own background is set with, in a sheet that
     // is one screen tall — so they are there to be scrolled to, not lost.
@@ -828,15 +914,13 @@ void main() {
     await tester.pumpAndSettle();
     await openTimetable(tester);
 
-    await tester.tap(find.text('高等数学'));
-    await tester.pumpAndSettle();
+    await openCourseEditor(tester, '高等数学');
     await tester.enterText(find.byType(TextFormField).first, '高数（二）');
     await tapInEditor(tester, AppStrings.done);
     expect(repository.stored!.courses.single.name, '高数（二）');
     expect(find.text('高数（二）'), findsOneWidget);
 
-    await tester.tap(find.text('高数（二）'));
-    await tester.pumpAndSettle();
+    await openCourseEditor(tester, '高数（二）');
     await tapInEditor(tester, AppStrings.actionDelete);
     expect(find.text(AppStrings.courseDeleteTitle), findsOneWidget);
     await tester.tap(find.text(AppStrings.confirm));
@@ -854,16 +938,19 @@ void main() {
       buildTestApp(
         repository: FakeTodoRepository(),
         timetableRepository: FakeTimetableRepository(
-          Timetable(term: term(), courses: <Course>[course('c1')]),
+          // Monday, period 1 — which is where a course started from the button
+          // begins, so the clash is there before anything is typed.
+          Timetable(
+            term: term(),
+            courses: <Course>[course('c1', weekday: DateTime.monday)],
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
     await openTimetable(tester);
 
-    // The same day and periods as the course already there.
-    await tester.tapAt(_firstCell(tester, column: 1));
-    await tester.pumpAndSettle();
+    await openSingleCourseEditor(tester);
     await tester.enterText(find.byType(TextFormField).first, '体育');
     await tester.pumpAndSettle();
 
@@ -871,7 +958,60 @@ void main() {
     // its start rather than in full.
     expect(find.textContaining('与「高等数学」在'), findsOneWidget);
     // The slot it names is the one already on the grid.
-    expect(find.textContaining('周二'), findsWidgets);
+    expect(find.textContaining('周一'), findsWidgets);
+  });
+
+  testWidgets('the time picker is a wheel, and turning it changes the slot', (
+    WidgetTester tester,
+  ) async {
+    _useTallWindow(tester);
+    final FakeTimetableRepository repository = FakeTimetableRepository(
+      Timetable(term: term(), courses: const <Course>[]),
+    );
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    await openSingleCourseEditor(tester);
+    await tester.enterText(find.byType(TextFormField).first, '体育');
+
+    // A new course starts on Monday, and its first meeting reads back.
+    expect(find.text('周一 第1节'), findsOneWidget);
+
+    await tester.tap(find.text(AppStrings.courseSlotCount(1)));
+    await tester.pumpAndSettle();
+
+    // Three wheels — day, first period, last period — as the phone's own editor
+    // has, because a period is a number on a scale rather than a set to pick
+    // from.
+    expect(find.byType(CupertinoPicker), findsNWidgets(3));
+    expect(find.text(AppStrings.courseSlotWeekday), findsOneWidget);
+    expect(find.text(AppStrings.courseSlotFromLabel), findsOneWidget);
+    expect(find.text(AppStrings.courseSlotToLabel), findsOneWidget);
+
+    // One notch up the day wheel is Tuesday; one notch on the end wheel turns a
+    // single period into a two-period class.
+    await tester.drag(find.byType(CupertinoPicker).at(0), const Offset(0, -40));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(CupertinoPicker).at(2), const Offset(0, -40));
+    await tester.pumpAndSettle();
+    // The line above the buttons is the answer the wheels are giving.
+    expect(find.text('周二 第1-2节'), findsOneWidget);
+
+    await tester.tap(find.text(AppStrings.confirm));
+    await tester.pumpAndSettle();
+    expect(find.text('周二 第1-2节'), findsOneWidget);
+
+    await tapInEditor(tester, AppStrings.done);
+    final Course stored = repository.stored!.courses.single;
+    expect(stored.slots.single.weekday, DateTime.tuesday);
+    expect(stored.slots.single.startPeriod, 1);
+    expect(stored.slots.single.endPeriod, 2);
   });
 
   testWidgets('a term that is one week long shows one week of courses', (

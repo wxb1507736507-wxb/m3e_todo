@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -533,6 +534,13 @@ Future<CourseSlot?> _pickSlot(
   );
 }
 
+/// Three wheels: which day, which period it starts, which period it ends.
+///
+/// Wheels rather than a row of chips because a period is a number on a scale
+/// rather than a set to choose from — every term has periods 1 to 9, in order,
+/// and spinning to the ninth is how a thumb says "period 9" without reading
+/// anything. The three are one gesture away from each other, which is what a
+/// weekly meeting is: a day and a range.
 class _SlotSheet extends StatefulWidget {
   const _SlotSheet({required this.slot, required this.periodNumbers});
 
@@ -548,100 +556,76 @@ class _SlotSheetState extends State<_SlotSheet> {
   late int _start = widget.slot.startPeriod;
   late int _end = widget.slot.endPeriod;
 
+  late final FixedExtentScrollController _weekdayWheel =
+      FixedExtentScrollController(initialItem: _weekday - 1);
+  late final FixedExtentScrollController _startWheel = FixedExtentScrollController(
+    initialItem: _indexOfPeriod(_start),
+  );
+  late final FixedExtentScrollController _endWheel = FixedExtentScrollController(
+    initialItem: _indexOfPeriod(_end) - _indexOfPeriod(_start),
+  );
+
+  int _indexOfPeriod(int period) {
+    final int index = widget.periodNumbers.indexOf(period);
+    return index < 0 ? 0 : index;
+  }
+
+  /// The periods [period] could end on: itself and everything after it.
+  ///
+  /// A range that ends before it begins is not a range, so the end wheel does
+  /// not offer one — and when the start moves past the end, the end moves with
+  /// it rather than being left behind.
+  List<int> get _endChoices => <int>[
+        for (final int period in widget.periodNumbers)
+          if (period >= _start) period,
+      ];
+
+  void _onStartChanged(int index) {
+    final int start = widget.periodNumbers[index];
+    setState(() {
+      _start = start;
+      if (_end < start) {
+        _end = start;
+      }
+    });
+    // The end wheel's items changed underneath it, so it is re-pointed at the
+    // period it is standing on rather than left at a stale offset.
+    _endWheel.jumpToItem(_endChoices.indexOf(_end).clamp(0, _endChoices.length - 1));
+  }
+
+  @override
+  void dispose() {
+    _weekdayWheel.dispose();
+    _startWheel.dispose();
+    _endWheel.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final TextTheme text = Theme.of(context).textTheme;
+    final ColorScheme colors = Theme.of(context).colorScheme;
 
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(AppStrings.courseSlotsLabel, style: text.titleLarge),
-            const SizedBox(height: 14),
-            _Label(AppStrings.courseSlotWeekday),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: Row(
               children: <Widget>[
-                for (int weekday = 1; weekday <= 7; weekday++)
-                  ChoiceChip(
-                    label: Text('周${kCourseWeekdayNames[weekday - 1]}'),
-                    selected: _weekday == weekday,
-                    onSelected: (_) => setState(() => _weekday = weekday),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            _Label(AppStrings.courseSlotPeriods),
-            const SizedBox(height: 8),
-            Row(
-              children: <Widget>[
-                SizedBox(
-                  width: 34,
-                  child: Text(AppStrings.courseSlotFromLabel, style: text.bodyMedium),
-                ),
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: <Widget>[
-                      for (final int period in widget.periodNumbers)
-                        ChoiceChip(
-                          label: Text('$period'),
-                          selected: _start == period,
-                          onSelected: (_) => setState(() {
-                            _start = period;
-                            // The end follows the start rather than being left
-                            // behind it: a range that ends before it begins is
-                            // not a range.
-                            if (_end < period) {
-                              _end = period;
-                            }
-                          }),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: <Widget>[
-                SizedBox(
-                  width: 34,
-                  child: Text(AppStrings.courseSlotToLabel, style: text.bodyMedium),
-                ),
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: <Widget>[
-                      for (final int period in widget.periodNumbers)
-                        if (period >= _start)
-                          ChoiceChip(
-                            label: Text('$period'),
-                            selected: _end == period,
-                            onSelected: (_) => setState(() => _end = period),
-                          ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: <Widget>[
-                const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text(AppStrings.cancel),
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
+                Expanded(
+                  child: Text(
+                    AppStrings.courseSlotsLabel,
+                    textAlign: TextAlign.center,
+                    style: text.titleMedium,
+                  ),
+                ),
+                TextButton(
                   onPressed: () => Navigator.of(context).pop(
                     CourseSlot(
                       weekday: _weekday,
@@ -649,18 +633,119 @@ class _SlotSheetState extends State<_SlotSheet> {
                       endPeriod: _end,
                     ),
                   ),
-                  // 确定 rather than 完成, because the editor behind this sheet
-                  // has a 完成 of its own and one screen should not offer two.
                   child: const Text(AppStrings.confirm),
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+          // The three columns are labelled above the wheels rather than beside
+          // them: a wheel has no room for a label, and a label inside it would
+          // scroll away with the values.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: <Widget>[
+                Expanded(child: _WheelLabel(AppStrings.courseSlotWeekday)),
+                Expanded(child: _WheelLabel(AppStrings.courseSlotFromLabel)),
+                Expanded(child: _WheelLabel(AppStrings.courseSlotToLabel)),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 216,
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: CupertinoPicker(
+                    scrollController: _weekdayWheel,
+                    itemExtent: 40,
+                    looping: true,
+                    onSelectedItemChanged: (int index) =>
+                        setState(() => _weekday = index + 1),
+                    selectionOverlay: const CupertinoPickerDefaultSelectionOverlay(
+                      background: Color(0x14000000),
+                    ),
+                    children: <Widget>[
+                      for (int weekday = 1; weekday <= 7; weekday++)
+                        _WheelItem('周${kCourseWeekdayNames[weekday - 1]}'),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: CupertinoPicker(
+                    scrollController: _startWheel,
+                    itemExtent: 40,
+                    onSelectedItemChanged: _onStartChanged,
+                    selectionOverlay: const CupertinoPickerDefaultSelectionOverlay(
+                      background: Color(0x14000000),
+                    ),
+                    children: <Widget>[
+                      for (final int period in widget.periodNumbers)
+                        _WheelItem(AppStrings.periodLabel(period)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: CupertinoPicker(
+                    scrollController: _endWheel,
+                    itemExtent: 40,
+                    onSelectedItemChanged: (int index) =>
+                        setState(() => _end = _endChoices[index]),
+                    selectionOverlay: const CupertinoPickerDefaultSelectionOverlay(
+                      background: Color(0x14000000),
+                    ),
+                    children: <Widget>[
+                      for (final int period in _endChoices)
+                        _WheelItem(AppStrings.periodLabel(period)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text(
+              CourseSlot(
+                weekday: _weekday,
+                startPeriod: _start,
+                endPeriod: _end,
+              ).label,
+              style: text.titleMedium?.copyWith(color: colors.primary),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+
+class _WheelLabel extends StatelessWidget {
+  const _WheelLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+        text,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+      );
+}
+
+class _WheelItem extends StatelessWidget {
+  const _WheelItem(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Text(text, style: Theme.of(context).textTheme.titleMedium),
+      );
+}
+
 
 /// Picks the weeks a course runs, in the term's own numbering.
 Future<Set<int>?> _pickWeeks(

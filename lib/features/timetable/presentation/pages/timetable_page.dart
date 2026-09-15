@@ -17,6 +17,7 @@ import '../../domain/entities/timetable.dart';
 import '../../../../core/platform/app_platform.dart';
 import '../course_widget_sync.dart';
 import '../providers/timetable_providers.dart';
+import '../widgets/course_detail_sheet.dart';
 import '../widgets/course_editor_sheet.dart';
 import '../widgets/course_list_page.dart';
 import '../widgets/course_new_menu.dart';
@@ -138,16 +139,57 @@ class TimetablePage extends ConsumerWidget {
   }
 }
 
-class _Body extends ConsumerWidget {
+class _Body extends ConsumerStatefulWidget {
   const _Body({required this.timetable, required this.now});
 
   final Timetable timetable;
   final DateTime now;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {    final Term term = timetable.term;
+  ConsumerState<_Body> createState() => _BodyState();
+}
+
+class _BodyState extends ConsumerState<_Body> {
+  /// The empty cell the user has pointed at, waiting for its plus to be tapped.
+  ///
+  /// One cell at a time, and it is a *choice* rather than an action: the phone's
+  /// own timetable answers a tap on an empty cell with a plus to press, and the
+  /// difference matters — a timetable is mostly empty, and a grid where every
+  /// stray tap opens a form is a grid you cannot touch to look at.
+  int? _armedWeekday;
+  int? _armedPeriod;
+
+  void _arm(int weekday, int period) {
+    setState(() {
+      if (_armedWeekday == weekday && _armedPeriod == period) {
+        _armedWeekday = null;
+        _armedPeriod = null;
+        return;
+      }
+      _armedWeekday = weekday;
+      _armedPeriod = period;
+    });
+  }
+
+  void _disarm() {
+    if (_armedWeekday == null) {
+      return;
+    }
+    setState(() {
+      _armedWeekday = null;
+      _armedPeriod = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Timetable timetable = widget.timetable;
+    final DateTime now = widget.now;
+    final Term term = timetable.term;
     final int week = ref.watch(shownWeekProvider);
     final int currentWeek = ref.watch(currentWeekProvider);
+    final TextTheme text = Theme.of(context).textTheme;
+    final ColorScheme colors = Theme.of(context).colorScheme;
 
     return Column(
       children: <Widget>[
@@ -169,34 +211,61 @@ class _Body extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
             child: Text(
               AppStrings.timetableNoCoursesBody,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+              style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
             ),
           ),
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 96),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                _PeriodColumn(periods: term.periods),
-                // Two columns or seven, from the term's own answer: a timetable
-                // with no Saturday classes is not improved by two empty ones.
-                for (final int weekday in term.shownWeekdays)
-                  Expanded(
-                    child: _DayColumn(
-                      term: term,
-                      week: week,
-                      weekday: weekday,
-                      meetings: timetable.meetingsOnDay(week, weekday),
-                      otherWeeks: term.showOtherWeeks
-                          ? timetable.meetingsOnDayInOtherWeeks(week, weekday)
-                          : const <CourseMeeting>[],
-                      isToday: _isToday(term, week, weekday, now),
+          child: GestureDetector(
+            // A tap that lands between the cells — on a rule, or on the padding
+            // around the grid — puts the plus away, which is how a thing that
+            // appeared is expected to disappear.
+            behavior: HitTestBehavior.deferToChild,
+            onTap: _disarm,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 96),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  _PeriodColumn(periods: term.periods),
+                  // Two columns or seven, from the term's own answer: a timetable
+                  // with no Saturday classes is not improved by two empty ones.
+                  for (final int weekday in term.shownWeekdays)
+                    Expanded(
+                      child: _DayColumn(
+                        term: term,
+                        week: week,
+                        weekday: weekday,
+                        meetings: timetable.meetingsOnDay(week, weekday),
+                        otherWeeks: term.showOtherWeeks
+                            ? timetable.meetingsOnDayInOtherWeeks(week, weekday)
+                            : const <CourseMeeting>[],
+                        isToday: _isToday(term, week, weekday, now),
+                        armedPeriod: _armedWeekday == weekday ? _armedPeriod : null,
+                        onCellTap: (int period) => _arm(weekday, period),
+                        onAddHere: (int period) {
+                          _disarm();
+                          unawaited(
+                            showCourseEditorSheet(
+                              context,
+                              weekday: weekday,
+                              period: period,
+                            ),
+                          );
+                        },
+                        onCourseTap: (Course course) {
+                          _disarm();
+                          unawaited(
+                            showCourseDetailSheet(
+                              context,
+                              course: course,
+                              term: term,
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -388,6 +457,10 @@ class _DayColumn extends ConsumerWidget {
     required this.meetings,
     required this.otherWeeks,
     required this.isToday,
+    required this.armedPeriod,
+    required this.onCellTap,
+    required this.onAddHere,
+    required this.onCourseTap,
   });
 
   final Term term;
@@ -400,6 +473,13 @@ class _DayColumn extends ConsumerWidget {
   final List<CourseMeeting> otherWeeks;
 
   final bool isToday;
+
+  /// The period of this day whose plus is showing, if any.
+  final int? armedPeriod;
+
+  final ValueChanged<int> onCellTap;
+  final ValueChanged<int> onAddHere;
+  final ValueChanged<Course> onCourseTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {    final ColorScheme colors = Theme.of(context).colorScheme;
@@ -441,13 +521,7 @@ class _DayColumn extends ConsumerWidget {
                 for (int index = 0; index < rows; index++)
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => unawaited(
-                      showCourseEditorSheet(
-                        context,
-                        weekday: weekday,
-                        period: index + 1,
-                      ),
-                    ),
+                    onTap: () => onCellTap(index + 1),
                     child: Container(
                       height: TimetablePage.rowHeight,
                       decoration: BoxDecoration(
@@ -463,6 +537,20 @@ class _DayColumn extends ConsumerWidget {
                   ),
               ],
             ),
+            // The plus, on the cell that was pointed at: an empty cell answers a
+            // tap with a way to fill it rather than with the form itself.
+            if (armedPeriod != null && armedPeriod! >= 1 && armedPeriod! <= rows)
+              Positioned(
+                top: (armedPeriod! - 1) * TimetablePage.rowHeight,
+                left: 0,
+                right: 0,
+                height: TimetablePage.rowHeight,
+                child: Center(
+                  child: _AddHereButton(
+                    onPressed: () => onAddHere(armedPeriod!),
+                  ),
+                ),
+              ),
             // The courses of other weeks first, so that a real one of this week
             // is drawn over them rather than under.
             for (final CourseMeeting meeting in ghostMeetings)
@@ -476,9 +564,7 @@ class _DayColumn extends ConsumerWidget {
                   term: term,
                   accent: _accentOf(timetable, meeting.course, colors),
                   ghost: true,
-                  onTap: () => unawaited(
-                    showCourseEditorSheet(context, existing: meeting.course),
-                  ),
+                  onTap: () => onCourseTap(meeting.course),
                 ),
               ),
             for (final CourseMeeting meeting in meetings)
@@ -491,9 +577,7 @@ class _DayColumn extends ConsumerWidget {
                   meeting: meeting,
                   term: term,
                   accent: _accentOf(timetable, meeting.course, colors),
-                  onTap: () => unawaited(
-                    showCourseEditorSheet(context, existing: meeting.course),
-                  ),
+                  onTap: () => onCourseTap(meeting.course),
                 ),
               ),
           ],
@@ -517,6 +601,39 @@ class _DayColumn extends ConsumerWidget {
       colors.tertiaryContainer,
     ];
     return palette[index.abs() % palette.length];
+  }
+}
+
+/// The plus that answers a tap on an empty cell.
+///
+/// Small and round and in the middle of the cell it belongs to, so that which
+/// cell is about to be filled in is not in question.
+class _AddHereButton extends StatelessWidget {
+  const _AddHereButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colors.primary,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: Tooltip(
+          message: AppStrings.courseAddHere,
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: Icon(Icons.add, size: 20, color: colors.onPrimary),
+          ),
+        ),
+      ),
+    );
   }
 }
 

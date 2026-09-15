@@ -391,6 +391,18 @@ abstract final class AppStrings {
   static const String courseDeleteTitle = '删除这门课程？';
   static const String courseSaved = '已保存';
 
+  // --- The course's own sheet, which the phone's timetable calls 课程详情 -----
+
+  static const String courseDetailTitle = '课程详情';
+  static const String courseDetailClose = '关闭';
+  static const String courseDetailRoomPrefix = '教室：';
+  static const String courseDetailNotePrefix = '备注（如老师）：';
+  static const String courseDetailNoRoom = '教室：未填写';
+  static const String courseDetailNoNote = '备注（如老师）：未填写';
+
+  /// The plus that appears on an empty cell, and what tapping it does.
+  static const String courseAddHere = '在这格加课';
+
   /// One weekly meeting of a course, numbered the way the phone numbers them.
   static String courseSlotCount(int index) => '课程时间$index';
 

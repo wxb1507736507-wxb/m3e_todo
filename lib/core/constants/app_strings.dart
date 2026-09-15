@@ -375,7 +375,7 @@ abstract final class AppStrings {
   static const String habitWidgetAdded = '小组件已添加到桌面';
   static const String habitWidgetPinRequested = '请在系统弹窗里确认添加';
   static const String habitWidgetManualHint =
-      '若系统没有弹出确认，请长按桌面空白处 → 在「卡片」旁找到小组件列表，选择「打卡小组件」';
+      '若系统没有弹出确认，请到桌面的「小组件 / 卡片」入口手动添加「打卡小组件」';
   static const String habitWidgetUnsupported = '当前设备不支持桌面小组件';
   static const String habitWidgetOnDesktop = '已添加到桌面';
   static const String habitWidgetAddMore = '再加一个';

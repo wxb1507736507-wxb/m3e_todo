@@ -24,7 +24,11 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.RemoteViews
+import android.widget.TextView
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -732,6 +736,10 @@ class MainActivity : FlutterActivity() {
                 result.success(actions)
             }
             "takeHabitOpenRequest" -> result.success(HabitWidgetStore.takeOpen(this))
+            // Debug-only: draws the widget's view tree without a launcher and
+            // answers with the text that came out of it. See
+            // HabitWidgetProvider.selfCheck for why this exists at all.
+            "selfCheckHabitWidget" -> result.success(HabitWidgetProvider.selfCheck(this))
             else -> result.notImplemented()
         }
     }
@@ -1155,8 +1163,24 @@ class HabitWidgetProvider : AppWidgetProvider() {
             ComponentName(context, HabitWidgetProvider::class.java)
 
         private fun render(context: Context, manager: AppWidgetManager, id: Int) {
-            val views = RemoteViews(context.packageName, R.layout.habit_widget)
             val snapshot = HabitWidgetStore.snapshot(context)
+            manager.updateAppWidget(id, buildViews(context, snapshot, rowsThatFit(manager, id)))
+        }
+
+        /**
+         * Builds the widget's view tree and binds [snapshot] into it.
+         *
+         * Separate from [render] because a launcher is not always available to
+         * draw the result: [selfCheck] applies the same tree to a throwaway
+         * parent so the layout, every view id in it, and every value bound to
+         * them can be exercised on a device that will not host the widget.
+         */
+        private fun buildViews(
+            context: Context,
+            snapshot: JSONObject?,
+            rowsToShow: Int,
+        ): RemoteViews {
+            val views = RemoteViews(context.packageName, R.layout.habit_widget)
 
             // Tapping anywhere the buttons are not brings the app forward: the
             // widget is a summary, and the way to change what it summarises is
@@ -1174,16 +1198,36 @@ class HabitWidgetProvider : AppWidgetProvider() {
                     context.getString(R.string.habit_widget_no_data),
                 )
                 views.setTextViewText(R.id.habit_widget_empty_body, "")
-                manager.updateAppWidget(id, views)
-                return
+                return views
             }
 
             val rows = snapshot.optJSONArray("rows") ?: JSONArray()
-            val available = rowsThatFit(manager, id)
-            val shown = minOf(available, rows.length())
+            val shown = minOf(rowsToShow, rows.length())
             val hidden = rows.length() - shown
             val overflow = hidden + snapshot.optInt("overflow", 0)
             val empty = snapshot.optBoolean("empty", false) || rows.length() == 0
+
+            // A snapshot is a picture of one day, and the day it was taken for
+            // is in it. When that day is no longer today — the app has not been
+            // opened since — the rows are yesterday's habits, and offering them
+            // as today's would both lie and file a check-in against the wrong
+            // date. So the widget says what it needs instead of guessing.
+            val snapshotDay = snapshot.optInt("dayKey", 0)
+            if (snapshotDay != 0 && snapshotDay != todayKey()) {
+                views.setViewVisibility(R.id.habit_widget_title, android.view.View.GONE)
+                views.setViewVisibility(R.id.habit_widget_count, android.view.View.GONE)
+                for (index in 0 until MAX_ROWS) {
+                    views.setViewVisibility(rowId(index), android.view.View.GONE)
+                }
+                views.setViewVisibility(R.id.habit_widget_empty_title, android.view.View.VISIBLE)
+                views.setViewVisibility(R.id.habit_widget_empty_body, android.view.View.GONE)
+                views.setViewVisibility(R.id.habit_widget_more, android.view.View.GONE)
+                views.setTextViewText(
+                    R.id.habit_widget_empty_title,
+                    context.getString(R.string.habit_widget_stale),
+                )
+                return views
+            }
 
             views.setViewVisibility(
                 R.id.habit_widget_title,
@@ -1230,7 +1274,11 @@ class HabitWidgetProvider : AppWidgetProvider() {
                         if (done) R.color.habit_widget_done else R.color.habit_widget_text,
                     ),
                 )
-                val time = row.optString("time")
+                // `optString` on a JSON null answers the four-letter string
+                // "null", which is why the check is `isNull` and not a length
+                // test: a habit with no reminder would otherwise show the word
+                // "null" under its name on the home screen.
+                val time = if (row.isNull("time")) "" else row.optString("time")
                 views.setTextViewText(timeId(index), time)
                 views.setViewVisibility(
                     timeId(index),
@@ -1269,7 +1317,80 @@ class HabitWidgetProvider : AppWidgetProvider() {
                     context.getString(R.string.habit_widget_more, overflow),
                 )
             }
-            manager.updateAppWidget(id, views)
+            return views
+        }
+
+        /**
+         * Draws the widget into a view nobody sees, and reports what came out.
+         *
+         * This exists because the widget's most failure-prone part — that every
+         * id in `habit_widget.xml` is what the code assumes it is, and that the
+         * launcher's own inflation of the layout succeeds — cannot be reached by
+         * a Flutter test and is not reachable at all on a launcher that will not
+         * host the widget. Applying the tree here runs the same inflation and the
+         * same actions the launcher would run, and the texts it returns are the
+         * proof that the binding happened.
+         *
+         * Only ever called from a debug build; see `HabitWidgetSync`.
+         */
+        fun selfCheck(context: Context): Map<String, Any?> {
+            val snapshot = HabitWidgetStore.snapshot(context)
+            return runCatching {
+                mapOf(
+                    "ok" to true,
+                    "current" to renderTexts(context, snapshot),
+                    // The same payload with yesterday's date on it: this is what
+                    // the widget finds after a day it was not opened during, and
+                    // it has to reach for the app rather than show it.
+                    "stale" to renderTexts(context, forcedDay(snapshot, -1)),
+                    "empty" to renderTexts(context, null),
+                    "rows" to (snapshot?.optJSONArray("rows")?.length() ?: 0),
+                )
+            }.getOrElse { error ->
+                mapOf("ok" to false, "reason" to error.toString())
+            }
+        }
+
+        /** Draws one payload and answers with the text that came out. */
+        private fun renderTexts(context: Context, snapshot: JSONObject?): List<String> {
+            val views = buildViews(context, snapshot, MAX_ROWS)
+            val root = views.apply(context, FrameLayout(context))
+            val texts = ArrayList<String>()
+            collectText(root, texts)
+            return texts
+        }
+
+        /** A copy of [snapshot] dated [daysFromToday] days ago. */
+        private fun forcedDay(snapshot: JSONObject?, daysFromToday: Int): JSONObject? {
+            if (snapshot == null) return null
+            val calendar = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, daysFromToday)
+            }
+            val dayKey = calendar.get(Calendar.YEAR) * 10000 +
+                (calendar.get(Calendar.MONTH) + 1) * 100 +
+                calendar.get(Calendar.DAY_OF_MONTH)
+            return JSONObject(snapshot.toString()).put("dayKey", dayKey)
+        }
+
+        /** Today as `20260915`, the packing the app uses for a day. */
+        private fun todayKey(): Int {
+            val now = Calendar.getInstance()
+            return now.get(Calendar.YEAR) * 10000 +
+                (now.get(Calendar.MONTH) + 1) * 100 +
+                now.get(Calendar.DAY_OF_MONTH)
+        }
+
+        /** The visible text in a view tree, in draw order. */
+        private fun collectText(view: View, into: MutableList<String>) {
+            if (view.visibility != View.VISIBLE) return
+            if (view is TextView) {
+                into.add(view.text?.toString().orEmpty())
+            }
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) {
+                    collectText(view.getChildAt(index), into)
+                }
+            }
         }
 
         /**

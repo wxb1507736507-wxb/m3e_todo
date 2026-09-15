@@ -2,12 +2,11 @@
 <!--
   What the launcher needs to know before it shows the habit widget.
 
-  `updatePeriodMillis` is 0 on purpose: the widget is redrawn when the app says
-  the day changed (or when the user taps it), and a periodic wake-up every half
-  hour to redraw four unchanged rows would be a battery cost for nothing.
-
-  The cell sizes are the Android 12+ hints; `minWidth`/`minHeight` cover the
-  older launchers that only understand those.
+  `updatePeriodMillis` is half an hour — the shortest Android allows — for one
+  reason only: the widget shows *today's* habits, and if the app is never opened
+  again the day still changes underneath it. The periodic call is what lets the
+  widget notice and stop showing yesterday's list as if it were today's. It is
+  the launcher's own alarm, so it costs the app nothing to keep.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/habit_widget_description"
@@ -18,5 +17,5 @@
     android:resizeMode="horizontal|vertical"
     android:targetCellHeight="2"
     android:targetCellWidth="3"
-    android:updatePeriodMillis="0"
+    android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen" />

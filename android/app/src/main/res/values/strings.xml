@@ -12,6 +12,7 @@
     <string name="habit_widget_note">写记录</string>
     <string name="habit_widget_check">打卡</string>
     <string name="habit_widget_no_data">打开应用完成一次同步</string>
+    <string name="habit_widget_stale">新的一天了，打开应用刷新今天的打卡</string>
     <!-- The overflow line: `还有 2 项`. -->
     <string name="habit_widget_more">还有 %1$d 项</string>
     <string name="habit_notification_action">打卡</string>

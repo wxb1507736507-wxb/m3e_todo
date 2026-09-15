@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_strings.dart';
@@ -80,6 +81,31 @@ class HabitWidgetSync {
     _ref.read(habitWidgetPlacedProvider.notifier).set(placed);
 
     await AppPlatform.syncHabitAlarms(_desiredAlarms());
+
+    // Last, so it draws the payload this run just published rather than the
+    // empty store a fresh install starts from.
+    if (kDebugMode) {
+      await _selfCheckOnce();
+    }
+  }
+
+  /// Whether the debug-only widget self-check has run in this process.
+  bool _selfChecked = false;
+
+  /// Draws the widget's view tree without a launcher and prints what came out.
+  ///
+  /// Debug builds only, and once per process. It is here because the widget is
+  /// the one part of this feature that a widget test cannot reach — and on a
+  /// launcher that will not host it, a device cannot reach it either — so the
+  /// only way to know the layout inflates and the values bind is to ask Android
+  /// to build it and report the text. See `HabitWidgetProvider.selfCheck`.
+  Future<void> _selfCheckOnce() async {
+    if (_selfChecked) {
+      return;
+    }
+    _selfChecked = true;
+    final Map<String, Object?> report = await AppPlatform.selfCheckHabitWidget();
+    debugPrint('habit-widget-self-check: $report');
   }
 
   /// Turns the taps the widget queued into stored check-ins.

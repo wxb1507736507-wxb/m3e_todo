@@ -419,6 +419,24 @@ abstract final class AppPlatform {
       return null;
     });
   }
+
+  /// Draws the widget's view tree without a launcher and reports what came out.
+  ///
+  /// Only used from debug builds. It answers the one question no Flutter test
+  /// can — whether the widget's layout inflates and takes the values bound to
+  /// it on a real Android — which matters because a launcher that refuses to
+  /// host the widget means nobody would otherwise ever see it run.
+  static Future<Map<String, Object?>> selfCheckHabitWidget() async {
+    final Map<Object?, Object?>? result =
+        await _invoke<Map<Object?, Object?>>('selfCheckHabitWidget');
+    if (result == null) {
+      return const <String, Object?>{};
+    }
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in result.entries)
+        entry.key.toString(): entry.value,
+    };
+  }
 }
 
 /// One habit reminder for the native scheduler.

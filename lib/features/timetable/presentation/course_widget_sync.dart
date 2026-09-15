@@ -1,36 +1,31 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants/app_strings.dart';
 import '../../../core/platform/app_platform.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/calendar.dart';
 import '../domain/entities/course.dart';
 import '../domain/entities/term.dart';
 import '../domain/entities/timetable.dart';
 import 'providers/timetable_providers.dart';
 
-/// Keeps the course widget's picture of today up to date.
+/// Keeps the course tile on the home screen up to date.
 ///
-/// The same arrangement as the habit tile's: the widget cannot read the app's
-/// documents, so the app publishes a payload it can draw, and the widget asks for
-/// nothing back — a course is read, not ticked off. Publishes on every change to
-/// the timetable and on every launch, which is what makes the tile show today
-/// rather than the day the app was last opened.
+/// One direction only — the app publishes, the tile draws — except for the week
+/// the tile is showing, which the tile changes by itself: stepping weeks on a
+/// home screen must not need the app to open, so the payload carries every week
+/// of the term and the tile picks one. That is why the rows are computed for a
+/// *weekday* across all weeks rather than for today alone.
 class CourseWidgetSync {
   CourseWidgetSync(this._ref);
 
   final Ref _ref;
 
-  bool _running = false;
-  bool _queued = false;
-
-  /// Whether the debug-only tile self-check has run in this process.
+  /// Whether the widget asked for the timetable since the last check.
   bool _selfChecked = false;
 
-  /// Draws the course tile without a launcher and prints what came out.
-  ///
-  /// Debug builds only, and once per process — the same exercise the habit tile
-  /// runs, for the same reason: this launcher may never host the widget, and what
-  /// it would draw still has to be knowable. See `CourseWidgetProvider.selfCheck`.
   Future<void> _selfCheckOnce() async {
     if (_selfChecked) {
       return;
@@ -56,6 +51,9 @@ class CourseWidgetSync {
     }
   }
 
+  bool _running = false;
+  bool _queued = false;
+
   Future<void> _syncOnce() async {
     // Awaited rather than read: on a cold start the timetable is still loading,
     // and a payload built from "still loading" would tell the widget there are no
@@ -69,12 +67,9 @@ class CourseWidgetSync {
     }
 
     final DateTime now = _ref.read(clockProvider)();
-    final List<CourseMeeting> today =
-        meetingsForDateIn(timetable.courses, timetable.term, now);
-
     final bool placed = await AppPlatform.updateCourseWidget(
       courseWidgetPayload(
-        meetings: today,
+        courses: timetable.courses,
         term: timetable.term,
         now: now,
         emptyText: AppStrings.courseWidgetEmpty,
@@ -91,25 +86,59 @@ class CourseWidgetSync {
   }
 }
 
-/// The payload the course widget draws.
+/// The payload the course tile draws.
 ///
-/// The rows arrive with their clock times already written out — the widget has
-/// no periods to look them up in — and only the four a tile can hold.
+/// Every week of the term, for the weekday today falls on: enough for the tile
+/// to step through the whole term by itself, which it must be able to do without
+/// the app running. The rows arrive with their clock times already written out —
+/// a widget has no periods to look them up in — and only the four a tile can
+/// hold.
 Map<String, Object?> courseWidgetPayload({
-  required List<CourseMeeting> meetings,
+  required List<Course> courses,
   required Term term,
   required DateTime now,
   required String emptyText,
   required String staleText,
   int maxRows = 4,
 }) {
-  final List<CourseMeeting> shown = meetings.take(maxRows).toList();
+  final int weekday = now.weekday;
   return <String, Object?>{
     'dayKey': now.year * 10000 + now.month * 100 + now.day,
     'emptyText': emptyText,
     'staleText': staleText,
+    // Which week the clock is in, so the tile can say 本周 — and 0 when today is
+    // outside the term, in which case no week is "this week".
+    'currentWeek': term.weekOf(now) ?? 0,
+    'weekday': weekday,
+    'weekdayName': '周${kCourseWeekdayNames[weekday - 1]}',
+    'weeks': <Object?>[
+      for (int week = 1; week <= term.totalWeeks; week++)
+        _weekPayload(
+          courses: courses,
+          term: term,
+          weekday: weekday,
+          week: week,
+          maxRows: maxRows,
+        ),
+    ],
+  };
+}
+
+Map<String, Object?> _weekPayload({
+  required List<Course> courses,
+  required Term term,
+  required int weekday,
+  required int week,
+  required int maxRows,
+}) {
+  final DateTime monday = term.mondayOfWeek(week);
+  final DateTime day = monday.add(Duration(days: weekday - 1));
+  final List<CourseMeeting> meetings = meetingsOn(courses, week, startOfDay(day));
+  return <String, Object?>{
+    'week': week,
+    'date': '${day.month}/${day.day}',
     'rows': <Object?>[
-      for (final CourseMeeting meeting in shown)
+      for (final CourseMeeting meeting in meetings.take(maxRows))
         <String, Object?>{
           // When it starts, not the whole range: a row is one line tall, and
           // "08:00" is the part a student reads.
@@ -119,6 +148,9 @@ Map<String, Object?> courseWidgetPayload({
           'room': meeting.course.room,
         },
     ],
+    // Whether the tile has more to say than it can hold, said rather than
+    // silently dropped.
+    'more': meetings.length > maxRows ? meetings.length - maxRows : 0,
   };
 }
 

@@ -49,6 +49,29 @@
         android:paddingTop="6dp"
         android:paddingBottom="6dp">
 
+        <!-- Which week is on show, and how to step it. The arrows are answered by
+             the widget itself, so looking at next week does not open the app. -->
+        <LinearLayout
+            android:id="@+id/course_widget_header"
+            style="@style/CourseWidgetHeader">
+
+            <ImageView
+                android:id="@+id/course_widget_prev"
+                style="@style/CourseWidgetArrow"
+                android:contentDescription="@string/course_widget_prev_week"
+                android:src="@drawable/widget_arrow_left" />
+
+            <TextView
+                android:id="@+id/course_widget_week"
+                style="@style/CourseWidgetWeek" />
+
+            <ImageView
+                android:id="@+id/course_widget_next"
+                style="@style/CourseWidgetArrow"
+                android:contentDescription="@string/course_widget_next_week"
+                android:src="@drawable/widget_arrow_right" />
+        </LinearLayout>
+
     <LinearLayout
         android:id="@+id/course_item_0"
         style="@style/CourseWidgetRow">

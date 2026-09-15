@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
@@ -164,7 +165,15 @@ class _BodyState extends ConsumerState<_Body> {
   Duration? _dragStartedAt;
   double _dragFurthest = 0;
 
+  /// The week the last frame was built for, and which way it moved.
+  int? _lastWeek;
+  double _slideFrom = 1;
+
   void _arm(int weekday, int period) {
+    // A tick under the thumb. The plus appearing is the visual answer, but it
+    // appears in the middle of a grid of small cells — the tick is what says the
+    // tap landed on the one the user meant.
+    unawaited(HapticFeedback.selectionClick());
     setState(() {
       if (_armedWeekday == weekday && _armedPeriod == period) {
         _armedWeekday = null;
@@ -174,6 +183,12 @@ class _BodyState extends ConsumerState<_Body> {
       _armedWeekday = weekday;
       _armedPeriod = period;
     });
+  }
+
+  /// Moves the week, with the tick that says it moved.
+  void _stepWeek(int delta, int currentWeek) {
+    unawaited(HapticFeedback.selectionClick());
+    ref.read(selectedWeekProvider.notifier).step(delta, currentWeek);
   }
 
   void _disarm() {
@@ -196,14 +211,23 @@ class _BodyState extends ConsumerState<_Body> {
     final TextTheme text = Theme.of(context).textTheme;
     final ColorScheme colors = Theme.of(context).colorScheme;
 
+    // Which way the week moved, so the new one slides in from the side it came
+    // from — forwards from the right, backwards from the left. Read during the
+    // build rather than set in a listener: it is a fact about the frame being
+    // built, not a state change of its own, and setting state here would be a
+    // rebuild inside a rebuild.
+    if (_lastWeek != week) {
+      _slideFrom = _lastWeek == null || week > _lastWeek! ? 1.0 : -1.0;
+      _lastWeek = week;
+    }
+
     return Column(
       children: <Widget>[
         _WeekHeader(
           term: term,
           week: week,
           currentWeek: currentWeek,
-          onWeek: (int delta) =>
-              ref.read(selectedWeekProvider.notifier).step(delta, currentWeek),
+          onWeek: (int delta) => _stepWeek(delta, currentWeek),
           onThisWeek: () => ref.read(selectedWeekProvider.notifier).show(null),
         ),
         _DayHeader(term: term, week: week, now: now),
@@ -259,9 +283,7 @@ class _BodyState extends ConsumerState<_Body> {
                 return;
               }
               _disarm();
-              ref
-                  .read(selectedWeekProvider.notifier)
-                  .step(travelled < 0 ? 1 : -1, currentWeek);
+              _stepWeek(travelled < 0 ? 1 : -1, currentWeek);
             },
             child: GestureDetector(
               // A tap that lands between the cells — on a rule, or on the padding
@@ -269,7 +291,26 @@ class _BodyState extends ConsumerState<_Body> {
               // appeared is expected to disappear.
               behavior: HitTestBehavior.deferToChild,
               onTap: _disarm,
-              child: SingleChildScrollView(
+              // The week slides in from the side it came from, briefly, and the
+              // old one fades under it. Two grids exist for those 180ms, which is
+              // the whole cost of the effect — and the alternative, moving the
+              // grid under the finger, is what would actually stutter.
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return SlideTransition(
+                    position: Tween<Offset>(
+                      begin: Offset(0.18 * _slideFrom, 0),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: FadeTransition(opacity: animation, child: child),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey<int>(week),
+                  child: SingleChildScrollView(
               padding: const EdgeInsets.only(bottom: 96),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,10 +355,12 @@ class _BodyState extends ConsumerState<_Body> {
                     ),
                 ],
               ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
-      ),
       ],
     );
   }

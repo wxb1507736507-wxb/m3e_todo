@@ -103,6 +103,36 @@
         <item name="android:textSize">12sp</item>
     </style>
 
+    <!-- The course tile's header: which week is on show, and the two arrows that
+         step it. A home screen has no room for a gesture the launcher owns, so
+         the week is stepped by tapping — and the taps are answered by the tile
+         itself, without the app waking up. -->
+    <style name="CourseWidgetHeader">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">28dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="CourseWidgetArrow">
+        <item name="android:layout_width">28dp</item>
+        <item name="android:layout_height">28dp</item>
+        <item name="android:padding">4dp</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:tint">@color/widget_subtle</item>
+    </style>
+
+    <style name="CourseWidgetWeek">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/widget_subtle</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
     <style name="CourseWidgetMessage">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A week back / a week forward on the course tile: drawn rather than shipped as
+     a PNG so the tint follows the widget's own colour in light and dark. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M15.4,7.4L14,6l-6,6 6,6 1.4,-1.4 -4.6,-4.6z" />
+</vector>

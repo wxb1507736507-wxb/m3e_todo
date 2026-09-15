@@ -814,6 +814,37 @@ void main() {
     expect(find.textContaining(AppStrings.timetableWeek(1)), findsOneWidget);
   });
 
+  testWidgets('the new week slides in rather than blinking into place', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        timetableRepository: FakeTimetableRepository(
+          Timetable(term: term(), courses: <Course>[course('c1')]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTimetable(tester);
+
+    // Settled: one grid.
+    expect(find.text('08:00'), findsOneWidget);
+
+    await tester.tap(find.byTooltip(AppStrings.timetableNextWeek));
+    await tester.pump();
+    // Mid-flight: the outgoing week and the incoming one are both laid out, which
+    // is what "sliding" means — a week that simply replaced the other would show
+    // one grid here.
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(find.text('08:00'), findsNWidgets(2));
+
+    await tester.pumpAndSettle();
+    expect(find.text('08:00'), findsOneWidget);
+    expect(find.textContaining(AppStrings.timetableWeek(2)), findsOneWidget);
+  });
+
   testWidgets('a course is renamed and then deleted from its own editor', (
     WidgetTester tester,
   ) async {

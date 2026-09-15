@@ -932,6 +932,8 @@ class MainActivity : FlutterActivity() {
                     },
                 )
             }
+            REQUEST_RINGTONE -> {
+                val result = pendingRingtoneResult
                 pendingRingtoneResult = null
                 @Suppress("DEPRECATION")
                 val uri = data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
@@ -2274,6 +2276,10 @@ internal object CourseWidgetStore {
     private const val PREFS = "course_widget"
     private const val KEY_SNAPSHOT = "snapshot"
     private const val KEY_OPEN = "openTimetable"
+    private const val KEY_WEEK_OFFSET = "weekOffset"
+
+    /** How far from the clock's week a tile may be stepped, in weeks. */
+    private const val MAX_WEEK_OFFSET = 40
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -2285,6 +2291,29 @@ internal object CourseWidgetStore {
 
     fun writeSnapshot(context: Context, snapshot: JSONObject) {
         prefs(context).edit().putString(KEY_SNAPSHOT, snapshot.toString()).apply()
+    }
+
+    /**
+     * How many weeks the tile has been stepped from the current one.
+     *
+     * An offset rather than a week number, so that a tile left on "next week"
+     * still means next week when the term moves on — and so that a fresh payload
+     * does not have to be re-read to know which week is meant.
+     */
+    fun weekOffset(context: Context): Int =
+        prefs(context).getInt(KEY_WEEK_OFFSET, 0).coerceIn(-MAX_WEEK_OFFSET, MAX_WEEK_OFFSET)
+
+    /** Steps the tile's week, clamped so a tile cannot walk off the term. */
+    fun stepWeek(context: Context, delta: Int) {
+        val total = snapshot(context)?.optJSONArray("weeks")?.length() ?: 0
+        val current = snapshot(context)?.optInt("currentWeek", 0) ?: 0
+        val next = weekOffset(context) + delta
+        val clamped = if (total > 0 && current > 0) {
+            next.coerceIn(1 - current, total - current)
+        } else {
+            next.coerceIn(-MAX_WEEK_OFFSET, MAX_WEEK_OFFSET)
+        }
+        prefs(context).edit().putInt(KEY_WEEK_OFFSET, clamped).apply()
     }
 
     /** Remembers that tapping the tile should land on the timetable when it opens. */
@@ -2316,6 +2345,25 @@ class CourseWidgetProvider : AppWidgetProvider() {
         private const val MAX_ROWS = 4
 
         private const val REQUEST_OPEN_TABLE = 5300
+        private const val REQUEST_WEEK_BACK = 5301
+        private const val REQUEST_WEEK_ON = 5302
+
+        /** The tile stepping its own week, which the app is not needed for. */
+        const val ACTION_WEEK_PREV = "dev.m3e.m3e_todo.widget.WEEK_PREV"
+        const val ACTION_WEEK_NEXT = "dev.m3e.m3e_todo.widget.WEEK_NEXT"
+
+        /**
+         * Steps the week every course tile is showing.
+         *
+         * Answered here rather than by opening the app: a home screen that has to
+         * launch an activity to show next week's Tuesday is a home screen that
+         * cannot be glanced at. The tile carries the whole term's rows for its
+         * weekday, so the answer is one preference and one repaint.
+         */
+        private fun stepWeek(context: Context, delta: Int) {
+            CourseWidgetStore.stepWeek(context, delta)
+            refresh(context)
+        }
 
         fun refresh(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -2356,19 +2404,54 @@ class CourseWidgetProvider : AppWidgetProvider() {
             // change here, and the timetable is what a row is *about*.
             val open = openTimetable(context)
             views.setOnClickPendingIntent(R.id.course_widget_root, open)
+            // The two exceptions are the arrows, which are about *which* week the
+            // tile is showing and are answered without leaving the home screen.
+            views.setOnClickPendingIntent(R.id.course_widget_prev, weekIntent(context, ACTION_WEEK_PREV, REQUEST_WEEK_BACK))
+            views.setOnClickPendingIntent(R.id.course_widget_next, weekIntent(context, ACTION_WEEK_NEXT, REQUEST_WEEK_ON))
 
-            val rows = snapshot?.optJSONArray("rows") ?: JSONArray()
+            val weeks = snapshot?.optJSONArray("weeks") ?: JSONArray()
+            val currentWeek = snapshot?.optInt("currentWeek", 0) ?: 0
+            val weekdayName = snapshot?.optString("weekdayName").orEmpty()
+
+            // Which week this tile is showing: the one the clock is in, moved by
+            // however many times the arrows have been tapped. An offset rather
+            // than a week number, so that a tile the user left on "next week"
+            // follows along when the term moves on.
+            val shownWeek = if (currentWeek <= 0 || weeks.length() == 0) {
+                0
+            } else {
+                (currentWeek + CourseWidgetStore.weekOffset(context))
+                    .coerceIn(1, weeks.length())
+            }
+            val offset = CourseWidgetStore.weekOffset(context)
+            val week = if (shownWeek <= 0) null else weeks.optJSONObject(shownWeek - 1)
+            val rows = week?.optJSONArray("rows") ?: JSONArray()
+
             // A payload is a picture of one day. When that day is no longer today
             // the rows are yesterday's classes — a different weekday entirely —
             // and showing them as today's would be worse than saying nothing.
             val stale = snapshot != null &&
                 snapshot.optInt("dayKey", 0).let { it != 0 && it != todayKey() }
 
+            // The header always says which week is on show, even when the tile has
+            // nothing to list for it.
+            val header = when {
+                snapshot == null -> ""
+                stale -> snapshot.optString("staleText")
+                shownWeek <= 0 -> weekdayName
+                offset == 0 -> context.getString(R.string.course_widget_this_week) +
+                    " · " + weekdayName + " " + week?.optString("date").orEmpty()
+                else ->
+                    "${shownWeek}周 · " + weekdayName + " " + week?.optString("date").orEmpty()
+            }
+            views.setTextViewText(R.id.course_widget_week, header)
+
             if (snapshot == null || stale || rows.length() == 0) {
                 val message = when {
                     snapshot == null -> context.getString(R.string.course_widget_no_data)
                     stale -> snapshot.optString("staleText")
-                    else -> snapshot.optString("emptyText")
+                    offset == 0 -> snapshot.optString("emptyText")
+                    else -> context.getString(R.string.course_widget_no_class)
                 }
                 views.setViewVisibility(R.id.course_widget_message, android.view.View.VISIBLE)
                 views.setTextViewText(R.id.course_widget_message, message)
@@ -2410,6 +2493,23 @@ class CourseWidgetProvider : AppWidgetProvider() {
             return PendingIntent.getActivity(
                 context,
                 REQUEST_OPEN_TABLE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
+
+        /**
+         * One of the tile's two week arrows.
+         *
+         * An explicit broadcast back to this provider, which is what keeps the
+         * tap on the home screen: the tile repaints itself from what it already
+         * holds, and no activity starts.
+         */
+        private fun weekIntent(context: Context, action: String, request: Int): PendingIntent {
+            val intent = Intent(context, CourseWidgetProvider::class.java).setAction(action)
+            return PendingIntent.getBroadcast(
+                context,
+                request,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -2457,6 +2557,27 @@ class CourseWidgetProvider : AppWidgetProvider() {
             runCatching { render(context, manager, id) }
                 .onFailure { Log.w(TAG, "Could not draw the course widget: ${it.message}") }
         }
+    }
+
+    /**
+     * The tile's own week arrows, answered without the app.
+     *
+     * An explicit broadcast back to this provider, which is what keeps the tap on
+     * the home screen: the tile repaints itself from what it already holds, and
+     * no activity starts.
+     */
+    override fun onReceive(context: Context, intent: Intent) {
+        when (intent.action) {
+            ACTION_WEEK_PREV -> {
+                stepWeek(context, -1)
+                return
+            }
+            ACTION_WEEK_NEXT -> {
+                stepWeek(context, 1)
+                return
+            }
+        }
+        super.onReceive(context, intent)
     }
 }
 

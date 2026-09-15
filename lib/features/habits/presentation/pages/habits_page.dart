@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
@@ -183,6 +184,10 @@ class _HabitsPageState extends ConsumerState<HabitsPage> {
   /// Checks off, or takes back, today's entry — the one-tap path the widget also
   /// uses.
   Future<void> _toggle(Habit habit, bool doneToday) async {
+    // A tick before the write, not after: the record is on disk in a few
+    // milliseconds and the circle has already changed, but the hand wants an
+    // answer now — and this is the most-tapped control in the app.
+    unawaited(HapticFeedback.selectionClick());
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final HabitLogsController controller = ref.read(habitLogsProvider.notifier);
     final DateTime now = ref.read(clockProvider)();

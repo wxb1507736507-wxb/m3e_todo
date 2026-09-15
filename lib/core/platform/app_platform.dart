@@ -252,6 +252,34 @@ abstract final class AppPlatform {
     ];
   }
 
+  /// Takes a photo with the device's camera, or `null` when the user backed out.
+  ///
+  /// Not a picker: the app hands the camera a file in its own private directory
+  /// to write into, so the picture arrives where it is wanted rather than being
+  /// copied there afterwards. A phone with no camera app is answered by the
+  /// picture picker on the native side, so a caller only has to handle "the
+  /// user changed their mind".
+  static Future<PickedAttachment?> takePhoto() async {
+    if (!isAndroid) {
+      return null;
+    }
+    final Map<Object?, Object?>? result = await _invoke<Map<Object?, Object?>>(
+      'takePhoto',
+    );
+    if (result == null) {
+      return null;
+    }
+    final Object? path = result['path'];
+    if (path is! String) {
+      return null;
+    }
+    return PickedAttachment(
+      path: path,
+      name: result['name'] as String? ?? path,
+      mime: result['mime'] as String?,
+    );
+  }
+
   /// Opens the system document picker filtered by [kind]
   /// (`image`/`video`/`audio`/anything else for documents).
   static Future<PickedAttachment?> pickAttachment(String kind) async {

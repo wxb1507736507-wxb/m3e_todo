@@ -18,7 +18,22 @@ import '../providers/timetable_providers.dart';
 /// only ever a *proposal* — the sheet says what it read, the user unticks and
 /// renames, and nothing is written until they say 导入.
 Future<void> showCourseImportSheet(BuildContext context) async {
-  final PickedAttachment? picked = await AppPlatform.pickAttachment('image');
+  final _PictureSource? source = await showModalBottomSheet<_PictureSource>(
+    context: context,
+    builder: (BuildContext sheetContext) => const _SourceMenu(),
+  );
+  if (source == null || !context.mounted) {
+    return;
+  }
+
+  // The camera, when there is one: the phone's own timetable calls this
+  // 拍照导入课程表, and a timetable on a wall is photographed rather than
+  // screenshotted. A phone with no camera app is answered by the picture picker
+  // instead, on the native side, so this is one call either way — and backing
+  // out of the camera is simply backing out.
+  final PickedAttachment? picked = source == _PictureSource.camera
+      ? await AppPlatform.takePhoto()
+      : await AppPlatform.pickAttachment('image');
   if (picked == null || !context.mounted) {
     return;
   }
@@ -27,6 +42,44 @@ Future<void> showCourseImportSheet(BuildContext context) async {
     isScrollControlled: true,
     builder: (_) => CourseImportSheet(imagePath: picked.path),
   );
+}
+
+/// Whether to take a picture now or choose one already on the phone.
+enum _PictureSource { camera, gallery }
+
+class _SourceMenu extends StatelessWidget {
+  const _SourceMenu();
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+            child: Text(AppStrings.courseImportTitle, style: text.titleLarge),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text(AppStrings.courseImportCamera),
+            subtitle: const Text(AppStrings.courseImportCameraHint),
+            onTap: () => Navigator.of(context).pop(_PictureSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text(AppStrings.courseImportGallery),
+            subtitle: const Text(AppStrings.courseImportGalleryHint),
+            onTap: () => Navigator.of(context).pop(_PictureSource.gallery),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
 }
 
 class CourseImportSheet extends ConsumerStatefulWidget {

@@ -400,6 +400,10 @@ abstract final class AppStrings {
   static const String courseImportIntro =
       '选一张课程表截图或照片。识别在本机完成，图片不会上传；认出课程以后先给你看一遍，确认了才写进课程表。';
   static const String courseImportPick = '选择课表图片';
+  static const String courseImportCamera = '拍照';
+  static const String courseImportCameraHint = '对着课表照一张，适合贴在墙上的课表';
+  static const String courseImportGallery = '从相册选择';
+  static const String courseImportGalleryHint = '选一张课表截图或者已经拍好的照片';
   static const String courseImportWorking = '正在识别…';
   static const String courseImportTakeLong = '图片大一点会慢一些，请稍等';
   static const String courseImportEmpty =

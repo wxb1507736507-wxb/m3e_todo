@@ -26,6 +26,8 @@ class AppSettings {
     this.ringtoneUri,
     this.backgroundImage,
     this.backgroundDim = defaultBackgroundDim,
+    this.timetableBackgroundImage,
+    this.timetableBackgroundDim = defaultBackgroundDim,
   });
 
   /// Default strength of the scrim drawn over an application background.
@@ -55,6 +57,17 @@ class AppSettings {
   /// How strongly the theme surface is laid over [backgroundImage], in `[0, 1]`.
   final double backgroundDim;
 
+  /// The timetable's own background, or `null` to follow the app's.
+  ///
+  /// Separate from the app-wide one because the two screens are read
+  /// differently: a photo behind a list of short titles is fine, while a grid of
+  /// small course names needs either a calmer picture or a stronger scrim, and
+  /// that has to be a decision the user can make for the timetable alone.
+  final String? timetableBackgroundImage;
+
+  /// How strongly the surface is laid over [timetableBackgroundImage].
+  final double timetableBackgroundDim;
+
   bool get hasBackground => backgroundImage != null;
 
   AppSettings copyWith({
@@ -67,6 +80,9 @@ class AppSettings {
     String? backgroundImage,
     bool clearBackgroundImage = false,
     double? backgroundDim,
+    String? timetableBackgroundImage,
+    bool clearTimetableBackgroundImage = false,
+    double? timetableBackgroundDim,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -80,6 +96,10 @@ class AppSettings {
           ? null
           : (backgroundImage ?? this.backgroundImage),
       backgroundDim: backgroundDim ?? this.backgroundDim,
+      timetableBackgroundImage: clearTimetableBackgroundImage
+          ? null
+          : (timetableBackgroundImage ?? this.timetableBackgroundImage),
+      timetableBackgroundDim: timetableBackgroundDim ?? this.timetableBackgroundDim,
     );
   }
 
@@ -95,7 +115,9 @@ class AppSettings {
         other.reminderLead == reminderLead &&
         other.ringtoneUri == ringtoneUri &&
         other.backgroundImage == backgroundImage &&
-        other.backgroundDim == backgroundDim;
+        other.backgroundDim == backgroundDim &&
+      other.timetableBackgroundImage == timetableBackgroundImage &&
+      other.timetableBackgroundDim == timetableBackgroundDim;
   }
 
   @override
@@ -107,6 +129,8 @@ class AppSettings {
         ringtoneUri,
         backgroundImage,
         backgroundDim,
+        timetableBackgroundImage,
+        timetableBackgroundDim,
       );
 
   @override
@@ -114,5 +138,6 @@ class AppSettings {
       'AppSettings(themeMode: $themeMode, colorSeed: $colorSeed, '
       'reminderMode: $reminderMode, reminderLead: $reminderLead, '
       'ringtone: $ringtoneUri, '
-      'background: $backgroundImage @$backgroundDim)';
+      'background: $backgroundImage @$backgroundDim, '
+      'timetable: $timetableBackgroundImage @$timetableBackgroundDim)';
 }

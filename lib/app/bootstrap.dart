@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/diagnostics/frame_log.dart';
 import '../core/storage/document_store.dart';
 import '../core/storage/document_store_factory.dart';
+import '../core/platform/app_platform.dart';
 import '../core/storage/storage_providers.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/settings/domain/app_settings.dart';
@@ -45,13 +46,19 @@ Future<void> bootstrap() async {
     storeFactory(settingsFileName),
   ).load();
 
+  // Asked before the first frame, because a tile that asked for the timetable has
+  // to *be* the timetable from the first pixel: opening the app and then pushing
+  // a page looks like the app opening, which is exactly what a widget tap should
+  // not look like.
+  final bool opensOnTimetable = await AppPlatform.takeCourseOpenRequest();
+
   runApp(
     ProviderScope(
       overrides: [
         documentStoreFactoryProvider.overrideWithValue(storeFactory),
         initialSettingsProvider.overrideWithValue(settings),
       ],
-      child: const M3eTodoApp(),
+      child: M3eTodoApp(opensOnTimetable: opensOnTimetable),
     ),
   );
 }

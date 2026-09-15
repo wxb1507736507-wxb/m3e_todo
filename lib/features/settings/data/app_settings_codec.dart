@@ -12,7 +12,9 @@ abstract final class AppSettingsCodec {
   /// Both are optional on read, so a version-2 file loads unchanged and a
   /// version-3 file still opens in an older build, where the extra fields are
   /// simply ignored.
-  static const int schemaVersion = 4;
+  /// Version 5 adds the timetable's own `timetableBackgroundImage` and
+  /// `timetableBackgroundDim`, both optional on read for the same reason.
+  static const int schemaVersion = 5;
 
   static Map<String, Object?> toJson(AppSettings settings) {
     return <String, Object?>{
@@ -27,6 +29,9 @@ abstract final class AppSettingsCodec {
       if (settings.backgroundImage != null)
         'backgroundImage': settings.backgroundImage,
       'backgroundDim': settings.backgroundDim,
+      if (settings.timetableBackgroundImage != null)
+        'timetableBackgroundImage': settings.timetableBackgroundImage,
+      'timetableBackgroundDim': settings.timetableBackgroundDim,
     };
   }
 
@@ -65,6 +70,13 @@ abstract final class AppSettingsCodec {
           json['backgroundImage'] is String ? json['backgroundImage'] as String : null,
       backgroundDim: _unitInterval(
         json['backgroundDim'],
+        AppSettings.defaultBackgroundDim,
+      ),
+      timetableBackgroundImage: json['timetableBackgroundImage'] is String
+          ? json['timetableBackgroundImage'] as String
+          : null,
+      timetableBackgroundDim: _unitInterval(
+        json['timetableBackgroundDim'],
         AppSettings.defaultBackgroundDim,
       ),
     );

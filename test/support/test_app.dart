@@ -39,6 +39,7 @@ Widget buildTestApp({
   HabitRepository? habitRepository,
   HabitPermissions? habitPermissions,
   TimetableRepository? timetableRepository,
+  bool opensOnTimetable = false,
 }) {
   // Always redirected away from the real per-user directory. A test must never
   // be able to read or overwrite the developer's actual todos, and defaulting to
@@ -74,6 +75,6 @@ Widget buildTestApp({
       if (timetableRepository != null)
         timetableRepositoryProvider.overrideWithValue(timetableRepository),
     ],
-    child: const M3eTodoApp(),
+    child: M3eTodoApp(opensOnTimetable: opensOnTimetable),
   );
 }

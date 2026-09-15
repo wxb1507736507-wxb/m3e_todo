@@ -376,6 +376,8 @@ abstract final class AppStrings {
   static const String termWeeksLabel = '总周数';
   static const String termPeriodsLabel = '节次时间';
   static const String termPeriodsHint = '点某一节可以改它的上下课时间';
+  static const String timetableBackgroundLabel = '课程表背景';
+  static const String timetableBackgroundHint = '给课程表单独换一张背景图；觉得课程名字看不清，就把下面的「遮罩浓度」调高一点，图片会变淡';
 
   /// The timetable's current week, as the header shows it.
   static String timetableWeek(int week) => '第 $week 周';

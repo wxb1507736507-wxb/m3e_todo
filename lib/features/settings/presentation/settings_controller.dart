@@ -120,6 +120,32 @@ class SettingsController extends Notifier<AppSettings> {
     _apply(state.copyWith(backgroundDim: clamped));
   }
 
+  /// Sets the timetable's own background, deleting the file it replaces.
+  ///
+  /// The same contract as [setBackgroundImage]: the cropper always writes a new
+  /// file, so keeping the old one would leave an unreferenced copy behind.
+  Future<void> setTimetableBackgroundImage(String? path) async {
+    final String? previous = state.timetableBackgroundImage;
+    _apply(
+      state.copyWith(
+        timetableBackgroundImage: path,
+        clearTimetableBackgroundImage: path == null,
+      ),
+    );
+    if (previous != null && previous != path) {
+      await _deleteQuietly(previous);
+    }
+  }
+
+  /// Sets how strongly the surface covers the timetable's background image.
+  void setTimetableBackgroundDim(double dim) {
+    final double clamped = dim.clamp(0.0, 1.0);
+    if (state.timetableBackgroundDim == clamped) {
+      return;
+    }
+    _apply(state.copyWith(timetableBackgroundDim: clamped));
+  }
+
   static Future<void> _deleteQuietly(String path) async {
     try {
       await File(path).delete();

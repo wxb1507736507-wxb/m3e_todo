@@ -69,6 +69,39 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('a tile opens the timetable as the first frame, not the list', (
+    WidgetTester tester,
+  ) async {
+    _usePhoneWindow(tester);
+    await tester.pumpWidget(
+      buildTestApp(
+        repository: FakeTodoRepository(),
+        opensOnTimetable: true,
+        timetableRepository: FakeTimetableRepository(
+          Timetable(term: term(), courses: <Course>[course('c1')]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Nothing was tapped: the grid has to be there on the first frame, because
+    // the tap that got us here landed on a tile, not on the app's list.
+    expect(find.text(AppStrings.timetableTitle), findsOneWidget);
+    expect(find.text('高等数学'), findsOneWidget);
+    // The shell it was opened over is behind it, so its chrome is not on screen.
+    expect(find.byType(NavigationBar), findsNothing);
+
+    // Back still reaches the app it was opened over: the grid is pushed on top,
+    // not swapped in for the shell.
+    final NavigatorState navigator = tester.state<NavigatorState>(
+      find.byType(Navigator).first,
+    );
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text(AppStrings.timetableTitle), findsNothing);
+  });
+
   testWidgets('the grid opens on this week, with the days and their dates', (
     WidgetTester tester,
   ) async {

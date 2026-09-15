@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_strings.dart';
+import '../../../settings/domain/app_settings.dart';
+import '../../../settings/presentation/settings_controller.dart';
+import '../../../../app/app_background.dart';
 import '../../../../core/theme/app_shapes.dart';
 import '../../../../core/utils/app_date_formatter.dart';
 import '../../../../core/utils/calendar.dart';
@@ -64,12 +67,22 @@ class TimetablePage extends ConsumerWidget {
   }
 
   @override
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {    final AsyncValue<Timetable> asyncTimetable = ref.watch(timetableProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<Timetable> asyncTimetable = ref.watch(timetableProvider);
     final DateTime now = ref.watch(clockProvider)();
+    final AppSettings settings = ref.watch(settingsProvider);
 
-    return Scaffold(
-      appBar: AppBar(
+    // The timetable's own background, painted the way the app's is: this page is
+    // pushed over the shell, so without this it would hide whatever the user
+    // chose for the app behind an opaque surface of its own.
+    return AppBackground(
+      imagePath: settings.timetableBackgroundImage,
+      dim: settings.timetableBackgroundDim,
+      child: Scaffold(
+        backgroundColor: settings.timetableBackgroundImage == null
+            ? null
+            : Colors.transparent,
+        appBar: AppBar(
         title: const Text(AppStrings.timetableTitle),
         actions: <Widget>[
           IconButton(
@@ -100,20 +113,21 @@ class TimetablePage extends ConsumerWidget {
           const SizedBox(width: 4),
         ],
       ),
-      body: asyncTimetable.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object error, StackTrace stackTrace) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(AppStrings.loadFailedTitle),
+        body: asyncTimetable.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (Object error, StackTrace stackTrace) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(AppStrings.loadFailedTitle),
+            ),
           ),
+          data: (Timetable timetable) => _Body(timetable: timetable, now: now),
         ),
-        data: (Timetable timetable) => _Body(timetable: timetable, now: now),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => unawaited(showCourseEditorSheet(context)),
-        icon: const Icon(Icons.add),
-        label: const Text(AppStrings.courseNew),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => unawaited(showCourseEditorSheet(context)),
+          icon: const Icon(Icons.add),
+          label: const Text(AppStrings.courseNew),
+        ),
       ),
     );
   }
